@@ -4,9 +4,9 @@ import { createCookieSessionStorage, redirect } from "react-router";
 export const adminSessionStorage = createCookieSessionStorage({
     cookie: {
         name: "ta_super_admin_session",
-        secure: process.env.NODE_ENV === "production",
+        secure: true, // Must be true for sameSite: "none"
         secrets: [process.env.SESSION_SECRET || "fallback_admin_secret"],
-        sameSite: "lax",
+        sameSite: "none", // Required for Shopify embedded iframes
         path: "/",
         httpOnly: true,
     },
