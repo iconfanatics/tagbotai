@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
 import { useLoaderData, useSubmit, useActionData, useNavigation, useNavigate } from "react-router";
 import { Page, Layout, Card, BlockStack, Text, InlineStack, Banner, Button, Box, Icon, Modal, TextField, Divider, Badge } from "@shopify/polaris";
-import { AppsIcon, CheckCircleIcon, XSmallIcon } from "@shopify/polaris-icons";
+import { AppsIcon, CheckCircleIcon, XSmallIcon, SaveIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 
@@ -143,122 +143,124 @@ export default function Integrations() {
                             </Banner>
                         </Box>
                     )}
+                </Layout.Section>
 
-                    {/* Klaviyo Section */}
-                    <Box paddingBlockEnd="400">
-                        <Card>
-                            <BlockStack gap="400">
-                                <InlineStack gap="200" align="start" blockAlign="center" wrap={false}>
-                                    <div style={{ flexGrow: 1 }}>
-                                        <InlineStack gap="200" align="start" blockAlign="center">
-                                            <Icon source={AppsIcon} tone="base" />
-                                            <Text variant="headingMd" as="h3">Klaviyo Sync</Text>
-                                        </InlineStack>
-                                    </div>
-                                    <Box>
-                                        {initialKlaviyo ? (
-                                            <Badge tone="success" icon={CheckCircleIcon}>Connected</Badge>
-                                        ) : (
-                                            <Badge tone="critical" icon={XSmallIcon}>Disconnected</Badge>
-                                        )}
-                                    </Box>
+                {/* Klaviyo Section */}
+                <Layout.AnnotatedSection
+                    id="klaviyo-integration"
+                    title="Klaviyo Sync"
+                    description="Automatically push TagBot AI segments into Klaviyo Profile Properties to trigger highly targeted email and SMS campaigns."
+                >
+                    <Card roundedAbove="sm">
+                        <BlockStack gap="400">
+                            <InlineStack align="space-between" blockAlign="center">
+                                <InlineStack gap="200" align="start" blockAlign="center">
+                                    <Icon source={AppsIcon} tone="base" />
+                                    <Text variant="headingMd" as="h3">Klaviyo Configuration</Text>
                                 </InlineStack>
+                                <Box>
+                                    {initialKlaviyo ? (
+                                        <Badge tone="success" icon={CheckCircleIcon}>Connected</Badge>
+                                    ) : (
+                                        <Badge tone="critical" icon={XSmallIcon}>Disconnected</Badge>
+                                    )}
+                                </Box>
+                            </InlineStack>
 
-                                <Text as="p" tone="subdued">Automatically push TagBot AI segments into Klaviyo Profile Properties.</Text>
-                                <Divider />
+                            <Divider />
 
-                                <div onClick={() => !isElitePlan && setIsEliteModalOpen(true)}>
+                            <div onClick={() => !isElitePlan && setIsEliteModalOpen(true)}>
+                                <TextField
+                                    label="Klaviyo Private API Key"
+                                    value={klaviyoApiKey}
+                                    onChange={setKlaviyoApiKey}
+                                    autoComplete="off"
+                                    placeholder="pk_..."
+                                    helpText="Found in Klaviyo -> Settings -> API Keys. Requires 'Profiles' read/write scope."
+                                    disabled={!isElitePlan}
+                                    type="password"
+                                />
+                            </div>
+
+                            <Box paddingBlockStart="200">
+                                <InlineStack align="start">
+                                    <Button disabled={!isElitePlan} loading={isSaving} icon={SaveIcon} onClick={handleSaveKlaviyo}>
+                                        Save Klaviyo Settings
+                                    </Button>
+                                </InlineStack>
+                            </Box>
+                        </BlockStack>
+                    </Card>
+                </Layout.AnnotatedSection>
+
+                {/* Mailchimp Section */}
+                <Layout.AnnotatedSection
+                    id="mailchimp-integration"
+                    title="Mailchimp Sync"
+                    description="Automatically push customers and apply tags within your Mailchimp Audiences based on intelligent TagBot Rules."
+                >
+                    <Card roundedAbove="sm">
+                        <BlockStack gap="400">
+                            <InlineStack align="space-between" blockAlign="center">
+                                <InlineStack gap="200" align="start" blockAlign="center">
+                                    <Icon source={AppsIcon} tone="base" />
+                                    <Text variant="headingMd" as="h3">Mailchimp Configuration</Text>
+                                </InlineStack>
+                                <Box>
+                                    {initialMailchimp ? (
+                                        <Badge tone="success" icon={CheckCircleIcon}>Connected</Badge>
+                                    ) : (
+                                        <Badge tone="critical" icon={XSmallIcon}>Disconnected</Badge>
+                                    )}
+                                </Box>
+                            </InlineStack>
+
+                            <Divider />
+
+                            <div onClick={() => !isElitePlan && setIsEliteModalOpen(true)}>
+                                <BlockStack gap="400">
                                     <TextField
-                                        label="Klaviyo Private API Key"
-                                        value={klaviyoApiKey}
-                                        onChange={setKlaviyoApiKey}
+                                        label="Mailchimp API Key"
+                                        value={mailchimpApiKey}
+                                        onChange={setMailchimpApiKey}
                                         autoComplete="off"
-                                        placeholder="pk_..."
-                                        helpText="Found in Klaviyo -> Settings -> API Keys. Requires 'Profiles' read/write scope."
+                                        placeholder="..."
+                                        helpText="Your Mailchimp API key, generated in Account Settings."
                                         disabled={!isElitePlan}
                                         type="password"
                                     />
-                                </div>
+                                    <TextField
+                                        label="Server Prefix (Data Center)"
+                                        value={mailchimpServerPrefix}
+                                        onChange={setMailchimpServerPrefix}
+                                        autoComplete="off"
+                                        placeholder="us14"
+                                        helpText="The final segment of your API key (e.g. if key is xxx-us14, prefix is us14)."
+                                        disabled={!isElitePlan}
+                                    />
+                                    <TextField
+                                        label="Audience List ID"
+                                        value={mailchimpListId}
+                                        onChange={setMailchimpListId}
+                                        autoComplete="off"
+                                        placeholder="e.g. 8d3a1fb"
+                                        helpText="The specific Audience ID to sync to. Found in Mailchimp Audience Settings."
+                                        disabled={!isElitePlan}
+                                    />
+                                </BlockStack>
+                            </div>
 
-                                <Box paddingBlockStart="200">
-                                    <InlineStack align="start">
-                                        <Button disabled={!isElitePlan} loading={isSaving} onClick={handleSaveKlaviyo}>
-                                            Save Klaviyo Settings
-                                        </Button>
-                                    </InlineStack>
-                                </Box>
-                            </BlockStack>
-                        </Card>
-                    </Box>
-
-                    {/* Mailchimp Section */}
-                    <Box paddingBlockEnd="400">
-                        <Card>
-                            <BlockStack gap="400">
-                                <InlineStack gap="200" align="start" blockAlign="center" wrap={false}>
-                                    <div style={{ flexGrow: 1 }}>
-                                        <InlineStack gap="200" align="start" blockAlign="center">
-                                            <Icon source={AppsIcon} tone="base" />
-                                            <Text variant="headingMd" as="h3">Mailchimp Sync</Text>
-                                        </InlineStack>
-                                    </div>
-                                    <Box>
-                                        {initialMailchimp ? (
-                                            <Badge tone="success" icon={CheckCircleIcon}>Connected</Badge>
-                                        ) : (
-                                            <Badge tone="critical" icon={XSmallIcon}>Disconnected</Badge>
-                                        )}
-                                    </Box>
+                            <Box paddingBlockStart="200">
+                                <InlineStack align="start">
+                                    <Button disabled={!isElitePlan} loading={isSaving} icon={SaveIcon} onClick={handleSaveMailchimp}>
+                                        Save Mailchimp Settings
+                                    </Button>
                                 </InlineStack>
+                            </Box>
+                        </BlockStack>
+                    </Card>
+                </Layout.AnnotatedSection>
 
-                                <Text as="p" tone="subdued">Automatically push customers and apply tags within your Mailchimp Audiences.</Text>
-                                <Divider />
-
-                                <div onClick={() => !isElitePlan && setIsEliteModalOpen(true)}>
-                                    <BlockStack gap="400">
-                                        <TextField
-                                            label="Mailchimp API Key"
-                                            value={mailchimpApiKey}
-                                            onChange={setMailchimpApiKey}
-                                            autoComplete="off"
-                                            placeholder="..."
-                                            helpText="Your Mailchimp API key, generated in Account Settings."
-                                            disabled={!isElitePlan}
-                                            type="password"
-                                        />
-                                        <TextField
-                                            label="Server Prefix (Data Center)"
-                                            value={mailchimpServerPrefix}
-                                            onChange={setMailchimpServerPrefix}
-                                            autoComplete="off"
-                                            placeholder="us14"
-                                            helpText="The final segment of your API key (e.g. if key is xxx-us14, prefix is us14)."
-                                            disabled={!isElitePlan}
-                                        />
-                                        <TextField
-                                            label="Audience List ID"
-                                            value={mailchimpListId}
-                                            onChange={setMailchimpListId}
-                                            autoComplete="off"
-                                            placeholder="e.g. 8d3a1fb"
-                                            helpText="The specific Audience ID to sync to. Found in Mailchimp Audience Settings."
-                                            disabled={!isElitePlan}
-                                        />
-                                    </BlockStack>
-                                </div>
-
-                                <Box paddingBlockStart="200">
-                                    <InlineStack align="start">
-                                        <Button disabled={!isElitePlan} loading={isSaving} onClick={handleSaveMailchimp}>
-                                            Save Mailchimp Settings
-                                        </Button>
-                                    </InlineStack>
-                                </Box>
-                            </BlockStack>
-                        </Card>
-                    </Box>
-
-                </Layout.Section>
             </Layout>
         </Page>
     );
