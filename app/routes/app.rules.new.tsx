@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { authenticate } from "../shopify.server";
 import { getCachedStore } from "../services/cache.server";
 import db from "../db.server";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
 import { useLoaderData, useSubmit, useActionData, useNavigation, useNavigate } from "react-router";
+import { useAppBridge } from "@shopify/app-bridge-react";
 import { Page, Layout, Card, FormLayout, TextField, Select, Button, Banner, BlockStack, Text, InlineStack, Box, Divider, Icon, Badge } from "@shopify/polaris";
 import { CashDollarIcon, PersonIcon, ClockIcon, SearchIcon, MagicIcon, CheckIcon } from "@shopify/polaris-icons";
 
@@ -83,6 +84,7 @@ export default function NewRule() {
     const submit = useSubmit();
     const navigation = useNavigation();
     const navigate = useNavigate();
+    const shopify = useAppBridge();
     const isSubmitting = navigation.state === "submitting";
 
     const isFreePlan = planName === "Free" || planName === "";
@@ -100,6 +102,22 @@ export default function NewRule() {
     const handleSubmit = () => {
         submit({ name, ruleType, field, operator, value, collectionId, collectionName, targetTag }, { method: "post" });
     };
+
+    useEffect(() => {
+        if (actionData?.success) {
+            shopify.toast.show('Smart automation created successfully');
+            setName("");
+            setValue("");
+            setTargetTag("");
+            setCollectionId("");
+            setCollectionName("");
+            setActivePreset(null);
+            // Default them back to metric layout
+            setRuleType("metric");
+            setField("totalSpent");
+            setOperator("greaterThan");
+        }
+    }, [actionData]);
 
     const applyPreset = (preset: string) => {
         setActivePreset(preset);
