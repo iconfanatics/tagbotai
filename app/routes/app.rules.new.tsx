@@ -3,7 +3,7 @@ import { authenticate } from "../shopify.server";
 import { getCachedStore } from "../services/cache.server";
 import db from "../db.server";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
-import { useLoaderData, useSubmit, useActionData, useNavigation, useNavigate } from "react-router";
+import { useLoaderData, useSubmit, useActionData, useNavigation, useNavigate, redirect } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { Page, Layout, Card, FormLayout, TextField, Select, Button, Banner, BlockStack, Text, InlineStack, Box, Divider, Icon, Badge } from "@shopify/polaris";
 import { CashDollarIcon, PersonIcon, ClockIcon, SearchIcon, MagicIcon, CheckIcon } from "@shopify/polaris-icons";
@@ -75,7 +75,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         }
     });
 
-    return { success: true };
+    return redirect("/app/rules");
 };
 
 export default function NewRule() {
@@ -112,22 +112,6 @@ export default function NewRule() {
 
         submit(formData, { method: "post" });
     };
-
-    useEffect(() => {
-        if (actionData?.success) {
-            shopify.toast.show('Smart automation created successfully');
-            setName("");
-            setValue("");
-            setTargetTag("");
-            setCollectionId("");
-            setCollectionName("");
-            setActivePreset(null);
-            // Default them back to metric layout
-            setRuleType("metric");
-            setField("totalSpent");
-            setOperator("greaterThan");
-        }
-    }, [actionData]);
 
     const applyPreset = (preset: string) => {
         setActivePreset(preset);
@@ -185,11 +169,6 @@ export default function NewRule() {
                 <Layout.Section>
                     {actionData?.error && (
                         <Banner tone="critical" title={actionData.error} />
-                    )}
-                    {actionData?.success && (
-                        <Banner tone="success" title="Rule created successfully!">
-                            <Button variant="plain" onClick={() => navigate('/app/rules')}>Return to active rules</Button>
-                        </Banner>
                     )}
 
                     <Box paddingBlockEnd="400">
