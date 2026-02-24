@@ -1,0 +1,104 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Note that some adapters may set a maximum length for the String type by default, please ensure your strings are long
+// enough when changing adapters.
+// See https://www.prisma.io/docs/orm/reference/prisma-schema-reference#string for more information
+datasource db {
+  provider = "sqlite"
+  url      = "file:dev.sqlite"
+}
+
+model Session {
+  id                  String    @id
+  shop                String
+  state               String
+  isOnline            Boolean   @default(false)
+  scope               String?
+  expires             DateTime?
+  accessToken         String
+  userId              BigInt?
+  firstName           String?
+  lastName            String?
+  email               String?
+  accountOwner        Boolean   @default(false)
+  locale              String?
+  collaborator        Boolean?  @default(false)
+  emailVerified       Boolean?  @default(false)
+  refreshToken        String?
+  refreshTokenExpires DateTime?
+}
+
+model Store {
+  id              String     @id @default(uuid())
+  shop            String     @unique
+  isActive        Boolean    @default(true)
+  planName              String     @default("Free") // Free, Growth, Pro, Elite
+  monthlyTagCount       Int        @default(0)
+  syncTagsToNotes       Boolean    @default(false)
+  klaviyoApiKey         String?
+  mailchimpApiKey       String?
+  mailchimpServerPrefix String?
+  mailchimpListId       String?
+  createdAt             DateTime   @default(now())
+  updatedAt             DateTime   @updatedAt
+  rules                 Rule[]
+  customers             Customer[]
+
+  @@index([shop])
+}
+
+model Rule {
+  id             String        @id @default(uuid())
+  storeId        String
+  store          Store         @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  name           String
+  description    String?
+  conditions     String        // Stored as JSON string
+  targetTag      String
+  collectionId   String?       // Targeting specific Shopify collections
+  collectionName String?
+  isActive       Boolean       @default(true)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  activityLogs   ActivityLog[]
+
+  @@index([storeId])
+}
+
+model Customer {
+  id            String        @id // Shopify Customer ID
+  storeId       String
+  store         Store         @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  email         String?
+  firstName     String?
+  lastName      String?
+  totalSpent    Float         @default(0)
+  orderCount    Int           @default(0)
+  lastOrderDate DateTime?
+  tags          String? // Commma separated tags from Shopify
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  activityLogs  ActivityLog[]
+
+  @@unique([id, storeId])
+  @@index([email])
+  @@index([storeId])
+}
+
+model ActivityLog {
+  id         String   @id @default(uuid())
+  storeId    String
+  customerId String
+  customer   Customer @relation(fields: [customerId, storeId], references: [id, storeId], onDelete: Cascade)
+  ruleId     String?
+  rule       Rule?    @relation(fields: [ruleId], references: [id], onDelete: SetNull)
+  action     String // e.g., "TAG_ADDED", "TAG_REMOVED"
+  tagContext String // e.g., "VIP"
+  reason     String? // e.g., "Customer spent ($120) which is greater than rule threshold ($100)"
+  createdAt  DateTime @default(now())
+}
