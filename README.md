@@ -43,7 +43,7 @@ TagBot AI is an intelligent Shopify application designed to replace manual custo
     ```bash
     npm install
     ```
-
+ 
 3.  **Link to your Shopify Partner App**
     Connect the codebase to your Shopify Partner Dashboard application:
     ```bash
