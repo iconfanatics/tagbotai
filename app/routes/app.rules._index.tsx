@@ -23,7 +23,25 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         orderBy: { createdAt: "desc" }
     });
 
-    return { rules, currentPlanName: store.planName };
+    const rulesWithMetrics = await Promise.all(
+        rules.map(async (rule) => {
+            const matchingCustomers = await db.customer.count({
+                where: { storeId: store.id, tags: { contains: rule.targetTag } }
+            });
+
+            const timesFired = await db.activityLog.count({
+                where: { storeId: store.id, tagContext: rule.targetTag, action: "TAG_ADDED" }
+            });
+
+            return {
+                ...rule,
+                matchingCustomers,
+                timesFired
+            };
+        })
+    );
+
+    return { rules: rulesWithMetrics, currentPlanName: store.planName };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -132,6 +150,16 @@ export default function RulesManagement() {
                         <Badge tone="info" progress="complete">{rule.targetTag}</Badge>
                     </IndexTable.Cell>
                     <IndexTable.Cell>
+                        <Text variant="bodyMd" fontWeight="semibold" as="span">
+                            {rule.matchingCustomers.toLocaleString()}
+                        </Text>
+                    </IndexTable.Cell>
+                    <IndexTable.Cell>
+                        <Text variant="bodyMd" fontWeight="semibold" as="span" tone="subdued">
+                            {rule.timesFired.toLocaleString()}
+                        </Text>
+                    </IndexTable.Cell>
+                    <IndexTable.Cell>
                         {rule.isActive ? <Badge tone="success">Active</Badge> : <Badge tone="critical">Inactive</Badge>}
                     </IndexTable.Cell>
                     <IndexTable.Cell>
@@ -205,6 +233,8 @@ export default function RulesManagement() {
                                 { title: 'Rule Name' },
                                 { title: 'Condition Logic' },
                                 { title: 'Target Tag' },
+                                { title: 'Matching Customers' },
+                                { title: 'Times Fired' },
                                 { title: 'Status' },
                                 { title: '' }, // Actions
                             ]}
