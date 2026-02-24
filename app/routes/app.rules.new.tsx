@@ -100,7 +100,17 @@ export default function NewRule() {
     const [activePreset, setActivePreset] = useState<string | null>(null);
 
     const handleSubmit = () => {
-        submit({ name, ruleType, field, operator, value, collectionId, collectionName, targetTag }, { method: "post" });
+        const formData = new FormData();
+        formData.append("name", name);
+        formData.append("ruleType", ruleType);
+        formData.append("field", field);
+        formData.append("operator", operator);
+        formData.append("value", value);
+        formData.append("collectionId", collectionId);
+        formData.append("collectionName", collectionName);
+        formData.append("targetTag", targetTag);
+
+        submit(formData, { method: "post" });
     };
 
     useEffect(() => {
