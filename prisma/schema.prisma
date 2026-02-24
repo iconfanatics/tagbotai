@@ -11,7 +11,10 @@ generator client {
 // See https://www.prisma.io/docs/orm/reference/prisma-schema-reference#string for more information
 datasource db {
   provider = "sqlite"
-  url      = env("TURSO_DATABASE_URL")
+  // The native SQLite provider requires a "file:" string at build time. 
+  // We use this local fallback for validation, while the dynamic "libsql://" URL 
+  // is passed at runtime directly to the @libsql/client adapter in app/db.server.ts.
+  url      = env("PRISMA_DB_URL")
 }
 
 model Session {

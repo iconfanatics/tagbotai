@@ -2,7 +2,7 @@
   "name": "tag-bot-ai-smart-segmentation",
   "private": true,
   "scripts": {
-    "vercel-build": "prisma generate && prisma migrate deploy && react-router build",
+    "vercel-build": "PRISMA_DB_URL=file:./dev.sqlite prisma generate && PRISMA_DB_URL=file:./dev.sqlite prisma migrate deploy && react-router build",
     "build": "react-router build",
     "dev": "shopify app dev",
     "config:link": "shopify app config link",
