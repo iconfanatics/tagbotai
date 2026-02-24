@@ -10,7 +10,7 @@ import { enqueueSyncJob } from "../services/queue.server";
 import { calculateCustomerTags } from "../services/rule.server";
 import { manageCustomerTags, sendVipDiscount } from "../services/tags.server";
 import { Page, Layout, Card, Text, BlockStack, InlineStack, Badge, DataTable, Button, Banner, Icon, Box, Modal, Spinner, CalloutCard, Divider, Grid } from "@shopify/polaris";
-import { HashtagIcon, PersonIcon, AlertCircleIcon, MagicIcon, RefreshIcon, PlusIcon, AutomationIcon, ExportIcon, ContentAddIcon, ViewIcon } from "@shopify/polaris-icons";
+import { HashtagIcon, PersonIcon, AlertCircleIcon, MagicIcon, RefreshIcon, PlusIcon, AutomationIcon, ExportIcon, ViewIcon } from "@shopify/polaris-icons";
 
 // Lazy-load the heavy Recharts library
 const DashboardChart = React.lazy(() => import("../components/DashboardChart"));
@@ -235,7 +235,7 @@ export default function Index() {
       ]}
       secondaryActions={[
         { content: 'View Automations', icon: ViewIcon, onAction: () => navigate('/app/rules') },
-        { content: 'New Rule', icon: ContentAddIcon, onAction: () => navigate('/app/rules/new') }
+        { content: 'New Rule', icon: PlusIcon, onAction: () => navigate('/app/rules/new') }
       ]}
     >
       <Layout>
