@@ -9,8 +9,8 @@ import { getCachedStore } from "../services/cache.server";
 import { enqueueSyncJob } from "../services/queue.server";
 import { calculateCustomerTags } from "../services/rule.server";
 import { manageCustomerTags, sendVipDiscount } from "../services/tags.server";
-import { Page, Layout, Card, Text, BlockStack, InlineStack, Badge, DataTable, Button, Banner, Icon, Box, Modal, Spinner } from "@shopify/polaris";
-import { HashtagIcon, PersonIcon, AlertCircleIcon, MagicIcon, RefreshIcon, PlusIcon, AutomationIcon, ExportIcon } from "@shopify/polaris-icons";
+import { Page, Layout, Card, Text, BlockStack, InlineStack, Badge, DataTable, Button, Banner, Icon, Box, Modal, Spinner, CalloutCard, Divider, Grid } from "@shopify/polaris";
+import { HashtagIcon, PersonIcon, AlertCircleIcon, MagicIcon, RefreshIcon, PlusIcon, AutomationIcon, ExportIcon, ContentAddIcon, ViewIcon } from "@shopify/polaris-icons";
 
 // Lazy-load the heavy Recharts library
 const DashboardChart = React.lazy(() => import("../components/DashboardChart"));
@@ -224,18 +224,18 @@ export default function Index() {
       primaryAction={{ content: 'Sync Customers', icon: RefreshIcon, onAction: handleSync, loading: isSyncing }}
       actionGroups={[
         {
-          title: 'Export CSV',
+          title: 'Export Customers',
           icon: ExportIcon,
           actions: [
-            { content: 'All Customers', onAction: () => handleExport() },
-            { content: 'Active VIPs', onAction: () => handleExport("VIP") },
-            { content: 'At-Risk Customers', onAction: () => handleExport("At-Risk") }
+            { content: 'All Segments (CSV)', onAction: () => handleExport() },
+            { content: 'Active VIPs (CSV)', onAction: () => handleExport("VIP") },
+            { content: 'At-Risk (CSV)', onAction: () => handleExport("At-Risk") }
           ]
         }
       ]}
       secondaryActions={[
-        { content: 'Manage Automations', icon: AutomationIcon, onAction: () => navigate('/app/rules') },
-        { content: 'Subscription', onAction: () => navigate('/app/pricing') }
+        { content: 'View Automations', icon: ViewIcon, onAction: () => navigate('/app/rules') },
+        { content: 'New Rule', icon: ContentAddIcon, onAction: () => navigate('/app/rules/new') }
       ]}
     >
       <Layout>
@@ -275,54 +275,61 @@ export default function Index() {
 
         {/* Top Row KPI Cards */}
         <Layout.Section>
-          <InlineStack gap="400" align="space-around">
-            <Card>
-              <div style={{ padding: '0 20px', minWidth: '200px' }}>
-                <BlockStack gap="200" align="start">
-                  <InlineStack gap="200" align="start" blockAlign="center">
-                    <Icon source={HashtagIcon} tone="base" />
-                    <Text variant="headingSm" as="h6" tone="subdued">Total Tags Applied</Text>
-                  </InlineStack>
-                  <Text variant="heading3xl" as="h2">{tagsAppliedCount.toLocaleString()}</Text>
-                </BlockStack>
-              </div>
-            </Card>
+          <Grid>
+            <Grid.Cell columnSpan={{ xs: 6, sm: 3, md: 3, lg: 4, xl: 4 }}>
+              <Card roundedAbove="sm">
+                <Box padding="400">
+                  <BlockStack gap="200">
+                    <InlineStack align="space-between">
+                      <Text variant="headingSm" as="h6" tone="subdued">Total Tags Applied</Text>
+                      <Icon source={HashtagIcon} tone="base" />
+                    </InlineStack>
+                    <Text variant="heading3xl" as="h2">{tagsAppliedCount.toLocaleString()}</Text>
+                  </BlockStack>
+                </Box>
+              </Card>
+            </Grid.Cell>
 
-            <Card>
-              <div style={{ padding: '0 20px', minWidth: '200px' }}>
-                <BlockStack gap="200" align="start">
-                  <InlineStack gap="200" align="start" blockAlign="center">
-                    <Icon source={PersonIcon} tone="base" />
-                    <Text variant="headingSm" as="h6" tone="subdued">Active VIPs</Text>
-                  </InlineStack>
-                  <Text variant="heading3xl" as="h2">{activeVipsCount.toLocaleString()}</Text>
-                </BlockStack>
-              </div>
-            </Card>
+            <Grid.Cell columnSpan={{ xs: 6, sm: 3, md: 3, lg: 4, xl: 4 }}>
+              <Card roundedAbove="sm" background="bg-surface-magic">
+                <Box padding="400">
+                  <BlockStack gap="200">
+                    <InlineStack align="space-between">
+                      <Text variant="headingSm" as="h6" tone="magic">Active VIPs</Text>
+                      <Icon source={PersonIcon} tone="magic" />
+                    </InlineStack>
+                    <Text variant="heading3xl" as="h2" tone="magic">{activeVipsCount.toLocaleString()}</Text>
+                  </BlockStack>
+                </Box>
+              </Card>
+            </Grid.Cell>
 
-            <Card>
-              <div style={{ padding: '0 20px', minWidth: '200px' }}>
-                <BlockStack gap="200" align="start">
-                  <InlineStack gap="200" align="start" blockAlign="center">
-                    <Icon source={AlertCircleIcon} tone="critical" />
-                    <Text variant="headingSm" as="h6" tone="subdued">At-Risk</Text>
-                  </InlineStack>
-                  <Text variant="heading3xl" as="h2">{atRiskCount.toLocaleString()}</Text>
-                </BlockStack>
-              </div>
-            </Card>
-          </InlineStack>
+            <Grid.Cell columnSpan={{ xs: 6, sm: 3, md: 3, lg: 4, xl: 4 }}>
+              <Card roundedAbove="sm" background="bg-surface-critical-active">
+                <Box padding="400">
+                  <BlockStack gap="200">
+                    <InlineStack align="space-between">
+                      <Text variant="headingSm" as="h6" tone="critical">At-Risk Customers</Text>
+                      <Icon source={AlertCircleIcon} tone="critical" />
+                    </InlineStack>
+                    <Text variant="heading3xl" as="h2" tone="critical">{atRiskCount.toLocaleString()}</Text>
+                  </BlockStack>
+                </Box>
+              </Card>
+            </Grid.Cell>
+          </Grid>
         </Layout.Section>
 
-        {/* Middle Section */}
+        {/* Middle Section: Chart & Insights */}
         <Layout.Section>
-          <InlineStack gap="400" align="start" blockAlign="stretch" wrap={false}>
+          <Grid>
             {/* Left Column: Segment Distribution */}
-            <div style={{ flex: 1, height: '300px' }}>
-              <Card>
-                <BlockStack gap="400" align="center">
-                  <Text variant="headingMd" as="h3">Segment Distribution</Text>
-                  <div style={{ height: '200px', width: '100%', display: 'flex', justifyContent: 'center' }}>
+            <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 3, lg: 6, xl: 6 }}>
+              <Card roundedAbove="sm">
+                <BlockStack gap="400">
+                  <Text variant="headingMd" as="h3">Audience Segments</Text>
+                  <Divider />
+                  <div style={{ height: '240px', width: '100%', display: 'flex', justifyContent: 'center' }}>
                     <React.Suspense fallback={
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
                         <Spinner accessibilityLabel="Loading chart" size="large" />
@@ -333,36 +340,29 @@ export default function Index() {
                   </div>
                 </BlockStack>
               </Card>
-            </div>
+            </Grid.Cell>
 
             {/* Right Column: AI Insights */}
-            <div style={{ flex: 1, height: '300px' }}>
-              <div style={{ height: '100%' }}>
-                <Box background="bg-surface-info" padding="400" borderRadius="200" minHeight="100%">
-                  <BlockStack gap="600">
-                    <InlineStack gap="200" align="start" blockAlign="center">
-                      <Icon source={MagicIcon} tone="info" />
-                      <Text variant="headingLg" as="h3" tone="magic">AI Insights</Text>
-                    </InlineStack>
-
-                    <Text as="p" variant="bodyMd">
-                      <Text as="span" fontWeight="bold">AI Suggestion: </Text>
-                      {aiInsightMessage}
-                    </Text>
-
-                    <Button
-                      variant="primary"
-                      tone="success"
-                      icon={PlusIcon}
-                      onClick={() => navigate('/app/rules/new')}
-                    >
-                      Create 'VIP-At-Risk' Automation
-                    </Button>
-                  </BlockStack>
-                </Box>
-              </div>
-            </div>
-          </InlineStack>
+            <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 3, lg: 6, xl: 6 }}>
+              <CalloutCard
+                title="TagBot AI Insights"
+                illustration="https://cdn.shopify.com/s/assets/admin/checkout/settings-customizecart-705f57c725ac05be5a34ec20c05b94298cb8afd10bf5ac5a56767eb215a77f0a.svg"
+                primaryAction={{
+                  content: 'Create "VIP-At-Risk" Rule',
+                  onAction: () => navigate('/app/rules/new'),
+                }}
+              >
+                <BlockStack gap="400">
+                  <Text as="p" variant="bodyMd">
+                    {aiInsightMessage}
+                  </Text>
+                  <InlineStack align="start">
+                    <Badge tone="magic" icon={MagicIcon}>AI Generated Recommendation</Badge>
+                  </InlineStack>
+                </BlockStack>
+              </CalloutCard>
+            </Grid.Cell>
+          </Grid>
         </Layout.Section>
 
         {/* Retention Alerts */}
@@ -407,14 +407,17 @@ export default function Index() {
         <Layout.Section>
           <Card padding="0">
             <Box padding="400">
-              <Text variant="headingMd" as="h3">Recent Automated Tagging Activity</Text>
+              <InlineStack align="space-between" blockAlign="center">
+                <Text variant="headingMd" as="h3">Recent Automation Activity</Text>
+                <Button size="micro" onClick={() => navigate('/app/rules')}>Manage Rules</Button>
+              </InlineStack>
             </Box>
+            <Divider />
             {recentLogs.length > 0 ? (
               <MemoizedDataTable
                 columnContentTypes={['text', 'text', 'text', 'text', 'text']}
-                headings={['Customer Name', 'Email', 'Tag Applied', 'Reason (Rule)', 'Date/Time']}
+                headings={['Customer Name', 'Email', 'Tag Action', 'Attributed To', 'Timestamp']}
                 rows={logRows}
-                hasZebraStripingOnData
               />
             ) : (
               <Box padding="400">
