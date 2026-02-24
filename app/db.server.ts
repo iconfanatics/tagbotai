@@ -1,5 +1,4 @@
 import { PrismaClient } from "@prisma/client";
-import { createClient } from "@libsql/client";
 import { PrismaLibSQL } from "@prisma/adapter-libsql";
 
 declare global {
@@ -7,13 +6,10 @@ declare global {
   var prismaGlobal: PrismaClient | undefined;
 }
 
-const libsql = createClient({
-  // Use Turso edge URL from Env, fallback to local SQLite file for development
+const adapter = new PrismaLibSQL({
   url: process.env.TURSO_DATABASE_URL || "file:dev.sqlite",
   authToken: process.env.TURSO_AUTH_TOKEN,
 });
-
-const adapter = new PrismaLibSQL(libsql);
 
 const prisma = global.prismaGlobal ?? new PrismaClient({ adapter });
 
