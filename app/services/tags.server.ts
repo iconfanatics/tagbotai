@@ -200,6 +200,31 @@ export async function manageCustomerTags(
     }
   }
 
+  // 5. Update Local Database Cache
+  if (allowedToTag && (tagsToAdd.length > 0 || tagsToRemove.length > 0)) {
+    try {
+      const dbCustomer = await db.customer.findUnique({
+        where: { id_storeId: { id: customerId, storeId } }
+      });
+
+      if (dbCustomer) {
+        let currentTags = dbCustomer.tags ? dbCustomer.tags.split(",").map(t => t.trim()).filter(Boolean) : [];
+        if (tagsToAdd.length > 0) currentTags = [...currentTags, ...tagsToAdd];
+        if (tagsToRemove.length > 0) currentTags = currentTags.filter(t => !tagsToRemove.includes(t));
+
+        // Deduplicate before saving
+        currentTags = Array.from(new Set(currentTags));
+
+        await db.customer.update({
+          where: { id_storeId: { id: customerId, storeId } },
+          data: { tags: currentTags.join(", ") }
+        });
+      }
+    } catch (err) {
+      console.error("[TAG_SERVICE] Failed to update local customer tags cache:", err);
+    }
+  }
+
   return { success: true, tagsAdded: tagsToAdd, tagsRemoved: tagsToRemove };
 }
 
