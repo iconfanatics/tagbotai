@@ -1,5 +1,6 @@
 import { Links, Meta, Outlet, Scripts, ScrollRestoration, type LinksFunction } from "react-router";
 import { SpeedInsights } from "@vercel/speed-insights/react";
+import { Analytics } from "@vercel/analytics/react";
 import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
 
 export const links: LinksFunction = () => [
@@ -25,6 +26,7 @@ export default function App() {
         <ScrollRestoration />
         <Scripts />
         <SpeedInsights />
+        <Analytics />
       </body>
     </html>
   );
