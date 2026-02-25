@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
-import { useLoaderData, useNavigate, useSubmit, useNavigation, useActionData } from "react-router";
+import { useLoaderData, useNavigate, useSubmit, useNavigation, useActionData, useRevalidator } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
@@ -10,7 +10,7 @@ import { enqueueSyncJob } from "../services/queue.server";
 import { calculateCustomerTags } from "../services/rule.server";
 import { manageCustomerTags, sendVipDiscount } from "../services/tags.server";
 import { Page, Layout, Card, Text, BlockStack, InlineStack, Badge, DataTable, Button, Banner, Icon, Box, Modal, Spinner, CalloutCard, Divider, Grid } from "@shopify/polaris";
-import { HashtagIcon, PersonIcon, AlertCircleIcon, MagicIcon, RefreshIcon, PlusIcon, AutomationIcon, ExportIcon, ViewIcon } from "@shopify/polaris-icons";
+import { HashtagIcon, PersonIcon, AlertCircleIcon, MagicIcon, RefreshIcon, PlusIcon, AutomationIcon, ExportIcon, ViewIcon, OrderIcon } from "@shopify/polaris-icons";
 
 // Lazy-load the heavy Recharts library
 const DashboardChart = React.lazy(() => import("../components/DashboardChart"));
@@ -25,7 +25,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const store = await getCachedStore(shop);
 
   if (!store) {
-    return { tagsAppliedCount: 0, activeVipsCount: 0, atRiskCount: 0, chartData: [], recentLogs: [], churningCustomers: [], currentPlanName: "Free", monthlyTagCount: 0 };
+    return { tagsAppliedCount: 0, activeVipsCount: 0, atRiskCount: 0, chartData: [], recentLogs: [], churningCustomers: [], currentPlanName: "Free", monthlyTagCount: 0, totalCustomers: 0, syncProgress: null };
   }
 
   const thirtyDaysAgo = new Date();
@@ -98,7 +98,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     aiInsightMessage,
     currentPlanName: store.planName,
     churningCustomers,
-    monthlyTagCount: store.monthlyTagCount
+    monthlyTagCount: store.monthlyTagCount,
+    totalCustomers,
+    syncProgress: store.isSyncing ? {
+      target: store.syncTarget,
+      completed: store.syncCompleted
+    } : null
   };
 };
 
@@ -175,14 +180,26 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
 export default function Index() {
   const shopify = useAppBridge();
-  const { tagsAppliedCount, activeVipsCount, atRiskCount, chartData, recentLogs, aiInsightMessage, currentPlanName, churningCustomers, monthlyTagCount } = useLoaderData<typeof loader>();
+  const { tagsAppliedCount, activeVipsCount, atRiskCount, chartData, recentLogs, aiInsightMessage, currentPlanName, churningCustomers, monthlyTagCount, totalCustomers, syncProgress } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigate = useNavigate();
   const submit = useSubmit();
   const navigation = useNavigation();
-  const isSyncing = navigation.state === "submitting";
+  const revalidator = useRevalidator();
+  const isSyncing = navigation.state === "submitting" || syncProgress !== null;
 
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
+
+  // Live UI Polling for the background progress bar
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (syncProgress !== null) {
+      interval = setInterval(() => {
+        revalidator.revalidate();
+      }, 2000);
+    }
+    return () => clearInterval(interval);
+  }, [syncProgress]);
 
   const handleSync = () => {
     submit({ action: "sync_customers" }, { method: "post" });
@@ -263,6 +280,39 @@ export default function Index() {
     }
   }
 
+  // Progress Bar tracking background jobs
+  let progressBanner = null;
+  if (syncProgress !== null) {
+    // Avoid divide-by-zero on initial ping
+    let percentage = 0;
+    if (syncProgress.target > 0) {
+      percentage = Math.max(0, Math.min(100, Math.round((syncProgress.completed / syncProgress.target) * 100)));
+    }
+
+    progressBanner = (
+      <Layout.Section>
+        <Banner tone="info" title="Background Automation Running">
+          <BlockStack gap="200">
+            <Text as="p">TagBot AI is evaluating past customers against your active rules. This runs in the background, minimizing impact on your store's performance.</Text>
+            <Box paddingBlockStart="200" paddingBlockEnd="100">
+              {percentage > 0 ? (
+                <InlineStack align="space-between" blockAlign="center">
+                  <Text as="span">{syncProgress.completed.toLocaleString()} / {syncProgress.target.toLocaleString()} Processed</Text>
+                  <Text as="span" fontWeight="bold">{percentage}%</Text>
+                </InlineStack>
+              ) : (
+                <Text as="span" tone="subdued">Initializing queue...</Text>
+              )}
+            </Box>
+            <div style={{ width: '100%', height: '8px', backgroundColor: 'var(--p-color-bg-surface-secondary)', borderRadius: '4px', overflow: 'hidden' }}>
+              <div style={{ width: `${percentage}%`, height: '100%', backgroundColor: 'var(--p-color-bg-fill-magic)', transition: 'width 0.5s ease-out' }}></div>
+            </div>
+          </BlockStack>
+        </Banner>
+      </Layout.Section>
+    );
+  }
+
   return (
     <Page
       title="TagBot AI: Smart Segmentation"
@@ -319,11 +369,26 @@ export default function Index() {
         )}
 
         {limitBanner}
+        {progressBanner}
 
         {/* Top Row KPI Cards */}
         <Layout.Section>
           <Grid>
-            <Grid.Cell columnSpan={{ xs: 6, sm: 3, md: 3, lg: 4, xl: 4 }}>
+            <Grid.Cell columnSpan={{ xs: 6, sm: 3, md: 3, lg: 3, xl: 3 }}>
+              <Card roundedAbove="sm">
+                <Box padding="400">
+                  <BlockStack gap="200">
+                    <InlineStack align="space-between">
+                      <Text variant="headingSm" as="h6" tone="subdued">Total Customers</Text>
+                      <Icon source={OrderIcon} tone="base" />
+                    </InlineStack>
+                    <Text variant="heading3xl" as="h2">{totalCustomers.toLocaleString()}</Text>
+                  </BlockStack>
+                </Box>
+              </Card>
+            </Grid.Cell>
+
+            <Grid.Cell columnSpan={{ xs: 6, sm: 3, md: 3, lg: 3, xl: 3 }}>
               <Card roundedAbove="sm">
                 <Box padding="400">
                   <BlockStack gap="200">
@@ -337,7 +402,7 @@ export default function Index() {
               </Card>
             </Grid.Cell>
 
-            <Grid.Cell columnSpan={{ xs: 6, sm: 3, md: 3, lg: 4, xl: 4 }}>
+            <Grid.Cell columnSpan={{ xs: 6, sm: 3, md: 3, lg: 3, xl: 3 }}>
               <Card roundedAbove="sm" background="bg-surface-magic">
                 <Box padding="400">
                   <BlockStack gap="200">
@@ -351,7 +416,7 @@ export default function Index() {
               </Card>
             </Grid.Cell>
 
-            <Grid.Cell columnSpan={{ xs: 6, sm: 3, md: 3, lg: 4, xl: 4 }}>
+            <Grid.Cell columnSpan={{ xs: 6, sm: 3, md: 3, lg: 3, xl: 3 }}>
               <Card roundedAbove="sm" background="bg-surface-critical-active">
                 <Box padding="400">
                   <BlockStack gap="200">

@@ -26,6 +26,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         return { error: "Store not found" };
     }
 
+    const { admin } = await authenticate.admin(request);
+
     const formData = await request.formData();
     const name = formData.get("name") as string;
     const ruleType = formData.get("ruleType") as string;
@@ -75,7 +77,53 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         }
     });
 
-    return redirect("/app/rules");
+    // START AUTO-SYNC
+    // Immediately fetch customers and dispatch them to the background worker 
+    // to calculate the new rule without requiring manual merchant action.
+    try {
+        const isFree = store.planName === "Free" || store.planName === "";
+        const fetchLimit = isFree ? 50 : 250;
+
+        const response = await admin.graphql(
+            `#graphql
+              query getCustomers {
+                customers(first: ${fetchLimit}) {
+                  edges {
+                    node {
+                      id
+                      email
+                      firstName
+                      lastName
+                      amountSpent {
+                        amount
+                      }
+                      numberOfOrders
+                      tags
+                    }
+                  }
+                }
+              }
+            `
+        );
+
+        const data = await response.json();
+        const customersToSync = data.data?.customers?.edges || [];
+
+        // We dynamically import `enqueueSyncJob` to avoid circular dependency trees 
+        // with the loader inside webhook architectures vs frontend routing
+        if (customersToSync.length > 0) {
+            const { enqueueSyncJob } = await import("../services/queue.server");
+            enqueueSyncJob({
+                shop,
+                storeId: store.id,
+                customersToSync
+            });
+        }
+    } catch (e) {
+        console.error("Failed to enqueue auto-sync on rule creation.", e);
+    }
+
+    return redirect("/app");
 };
 
 export default function NewRule() {

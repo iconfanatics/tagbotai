@@ -44,6 +44,9 @@ model Store {
   planName              String     @default("Free") // Free, Growth, Pro, Elite
   monthlyTagCount       Int        @default(0)
   syncTagsToNotes       Boolean    @default(false)
+  isSyncing             Boolean    @default(false)
+  syncTarget            Int        @default(0)
+  syncCompleted         Int        @default(0)
   klaviyoApiKey         String?
   mailchimpApiKey       String?
   mailchimpServerPrefix String?

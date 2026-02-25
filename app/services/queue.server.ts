@@ -31,6 +31,14 @@ async function processSyncJob(payload: SyncJobPayload) {
             where: { storeId: storeId, isActive: true }
         });
 
+        // Initialize sync progress 
+        await db.store.update({
+            where: { id: storeId },
+            data: { isSyncing: true, syncTarget: customersToSync.length, syncCompleted: 0 }
+        });
+
+        let completed = 0;
+
         for (const edge of customersToSync) {
             const c = edge.node;
             const customerId = c.id.split('/').pop();
@@ -84,10 +92,29 @@ async function processSyncJob(payload: SyncJobPayload) {
                     }
                 }
             }
+
+            completed++;
+            // Update database progress every 10 iterations to prevent write locks, or on the final item
+            if (completed % 10 === 0 || completed === customersToSync.length) {
+                await db.store.update({
+                    where: { id: storeId },
+                    data: { syncCompleted: completed }
+                });
+            }
         }
+
+        // Complete job
+        await db.store.update({
+            where: { id: storeId },
+            data: { isSyncing: false }
+        });
 
         console.log(`[QUEUE_WORKER] Finished processing ${customersToSync.length} customers for shop: ${shop}`);
     } catch (err: any) {
         console.error(`[QUEUE_WORKER] Failed to process sync job for ${shop}:`, err.message);
+        // Force reset the sync flag on critical failure
+        try {
+            await db.store.update({ where: { id: storeId }, data: { isSyncing: false } });
+        } catch (e) { }
     }
 }
