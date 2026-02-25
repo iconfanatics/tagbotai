@@ -31,13 +31,17 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     if (tag) {
         queryArgs.where.tags = { contains: tag };
     } else if (ruleId) {
-        // Find customers who had an activity log associated with this rule
-        const logs = await db.activityLog.findMany({
-            where: { storeId: store.id, ruleId: ruleId },
-            select: { customerId: true }
+        // Query the rule to find its target tag, then export all customers with that tag
+        const rule = await db.rule.findUnique({
+            where: { id: ruleId as string },
+            select: { targetTag: true }
         });
-        const targetedCustomerIds = [...new Set(logs.map(log => log.customerId))];
-        queryArgs.where.id = { in: targetedCustomerIds };
+
+        if (rule && rule.targetTag) {
+            queryArgs.where.tags = { contains: rule.targetTag };
+        } else {
+            return new Response("Rule not found or lacks a target tag.", { status: 404 });
+        }
     }
 
     const customers = await db.customer.findMany(queryArgs);
