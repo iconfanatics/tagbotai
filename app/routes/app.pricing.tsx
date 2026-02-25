@@ -1,4 +1,4 @@
-import { Page, Layout, Card, Text, BlockStack, Button, InlineStack, Box, Divider, List, Icon } from "@shopify/polaris";
+import { Page, Layout, Card, Text, BlockStack, Button, InlineStack, Box, Divider, List, Badge, Icon } from "@shopify/polaris";
 import { CheckIcon } from "@shopify/polaris-icons";
 import { authenticate, MONTHLY_PLAN } from "../shopify.server";
 import { useLoaderData, useSubmit, useActionData } from "react-router";
@@ -77,6 +77,41 @@ export default function Pricing() {
 
     return (
         <Page title="Upgrade Your Plan" backAction={{ content: "Dashboard", url: "/app" }}>
+            <style>{`
+                .pricing-grid {
+                    display: grid;
+                    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+                    gap: 16px;
+                    align-items: stretch;
+                }
+                .pricing-card {
+                    display: flex;
+                    flex-direction: column;
+                    height: 100%;
+                }
+                .pricing-card .Polaris-Card {
+                    height: 100%;
+                    display: flex;
+                    flex-direction: column;
+                }
+                .pricing-card-content {
+                    flex-grow: 1;
+                    display: flex;
+                    flex-direction: column;
+                }
+                .pricing-features {
+                    flex-grow: 1;
+                    padding-top: 12px;
+                }
+                .pricing-action {
+                    margin-top: auto;
+                    padding-top: 24px;
+                }
+                .pro-card .Polaris-Card {
+                    border: 2px solid var(--p-color-border-magic);
+                    box-shadow: var(--p-shadow-300);
+                }
+            `}</style>
             <Layout>
                 <Layout.Section>
                     <BlockStack gap="400" align="center">
@@ -89,21 +124,25 @@ export default function Pricing() {
                             </Text>
                         </Box>
 
-                        <InlineStack gap="400" align="center" blockAlign="stretch">
+                        <div className="pricing-grid">
 
                             {/* Free Plan */}
-                            <div style={{ flex: '1 1 250px', display: 'flex' }}>
+                            <div className="pricing-card">
                                 <Card>
-                                    <BlockStack gap="400">
-                                        <Text variant="headingLg" as="h2">Free</Text>
-                                        <Text variant="heading3xl" as="h3">$0<Text as="span" variant="bodyMd" tone="subdued">/mo</Text></Text>
-                                        <Text as="p" variant="bodyMd" tone="subdued">Everything you need to try out automation.</Text>
-                                        <Divider />
-                                        <List>
-                                            <List.Item>100 tags applied per month</List.Item>
-                                            <List.Item>Basic Dashboard Analytics</List.Item>
-                                        </List>
-                                        <Box paddingBlockStart="400">
+                                    <div className="pricing-card-content">
+                                        <BlockStack gap="400">
+                                            <Text variant="headingLg" as="h2">Free</Text>
+                                            <Text variant="heading3xl" as="h3">$0<Text as="span" variant="bodyMd" tone="subdued">/mo</Text></Text>
+                                            <Text as="p" variant="bodyMd" tone="subdued">Everything you need to try out automation.</Text>
+                                            <Divider />
+                                            <div className="pricing-features">
+                                                <List>
+                                                    <List.Item>100 tags applied per month</List.Item>
+                                                    <List.Item>Basic Dashboard Analytics</List.Item>
+                                                </List>
+                                            </div>
+                                        </BlockStack>
+                                        <div className="pricing-action">
                                             <Button
                                                 fullWidth
                                                 disabled={currentPlanName === "Free" || currentPlanName === ""}
@@ -112,25 +151,29 @@ export default function Pricing() {
                                             >
                                                 {currentPlanName === "Free" || currentPlanName === "" ? "Current Plan" : "Downgrade"}
                                             </Button>
-                                        </Box>
-                                    </BlockStack>
+                                        </div>
+                                    </div>
                                 </Card>
                             </div>
 
                             {/* Growth Plan */}
-                            <div style={{ flex: '1 1 250px', display: 'flex' }}>
+                            <div className="pricing-card">
                                 <Card>
-                                    <BlockStack gap="400">
-                                        <Text variant="headingLg" as="h2" tone="magic">Growth</Text>
-                                        <Text variant="heading3xl" as="h3">$14.99<Text as="span" variant="bodyMd" tone="subdued">/mo</Text></Text>
-                                        <Text as="p" variant="bodyMd" tone="subdued">For growing stores that need more volume.</Text>
-                                        <Divider />
-                                        <List>
-                                            <List.Item>1,000 tags applied per month</List.Item>
-                                            <List.Item>Basic Dashboard Analytics</List.Item>
-                                            <List.Item>Email Support</List.Item>
-                                        </List>
-                                        <Box paddingBlockStart="400">
+                                    <div className="pricing-card-content">
+                                        <BlockStack gap="400">
+                                            <Text variant="headingLg" as="h2" tone="magic">Growth</Text>
+                                            <Text variant="heading3xl" as="h3">$14.99<Text as="span" variant="bodyMd" tone="subdued">/mo</Text></Text>
+                                            <Text as="p" variant="bodyMd" tone="subdued">For growing stores that need more volume.</Text>
+                                            <Divider />
+                                            <div className="pricing-features">
+                                                <List>
+                                                    <List.Item>1,000 tags applied per month</List.Item>
+                                                    <List.Item>Basic Dashboard Analytics</List.Item>
+                                                    <List.Item>Email Support</List.Item>
+                                                </List>
+                                            </div>
+                                        </BlockStack>
+                                        <div className="pricing-action">
                                             <Button
                                                 fullWidth
                                                 variant={currentPlanName === "Growth Plan" ? "tertiary" : "primary"}
@@ -140,30 +183,32 @@ export default function Pricing() {
                                             >
                                                 {currentPlanName === "Growth Plan" ? "Current Plan" : "Upgrade to Growth"}
                                             </Button>
-                                        </Box>
-                                    </BlockStack>
+                                        </div>
+                                    </div>
                                 </Card>
                             </div>
 
                             {/* Pro Plan */}
-                            <div style={{ flex: '1 1 250px', display: 'flex', transform: 'scale(1.05)', zIndex: 1 }}>
+                            <div className="pricing-card pro-card">
                                 <Card background="bg-surface-magic">
-                                    <BlockStack gap="400">
-                                        <InlineStack align="space-between">
-                                            <Text variant="headingLg" as="h2" tone="magic">Pro</Text>
-                                            <Box padding="100" background="bg-surface-brand" borderRadius="100">
-                                                <Text as="span" variant="bodySm" tone="text-inverse">Most Popular</Text>
-                                            </Box>
-                                        </InlineStack>
-                                        <Text variant="heading3xl" as="h3">$29.99<Text as="span" variant="bodyMd" tone="subdued">/mo</Text></Text>
-                                        <Text as="p" variant="bodyMd" tone="subdued">Unlimited tagging with advanced insights.</Text>
-                                        <Divider />
-                                        <List>
-                                            <List.Item><strong>Unlimited tags applied per month</strong></List.Item>
-                                            <List.Item>AI Insights Engine</List.Item>
-                                            <List.Item>CSV Data Export</List.Item>
-                                        </List>
-                                        <Box paddingBlockStart="400">
+                                    <div className="pricing-card-content">
+                                        <BlockStack gap="400">
+                                            <InlineStack align="space-between" blockAlign="center">
+                                                <Text variant="headingLg" as="h2" tone="magic">Pro</Text>
+                                                <Badge tone="magic">Most Popular</Badge>
+                                            </InlineStack>
+                                            <Text variant="heading3xl" as="h3">$29.99<Text as="span" variant="bodyMd" tone="subdued">/mo</Text></Text>
+                                            <Text as="p" variant="bodyMd" tone="subdued">Unlimited tagging with advanced insights.</Text>
+                                            <Divider />
+                                            <div className="pricing-features">
+                                                <List>
+                                                    <List.Item><strong>Unlimited tags applied</strong></List.Item>
+                                                    <List.Item>AI Insights Engine</List.Item>
+                                                    <List.Item>CSV Data Export</List.Item>
+                                                </List>
+                                            </div>
+                                        </BlockStack>
+                                        <div className="pricing-action">
                                             <Button
                                                 fullWidth
                                                 variant={currentPlanName === "Pro Plan" ? "tertiary" : "primary"}
@@ -174,25 +219,29 @@ export default function Pricing() {
                                             >
                                                 {currentPlanName === "Pro Plan" ? "Current Plan" : "Upgrade to Pro"}
                                             </Button>
-                                        </Box>
-                                    </BlockStack>
+                                        </div>
+                                    </div>
                                 </Card>
                             </div>
 
                             {/* Elite Plan */}
-                            <div style={{ flex: '1 1 250px', display: 'flex' }}>
+                            <div className="pricing-card">
                                 <Card>
-                                    <BlockStack gap="400">
-                                        <Text variant="headingLg" as="h2">Elite</Text>
-                                        <Text variant="heading3xl" as="h3">$49.99<Text as="span" variant="bodyMd" tone="subdued">/mo</Text></Text>
-                                        <Text as="p" variant="bodyMd" tone="subdued">Enterprise features & external integrations.</Text>
-                                        <Divider />
-                                        <List>
-                                            <List.Item><strong>Unlimited tags applied per month</strong></List.Item>
-                                            <List.Item>Priority 24/7 Support</List.Item>
-                                            <List.Item>Klaviyo / Mailchimp Sync (Coming Soon)</List.Item>
-                                        </List>
-                                        <Box paddingBlockStart="400">
+                                    <div className="pricing-card-content">
+                                        <BlockStack gap="400">
+                                            <Text variant="headingLg" as="h2">Elite</Text>
+                                            <Text variant="heading3xl" as="h3">$49.99<Text as="span" variant="bodyMd" tone="subdued">/mo</Text></Text>
+                                            <Text as="p" variant="bodyMd" tone="subdued">Enterprise features & external integrations.</Text>
+                                            <Divider />
+                                            <div className="pricing-features">
+                                                <List>
+                                                    <List.Item><strong>Unlimited tags applied</strong></List.Item>
+                                                    <List.Item>Priority 24/7 Support</List.Item>
+                                                    <List.Item>Klaviyo / Mailchimp Setup</List.Item>
+                                                </List>
+                                            </div>
+                                        </BlockStack>
+                                        <div className="pricing-action">
                                             <Button
                                                 fullWidth
                                                 variant={currentPlanName === "Elite Plan" ? "tertiary" : "primary"}
@@ -202,12 +251,12 @@ export default function Pricing() {
                                             >
                                                 {currentPlanName === "Elite Plan" ? "Current Plan" : "Upgrade to Elite"}
                                             </Button>
-                                        </Box>
-                                    </BlockStack>
+                                        </div>
+                                    </div>
                                 </Card>
                             </div>
 
-                        </InlineStack>
+                        </div>
                     </BlockStack>
                 </Layout.Section>
             </Layout>
