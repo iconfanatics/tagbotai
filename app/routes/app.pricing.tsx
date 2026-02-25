@@ -1,9 +1,9 @@
 import { Page, Layout, Card, Text, BlockStack, Button, InlineStack, Box, Divider, List, Icon } from "@shopify/polaris";
 import { CheckIcon } from "@shopify/polaris-icons";
 import { authenticate, MONTHLY_PLAN } from "../shopify.server";
-import { useLoaderData, useSubmit, useNavigation, useActionData } from "react-router";
+import { useLoaderData, useSubmit, useActionData } from "react-router";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import db from "../db.server";
 import { getCachedStore, invalidateStoreCache } from "../services/cache.server";
@@ -62,7 +62,7 @@ export default function Pricing() {
     const { currentPlanName } = useLoaderData<typeof loader>();
     const actionData = useActionData<typeof action>();
     const submit = useSubmit();
-    const navigation = useNavigation();
+    const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
 
     useEffect(() => {
         if (actionData?.message) {
@@ -71,6 +71,7 @@ export default function Pricing() {
     }, [actionData]);
 
     const handleSubscribe = (plan: string) => {
+        setLoadingPlan(plan);
         submit({ plan }, { method: "post" });
     }
 
@@ -106,7 +107,8 @@ export default function Pricing() {
                                             <Button
                                                 fullWidth
                                                 disabled={currentPlanName === "Free" || currentPlanName === ""}
-                                                onClick={() => handleSubscribe("Free")} // Added onClick for downgrade
+                                                onClick={() => handleSubscribe("Free")}
+                                                loading={loadingPlan === "Free"}
                                             >
                                                 {currentPlanName === "Free" || currentPlanName === "" ? "Current Plan" : "Downgrade"}
                                             </Button>
@@ -134,7 +136,7 @@ export default function Pricing() {
                                                 variant={currentPlanName === "Growth Plan" ? "tertiary" : "primary"}
                                                 disabled={currentPlanName === "Growth Plan"}
                                                 onClick={() => handleSubscribe("Growth Plan")}
-                                                loading={navigation.state === "submitting"}
+                                                loading={loadingPlan === "Growth Plan"}
                                             >
                                                 {currentPlanName === "Growth Plan" ? "Current Plan" : "Upgrade to Growth"}
                                             </Button>
@@ -168,7 +170,7 @@ export default function Pricing() {
                                                 tone="success"
                                                 disabled={currentPlanName === "Pro Plan"}
                                                 onClick={() => handleSubscribe("Pro Plan")}
-                                                loading={navigation.state === "submitting"}
+                                                loading={loadingPlan === "Pro Plan"}
                                             >
                                                 {currentPlanName === "Pro Plan" ? "Current Plan" : "Upgrade to Pro"}
                                             </Button>
@@ -196,7 +198,7 @@ export default function Pricing() {
                                                 variant={currentPlanName === "Elite Plan" ? "tertiary" : "primary"}
                                                 disabled={currentPlanName === "Elite Plan"}
                                                 onClick={() => handleSubscribe("Elite Plan")}
-                                                loading={navigation.state === "submitting"}
+                                                loading={loadingPlan === "Elite Plan"}
                                             >
                                                 {currentPlanName === "Elite Plan" ? "Current Plan" : "Upgrade to Elite"}
                                             </Button>
