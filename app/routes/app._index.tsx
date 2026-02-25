@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
-import { useLoaderData, useNavigate, useSubmit, useNavigation, useActionData, useRevalidator, defer, Await } from "react-router";
+import { useLoaderData, useNavigate, useSubmit, useNavigation, useActionData, useRevalidator, Await } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
@@ -37,11 +37,11 @@ const DashboardSkeleton = () => (
       </Grid>
     </Layout.Section>
     <Layout.Section>
-        <Card roundedAbove="sm">
-            <Box padding="400">
-                <SkeletonBodyText lines={6} />
-            </Box>
-        </Card>
+      <Card roundedAbove="sm">
+        <Box padding="400">
+          <SkeletonBodyText lines={6} />
+        </Box>
+      </Card>
     </Layout.Section>
   </>
 );
@@ -53,12 +53,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const store = await getCachedStore(shop);
 
   if (!store) {
-    return defer({
+    return {
       currentPlanName: "Free",
       monthlyTagCount: 0,
       syncProgress: null,
-      dashboardDataPromise: Promise.resolve({ metrics: [0,0,0,0,0,0,[]], churningCustomers: [] })
-    });
+      dashboardDataPromise: Promise.resolve({ metrics: [0, 0, 0, 0, 0, 0, []], churningCustomers: [] })
+    };
   }
 
   const thirtyDaysAgo = new Date();
@@ -99,7 +99,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     return { metrics, churningCustomers };
   })();
 
-  return defer({
+  return {
     currentPlanName: store.planName,
     monthlyTagCount: store.monthlyTagCount,
     syncProgress: store.isSyncing ? {
@@ -107,7 +107,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       completed: store.syncCompleted
     } : null,
     dashboardDataPromise
-  });
+  };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
