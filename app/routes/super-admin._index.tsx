@@ -38,7 +38,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     let totalTagsEverApplied = 0;
 
     const mappedStores = stores.map(store => {
-        totalTagsEverApplied += store.monthlyTagCount;
+        const totalCustomers = store._count?.customers || 0;
+        const totalTagsApplied = store._count?.activityLogs || 0;
+
+        totalTagsEverApplied += totalTagsApplied;
 
         if (store.isActive) {
             if (store.planName === "Growth Plan") totalRevenue += 14.99;
@@ -52,8 +55,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
             planName: store.planName || "Free",
             isActive: store.isActive,
             monthlyTagCount: store.monthlyTagCount,
-            totalCustomers: store._count.customers,
-            totalTagsApplied: store._count.activityLogs,
+            totalCustomers: totalCustomers,
+            totalTagsApplied: totalTagsApplied,
             createdAt: new Date(store.createdAt).toLocaleDateString()
         };
     });
