@@ -11,7 +11,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
     // 2. Fetch all stores and calculate churn
     const stores = await db.store.findMany({
-        orderBy: { createdAt: "desc" }
+        orderBy: { createdAt: "desc" },
+        include: {
+            _count: {
+                select: {
+                    customers: true,
+                    activityLogs: { where: { action: "TAG_ADDED" } }
+                }
+            }
+        }
     });
 
     const sixtyDaysAgo = new Date();
@@ -44,6 +52,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
             planName: store.planName || "Free",
             isActive: store.isActive,
             monthlyTagCount: store.monthlyTagCount,
+            totalCustomers: store._count.customers,
+            totalTagsApplied: store._count.activityLogs,
             createdAt: new Date(store.createdAt).toLocaleDateString()
         };
     });
@@ -160,14 +170,16 @@ export default function SuperAdminIndex() {
                             <Text variant="headingMd" as="h3">All Installed Stores</Text>
                         </div>
                         <DataTable
-                            columnContentTypes={['text', 'text', 'text', 'numeric', 'text', 'text']}
-                            headings={['Shop URL', 'Status', 'Plan', 'Tags Used (Mo)', 'Installed At', 'Actions']}
+                            columnContentTypes={['text', 'text', 'text', 'numeric', 'numeric', 'numeric', 'text', 'text']}
+                            headings={['Shop URL', 'Status', 'Plan', 'Total Customers', 'Lifelong Tags', 'Tags Used (Mo)', 'Installed At', 'Actions']}
                             rows={stores.map(store => [
                                 <Text key={`id-${store.id}`} variant="bodyMd" fontWeight="bold" as="span">{store.shop}</Text>,
                                 store.isActive ? <Badge key={`active-${store.id}`} tone="success">Active</Badge> : <Badge key={`inactive-${store.id}`} tone="critical">Uninstalled</Badge>,
                                 <Badge key={`plan-${store.id}`} tone={store.planName.includes("Pro") || store.planName.includes("Elite") ? "magic" : "info"}>
                                     {store.planName}
                                 </Badge>,
+                                store.totalCustomers.toLocaleString(),
+                                store.totalTagsApplied.toLocaleString(),
                                 store.monthlyTagCount.toLocaleString(),
                                 store.createdAt,
                                 <InlineStack key={`actions-${store.id}`} gap="200" wrap={false}>
