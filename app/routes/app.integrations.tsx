@@ -138,7 +138,11 @@ export default function Integrations() {
 
                     {!isElitePlan && (
                         <Box paddingBlockEnd="400">
-                            <Banner tone="warning" title="Elite Plan Required">
+                            <Banner
+                                tone="warning"
+                                title="Elite Plan Required"
+                                action={{ content: 'Upgrade Plan', onAction: () => navigate('/app/pricing') }}
+                            >
                                 <Text as="p">You must be on the Elite plan to activate external marketing integrations.</Text>
                             </Banner>
                         </Box>

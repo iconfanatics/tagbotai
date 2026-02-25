@@ -1,8 +1,10 @@
 import { Page, Layout, Card, Text, BlockStack, Button, InlineStack, Box, Divider, List, Icon } from "@shopify/polaris";
 import { CheckIcon } from "@shopify/polaris-icons";
 import { authenticate, MONTHLY_PLAN } from "../shopify.server";
-import { useLoaderData, useSubmit, useNavigation } from "react-router";
+import { useLoaderData, useSubmit, useNavigation, useActionData } from "react-router";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
+import { useEffect } from "react";
+import { useAppBridge } from "@shopify/app-bridge-react";
 import db from "../db.server";
 import { getCachedStore, invalidateStoreCache } from "../services/cache.server";
 
@@ -22,6 +24,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const { billing, session } = await authenticate.admin(request);
     const formData = await request.formData();
     const plan = formData.get("plan") as string;
+    const url = new URL(request.url);
 
     if (plan === "Growth Plan" || plan === "Pro Plan" || plan === "Elite Plan") {
         await billing.require({
@@ -30,16 +33,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             onFailure: async () => billing.request({
                 plan: plan,
                 isTest: true,
-                returnUrl: `https://${process.env.SHOP_CUSTOM_DOMAIN || "admin.shopify.com"}/store/app/pricing`,
+                returnUrl: `https://${url.host}/app/pricing`,
             }),
         });
 
-        // If they already had the plan, billing.require passes and we do nothing (or redirect).
-        // The actual plan update in the DB should happen via webhook after successful payment.
-        // However, if we are simulating an immediate update for testing or specific flow,
-        // we would update the DB here and invalidate the cache.
-        // For now, we assume the billing.require handles the redirect or success.
-        return null;
+        // If Shopify says they ALREADY have the plan, update the local DB
+        await db.store.update({
+            where: { shop: session.shop },
+            data: { planName: plan }
+        });
+        invalidateStoreCache(session.shop);
+        return { success: true, message: `Successfully upgraded to ${plan}.` };
     } else if (plan === "Free") {
         // This block handles downgrading to the Free plan
         await db.store.update({
@@ -50,13 +54,21 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         return { success: true, message: "Successfully downgraded to Free Plan." };
     }
 
-    return null;
+    return { success: false, message: "Invalid plan selection." };
 }
 
 export default function Pricing() {
+    const shopify = useAppBridge();
     const { currentPlanName } = useLoaderData<typeof loader>();
+    const actionData = useActionData<typeof action>();
     const submit = useSubmit();
     const navigation = useNavigation();
+
+    useEffect(() => {
+        if (actionData?.message) {
+            shopify.toast.show(actionData.message, { isError: !actionData.success });
+        }
+    }, [actionData]);
 
     const handleSubscribe = (plan: string) => {
         submit({ plan }, { method: "post" });
