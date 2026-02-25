@@ -25,7 +25,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const store = await getCachedStore(shop);
 
   if (!store) {
-    return { tagsAppliedCount: 0, activeVipsCount: 0, atRiskCount: 0, chartData: [], recentLogs: [], churningCustomers: [] };
+    return { tagsAppliedCount: 0, activeVipsCount: 0, atRiskCount: 0, chartData: [], recentLogs: [], churningCustomers: [], currentPlanName: "Free", monthlyTagCount: 0 };
   }
 
   const thirtyDaysAgo = new Date();
@@ -97,7 +97,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     recentLogs,
     aiInsightMessage,
     currentPlanName: store.planName,
-    churningCustomers
+    churningCustomers,
+    monthlyTagCount: store.monthlyTagCount
   };
 };
 
@@ -174,7 +175,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
 export default function Index() {
   const shopify = useAppBridge();
-  const { tagsAppliedCount, activeVipsCount, atRiskCount, chartData, recentLogs, aiInsightMessage, currentPlanName, churningCustomers } = useLoaderData<typeof loader>();
+  const { tagsAppliedCount, activeVipsCount, atRiskCount, chartData, recentLogs, aiInsightMessage, currentPlanName, churningCustomers, monthlyTagCount } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigate = useNavigate();
   const submit = useSubmit();
@@ -217,6 +218,50 @@ export default function Index() {
       Send Win-back Offer
     </Button>
   ]), [churningCustomers, submit]);
+
+  // Tag Limit Checking Logic
+  let tagLimit = Infinity;
+  if (currentPlanName === "Free" || currentPlanName === "") tagLimit = 100;
+  else if (currentPlanName === "Growth Plan") tagLimit = 1000;
+
+  let limitBanner = null;
+  const currentMonthlyTags = monthlyTagCount || 0;
+  if (tagLimit !== Infinity) {
+    if (currentMonthlyTags >= tagLimit) {
+      limitBanner = (
+        <Layout.Section>
+          <Banner tone="critical" title="Monthly Tagging Limit Reached">
+            <BlockStack gap="200">
+              <Text as="p">
+                You have reached your limit of {tagLimit} automated tags for this billing cycle. TagBot AI has paused applying new tags to avoid overage charges.
+              </Text>
+              <Text as="p" fontWeight="bold">
+                Please upgrade to a premium plan to instantly resume automation.
+              </Text>
+              <Box paddingBlockStart="200">
+                <Button onClick={() => navigate('/app/pricing')} tone="critical">Upgrade Plan</Button>
+              </Box>
+            </BlockStack>
+          </Banner>
+        </Layout.Section>
+      );
+    } else if (currentMonthlyTags >= tagLimit * 0.9) {
+      limitBanner = (
+        <Layout.Section>
+          <Banner tone="warning" title="Approaching Tagging Limit">
+            <BlockStack gap="200">
+              <Text as="p">
+                You have used {monthlyTagCount} out of {tagLimit} automated tags for this billing cycle. Consider upgrading your plan to ensure uninterrupted automation when the limit is reached.
+              </Text>
+              <Box paddingBlockStart="200">
+                <Button onClick={() => navigate('/app/pricing')}>View Plans</Button>
+              </Box>
+            </BlockStack>
+          </Banner>
+        </Layout.Section>
+      );
+    }
+  }
 
   return (
     <Page
@@ -272,6 +317,8 @@ export default function Index() {
             </Banner>
           </Layout.Section>
         )}
+
+        {limitBanner}
 
         {/* Top Row KPI Cards */}
         <Layout.Section>
