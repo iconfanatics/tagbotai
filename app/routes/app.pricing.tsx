@@ -27,15 +27,25 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const url = new URL(request.url);
 
     if (plan === "Growth Plan" || plan === "Pro Plan" || plan === "Elite Plan") {
-        await billing.require({
-            plans: [plan],
-            isTest: true,
-            onFailure: async () => billing.request({
-                plan: plan,
+        try {
+            await billing.require({
+                plans: [plan],
                 isTest: true,
-                returnUrl: `https://${url.host}/app/pricing`,
-            }),
-        });
+                onFailure: async () => billing.request({
+                    plan: plan,
+                    isTest: true,
+                    returnUrl: `https://${url.host}/app/pricing`,
+                }),
+            });
+        } catch (error: any) {
+            // If the error is a redirect Response from billing.request, throw it so React Router handles it
+            if (error instanceof Response) {
+                throw error;
+            }
+            // Otherwise, it's a genuine API error from Shopify (e.g. cannot use isTest=true on live store)
+            console.error("[BILLING_ERROR]", error);
+            return { success: false, message: `Billing Error: ${error.message || String(error)}` };
+        }
 
         // If Shopify says they ALREADY have the plan, update the local DB
         await db.store.update({
