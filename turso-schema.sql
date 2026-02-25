@@ -18,7 +18,6 @@ CREATE TABLE "Session" (
     "refreshToken" TEXT,
     "refreshTokenExpires" DATETIME
 );
-
 -- CreateTable
 CREATE TABLE "Store" (
     "id" TEXT NOT NULL PRIMARY KEY,
@@ -27,6 +26,9 @@ CREATE TABLE "Store" (
     "planName" TEXT NOT NULL DEFAULT 'Free',
     "monthlyTagCount" INTEGER NOT NULL DEFAULT 0,
     "syncTagsToNotes" BOOLEAN NOT NULL DEFAULT false,
+    "isSyncing" BOOLEAN NOT NULL DEFAULT false,
+    "syncTarget" INTEGER NOT NULL DEFAULT 0,
+    "syncCompleted" INTEGER NOT NULL DEFAULT 0,
     "klaviyoApiKey" TEXT,
     "mailchimpApiKey" TEXT,
     "mailchimpServerPrefix" TEXT,
@@ -34,7 +36,6 @@ CREATE TABLE "Store" (
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" DATETIME NOT NULL
 );
-
 -- CreateTable
 CREATE TABLE "Rule" (
     "id" TEXT NOT NULL PRIMARY KEY,
@@ -50,7 +51,6 @@ CREATE TABLE "Rule" (
     "updatedAt" DATETIME NOT NULL,
     CONSTRAINT "Rule_storeId_fkey" FOREIGN KEY ("storeId") REFERENCES "Store" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
-
 -- CreateTable
 CREATE TABLE "Customer" (
     "id" TEXT NOT NULL PRIMARY KEY,
@@ -66,7 +66,6 @@ CREATE TABLE "Customer" (
     "updatedAt" DATETIME NOT NULL,
     CONSTRAINT "Customer_storeId_fkey" FOREIGN KEY ("storeId") REFERENCES "Store" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
-
 -- CreateTable
 CREATE TABLE "ActivityLog" (
     "id" TEXT NOT NULL PRIMARY KEY,
@@ -78,24 +77,18 @@ CREATE TABLE "ActivityLog" (
     "reason" TEXT,
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "ActivityLog_customerId_storeId_fkey" FOREIGN KEY ("customerId", "storeId") REFERENCES "Customer" ("id", "storeId") ON DELETE CASCADE ON UPDATE CASCADE,
-    CONSTRAINT "ActivityLog_ruleId_fkey" FOREIGN KEY ("ruleId") REFERENCES "Rule" ("id") ON DELETE SET NULL ON UPDATE CASCADE
+    CONSTRAINT "ActivityLog_ruleId_fkey" FOREIGN KEY ("ruleId") REFERENCES "Rule" ("id") ON DELETE
+    SET NULL ON UPDATE CASCADE
 );
-
 -- CreateIndex
 CREATE UNIQUE INDEX "Store_shop_key" ON "Store"("shop");
-
 -- CreateIndex
 CREATE INDEX "Store_shop_idx" ON "Store"("shop");
-
 -- CreateIndex
 CREATE INDEX "Rule_storeId_idx" ON "Rule"("storeId");
-
 -- CreateIndex
 CREATE INDEX "Customer_email_idx" ON "Customer"("email");
-
 -- CreateIndex
 CREATE INDEX "Customer_storeId_idx" ON "Customer"("storeId");
-
 -- CreateIndex
 CREATE UNIQUE INDEX "Customer_id_storeId_key" ON "Customer"("id", "storeId");
-

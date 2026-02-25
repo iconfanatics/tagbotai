@@ -1,4 +1,6 @@
-import React, { useEffect, useState } from "react";
+import os
+
+content = """import React, { useEffect, useState } from "react";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
 import { useLoaderData, useNavigate, useSubmit, useNavigation, useActionData, useRevalidator, defer, Await } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
@@ -578,3 +580,8 @@ export default function Index() {
 export const headers = (headersArgs: any) => {
   return boundary.headers(headersArgs);
 };
+"""
+
+with open("app/routes/app._index.tsx", "w") as f:
+    f.write(content)
+
