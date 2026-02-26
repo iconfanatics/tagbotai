@@ -104,3 +104,67 @@ export async function generateRuleConditions(prompt: string): Promise<GeneratedR
         return null;
     }
 }
+
+/**
+ * Analyzes a Shopify Order Note to determine customer sentiment or intent.
+ * Returns a single, concise Tag (e.g., "Gifting", "Frustrated", "Urgent") or null if neutral/meaningless.
+ */
+export async function analyzeSentiment(note: string): Promise<string | null> {
+    const provider = process.env.ACTIVE_AI_PROVIDER?.toLowerCase() || 'gemini';
+
+    const sentimentPrompt = `
+You are an AI order analysis engine for Shopify.
+Read the following customer order note and determine if it warrants a special tag.
+
+CATEGORIES TO LOOK FOR:
+- Gifting (e.g., "Please don't include an invoice", "Happy birthday mom") -> return "Gifting"
+- Frustrated (e.g., "This took forever last time", "Better not be broken") -> return "Frustrated"
+- Urgent (e.g., "I need this by Friday", "Overnight shipping please") -> return "Urgent"
+- High-Intent (e.g., "I buy these all the time", "Can't wait to try") -> return "High-Intent"
+
+INSTRUCTIONS:
+1. If the note clearly matches one of the above intents, return ONLY the single tag word (e.g. "Gifting").
+2. Do not include any punctuation, explanation, or quotes.
+3. If the note is neutral, meaningless, or just generic instructions (e.g., "Leave at back door"), return EXACTLY the string "NULL".
+
+CUSTOMER NOTE:
+"${note}"
+`;
+
+    try {
+        if (provider === 'gemini') {
+            const apiKey = process.env.GEMINI_API_KEY;
+            if (!apiKey) return null;
+
+            const genAI = new GoogleGenerativeAI(apiKey);
+            const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+            const result = await model.generateContent(sentimentPrompt);
+            const tag = result.response.text().trim();
+
+            return tag === "NULL" ? null : tag;
+
+        } else if (provider === 'openai') {
+            const apiKey = process.env.OPENAI_API_KEY;
+            if (!apiKey) return null;
+
+            const openai = new OpenAI({ apiKey });
+
+            const completion = await openai.chat.completions.create({
+                model: "gpt-4o-mini",
+                messages: [
+                    { role: "user", content: sentimentPrompt }
+                ]
+            });
+
+            const tag = completion.choices[0]?.message?.content?.trim() || "NULL";
+            return tag === "NULL" ? null : tag;
+
+        }
+    } catch (error) {
+        console.error("[AI_SERVICE] Failed to analyze sentiment:", error);
+        return null;
+    }
+
+    return null;
+}

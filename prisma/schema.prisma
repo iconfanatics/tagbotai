@@ -38,13 +38,14 @@ model Session {
 }
 
 model Store {
-  id              String     @id @default(uuid())
-  shop            String     @unique
-  isActive        Boolean    @default(true)
-  planName              String     @default("Free") // Free, Growth, Pro, Elite
-  monthlyTagCount       Int        @default(0)
-  syncTagsToNotes       Boolean    @default(false)
-  isSyncing             Boolean    @default(false)
+  id                    String        @id @default(uuid())
+  shop                  String        @unique
+  isActive              Boolean       @default(true)
+  planName              String        @default("Free") // Free, Growth, Pro, Elite
+  monthlyTagCount       Int           @default(0)
+  syncTagsToNotes       Boolean       @default(false)
+  enableSentimentAnalysis Boolean     @default(false)
+  isSyncing             Boolean       @default(false)
   syncTarget            Int        @default(0)
   syncCompleted         Int        @default(0)
   klaviyoApiKey         String?

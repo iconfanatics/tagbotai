@@ -4,6 +4,7 @@ import db from "../db.server";
 import { calculateCustomerTags } from "../services/rule.server";
 import { manageCustomerTags, sendVipDiscount } from "../services/tags.server";
 import { getCachedStore } from "../services/cache.server";
+import { analyzeSentiment } from "../services/ai.server";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
     const { admin, shop, payload, topic } = await authenticate.webhook(request);
@@ -142,6 +143,25 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                 } catch (err) {
                     console.error("Failed to evaluate collection rules:", err);
                 }
+            }
+        }
+
+        // 3. Evaluate AI Sentiment Analysis on the Order Note
+        if (store.enableSentimentAnalysis && order.note) {
+            try {
+                const sentimentTag = await analyzeSentiment(order.note);
+                if (sentimentTag) {
+                    const normalizedExisting = existingTags.map(t => t.toLowerCase());
+                    const normalizedAdd = addTagNames.map(t => t.toLowerCase());
+                    const targetTagLower = sentimentTag.toLowerCase();
+
+                    if (!normalizedExisting.includes(targetTagLower) && !normalizedAdd.includes(targetTagLower)) {
+                        addTagNames.push(sentimentTag);
+                        tagsToAddLog.push({ tag: sentimentTag, reason: `AI Detected intent from note: "${order.note.substring(0, 30)}..."` });
+                    }
+                }
+            } catch (err) {
+                console.error("Failed to execute AI Sentiment analysis on order notes:", err);
             }
         }
 

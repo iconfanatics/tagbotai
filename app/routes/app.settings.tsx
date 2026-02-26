@@ -19,6 +19,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
     return {
         syncTagsToNotes: store.syncTagsToNotes,
+        enableSentimentAnalysis: store.enableSentimentAnalysis, // Added this line
         currentPlanName: store.planName
     };
 };
@@ -32,12 +33,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     if (actionType === "save_settings") {
         const syncTagsToNotes = formData.get("syncTagsToNotes") === "true";
+        const enableSentimentAnalysis = formData.get("enableSentimentAnalysis") === "true"; // Added this line
         const klaviyoApiKey = formData.get("klaviyoApiKey") as string;
 
         await db.store.update({
             where: { shop },
             data: {
                 syncTagsToNotes,
+                enableSentimentAnalysis, // Added this line
                 klaviyoApiKey: klaviyoApiKey.trim() === "" ? null : klaviyoApiKey.trim()
             }
         });
@@ -51,7 +54,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function Settings() {
-    const { syncTagsToNotes: initialSyncTagsToNotes, currentPlanName } = useLoaderData<typeof loader>();
+    const { syncTagsToNotes: initialSyncTagsToNotes, enableSentimentAnalysis: initialEnableSentimentAnalysis, currentPlanName } = useLoaderData<typeof loader>();
     const actionData = useActionData<typeof action>();
     const submit = useSubmit();
     const navigation = useNavigation();
@@ -59,7 +62,9 @@ export default function Settings() {
 
     const isSaving = navigation.state === "submitting";
 
+    // State definitions
     const [syncTagsToNotes, setSyncTagsToNotes] = useState(initialSyncTagsToNotes);
+    const [enableSentimentAnalysis, setEnableSentimentAnalysis] = useState(initialEnableSentimentAnalysis); // Added this line
     const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
 
     const isFreePlan = currentPlanName === "Free" || currentPlanName === "";
@@ -72,10 +77,19 @@ export default function Settings() {
         }
     };
 
+    const handleSentimentToggle = (newChecked: boolean) => {
+        if (isFreePlan) {
+            setIsUpgradeModalOpen(true);
+        } else {
+            setEnableSentimentAnalysis(newChecked);
+        }
+    };
+
     const handleSave = () => {
         submit({
             action: "save_settings",
-            syncTagsToNotes: syncTagsToNotes ? "true" : "false"
+            syncTagsToNotes: syncTagsToNotes ? "true" : "false",
+            enableSentimentAnalysis: enableSentimentAnalysis ? "true" : "false"
         }, { method: "post" });
     };
 
@@ -135,6 +149,13 @@ export default function Settings() {
                                 helpText="When an automated rule is triggered, append a contextual insight directly into the Shopify Customer Note field (e.g., 'TagBot AI Alert: Applied VIP tag due to rule match')."
                                 checked={syncTagsToNotes}
                                 onChange={handleToggle}
+                            />
+
+                            <Checkbox
+                                label="AI Order Note Sentiment Analysis"
+                                helpText="Automatically scan incoming Shopify Order Notes using Natural Language Processing to detect intent and instantly apply labels like 'Gifting' or 'Frustrated'."
+                                checked={enableSentimentAnalysis}
+                                onChange={handleSentimentToggle}
                             />
 
                             <Box paddingBlockStart="400">
