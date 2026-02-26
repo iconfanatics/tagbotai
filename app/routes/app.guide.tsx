@@ -220,6 +220,29 @@ export default function FeaturesGuide() {
                             </BlockStack>
                         </Card>
 
+                        <Card>
+                            <BlockStack gap="400">
+                                <InlineStack gap="200" align="start" blockAlign="center">
+                                    <Icon source={CheckCircleIcon} tone="success" />
+                                    <Text variant="headingMd" as="h2">11. AI Natural Language Rule Engine (Magic Creator)</Text>
+                                </InlineStack>
+                                <Text as="p">
+                                    Instead of clicking through dropdowns, instruct the AI to build your automation logic natively from a simple sentence.
+                                </Text>
+                                <Box padding="300" background="bg-surface-secondary" borderRadius="200">
+                                    <Text variant="headingSm" as="h3">How to Test:</Text>
+                                    <List type="number">
+                                        <List.Item>Go to the <strong>Rules</strong> tab and click "Create Rule".</List.Item>
+                                        <List.Item>Copy and paste any of these exact prompts into the AI text bar and click "✨ Generate with AI":</List.Item>
+                                        <List.Item><strong>Prompt A:</strong> <code>Tag people who have spent more than $500 as VIP</code></List.Item>
+                                        <List.Item><strong>Prompt B:</strong> <code>Create a Loyal tag for customers with exactly 5 orders</code></List.Item>
+                                        <List.Item><strong>Prompt C:</strong> <code>Find customers who haven't ordered in the last 90 days and tag them as At-Risk</code></List.Item>
+                                        <List.Item><strong>Prompt D:</strong> <code>Tag anyone with a .edu email address as Student</code></List.Item>
+                                    </List>
+                                </Box>
+                            </BlockStack>
+                        </Card>
+
                     </BlockStack>
                 </Layout.Section>
             </Layout>
