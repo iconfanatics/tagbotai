@@ -87,3 +87,21 @@ If Shopify updates faster than the server can process the tag, the local databas
 
 **To resolve any inconsistencies:**
 Simply return to your Dashboard and click **"Sync Customers"**. This forces TagBot AI's background queue to pull the latest truth from Shopify and rewrite the local database, permanently fixing the desync.
+
+---
+
+## 🤖 AI Natural Language Prompts (Testing Guide)
+
+To test the **Natural Language Rule Engine** built into the `/app/rules/new` page, simply paste any of the following examples into the text box and click "**✨ Generate with AI**". The AI will intelligently map your intent directly into the correct rule parameters automatically:
+
+1. **"Tag people who have spent more than $500 as VIP"**
+   *(The AI translates to: Metric > Total Spent > Greater Than > 500 > Target Tag: VIP)*
+
+2. **"Create a Loyal tag for customers with exactly 5 orders"**
+   *(The AI translates to: Metric > Order Count > Equals > 5 > Target Tag: Loyal)*
+
+3. **"Find customers who haven't ordered in the last 90 days and tag them as At-Risk"**
+   *(The AI translates to: Metric > Last Order Date > Is Before > [Calculates Date 90 days ago] > Target Tag: At-Risk)*
+
+4. **"Tag anyone with a .edu email address as Student"**
+   *(The AI translates to: Metric > Email Domain > Contains > .edu > Target Tag: Student)*

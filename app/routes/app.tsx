@@ -76,6 +76,7 @@ export default function App() {
           <Link to="/app/rules">Rules</Link>
           <Link to="/app/cleanup">Cleanup</Link>
           <Link to="/app/integrations">Integrations</Link>
+          <Link to="/app/pricing">Plans</Link>
           <Link to="/app/settings">Settings</Link>
           <Link to="/app/guide">Testing Guide</Link>
         </ui-nav-menu>
