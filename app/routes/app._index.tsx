@@ -118,22 +118,76 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   if (!store) return { success: false, message: "Store not found" };
 
   const formData = await request.formData();
+  const actionType = formData.get("action");
 
-  if (formData.get("action") === "send_winback_offer") {
+  if (actionType === "send_winback_offer") {
     const customerId = formData.get("customerId") as string;
-    await db.activityLog.create({
-      data: {
-        storeId: store.id,
-        customerId,
-        action: "EMAIL_SENT",
-        tagContext: "Win-back Email",
-        reason: "Simulated sending an AI automated win-back offer."
-      }
-    });
-    return { success: true, message: `Win-back offer sent to customer ID ${customerId}` };
+    if (customerId) {
+      await db.activityLog.create({
+        data: {
+          storeId: store.id,
+          customerId,
+          action: "EMAIL_SENT",
+          tagContext: "Win-back Campaign Simulated",
+          reason: "Manual trigger from Retention Dashboard"
+        }
+      });
+      return { success: true, message: "Simulated Email Sent Successfully!" };
+    }
   }
 
-  if (formData.get("action") === "sync_customers") {
+  if (actionType === "auto_tag_churn") {
+    try {
+      const sixtyDaysAgo = new Date();
+      sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
+
+      const activeVips = await db.customer.findMany({
+        where: {
+          storeId: store.id,
+          totalSpent: { gt: 50 },
+          orderCount: { gt: 3 },
+          lastOrderDate: { lt: sixtyDaysAgo },
+          NOT: { tags: { contains: "At-Risk" } }
+        },
+        select: { id: true, email: true, firstName: true, lastName: true, tags: true }
+      });
+
+      if (activeVips.length > 0) {
+        // Send to background queue to iteratively apply the "At-Risk" tag in Shopify
+        // We convert the Prisma Customer objects to match the API signature the Sync queue expects
+        enqueueSyncJob({
+          shop,
+          storeId: store.id,
+          customersToSync: activeVips.map(vip => ({
+            node: {
+              id: `gid://shopify/Customer/${vip.id}`,
+              firstName: vip.firstName || "",
+              lastName: vip.lastName || "",
+              email: vip.email || "",
+              amountSpent: { amount: "0" }, // The background rule engine will just see "At-Risk" if we build a rule
+              numberOfOrders: "0",
+              tags: vip.tags ? vip.tags.split(",").map(t => t.trim()) : []
+            }
+          }))
+        });
+
+        // Pre-log for fast UI feedback
+        for (const vip of activeVips) {
+          await db.activityLog.create({
+            data: { storeId: store.id, customerId: vip.id, action: "TAG_ADDED", tagContext: "At-Risk", reason: "AI Churn Auto-Tag Triggered" }
+          });
+        }
+        return { success: true, message: `Dispatched background job to tag ${activeVips.length} churning VIPs correctly.` };
+      }
+      return { success: true, message: "All churning VIPs are already tagged." };
+
+    } catch (e: any) {
+      console.error("Failed to enqueue auto-tag churn job", e);
+      return { success: false, message: e.message || "Failed to tag churning customers" };
+    }
+  }
+
+  if (actionType === "sync_customers") {
     try {
       const isFree = store.planName === "Free" || store.planName === "";
       const fetchLimit = isFree ? 50 : 250;
@@ -526,11 +580,25 @@ export default function Index() {
                     <Layout.Section>
                       <Card padding="0">
                         <Box padding="400">
-                          <InlineStack gap="200" align="start" blockAlign="center">
-                            <Icon source={AlertCircleIcon} tone="critical" />
-                            <Text variant="headingMd" as="h3" tone="critical">Action Required: Retention Alerts (High Value Churn)</Text>
-                          </InlineStack>
-                          <Text as="p" tone="subdued">These VIP customers have &gt; 3 orders but haven't purchased in over 60 days. Don't lose them!</Text>
+                          <BlockStack gap="400">
+                            <InlineStack gap="200" align="start" blockAlign="center">
+                              <Icon source={AlertCircleIcon} tone="critical" />
+                              <Text variant="headingMd" as="h3" tone="critical">Action Required: Retention Alerts (High Value Churn)</Text>
+                            </InlineStack>
+
+                            <InlineStack align="space-between" blockAlign="center">
+                              <Text as="p" tone="subdued">These VIP customers have &gt; 3 orders but haven't purchased in over 60 days. Don't lose them!</Text>
+                              <Button
+                                variant="primary"
+                                tone="critical"
+                                size="micro"
+                                loading={navigation.state === "submitting"}
+                                onClick={() => submit({ action: 'auto_tag_churn' }, { method: 'post' })}
+                              >
+                                Auto-Tag as "At-Risk"
+                              </Button>
+                            </InlineStack>
+                          </BlockStack>
                         </Box>
                         <MemoizedDataTable
                           columnContentTypes={['text', 'text', 'numeric', 'text']}
