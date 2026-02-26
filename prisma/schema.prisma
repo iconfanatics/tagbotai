@@ -55,6 +55,7 @@ model Store {
   updatedAt             DateTime   @updatedAt
   rules                 Rule[]
   customers             Customer[]
+  activityLogs          ActivityLog[]
 
   @@index([shop])
 }
@@ -100,6 +101,7 @@ model Customer {
 model ActivityLog {
   id         String   @id @default(uuid())
   storeId    String
+  store      Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
   customerId String
   customer   Customer @relation(fields: [customerId, storeId], references: [id, storeId], onDelete: Cascade)
   ruleId     String?
