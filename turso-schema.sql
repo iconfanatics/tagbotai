@@ -26,6 +26,7 @@ CREATE TABLE "Store" (
     "planName" TEXT NOT NULL DEFAULT 'Free',
     "monthlyTagCount" INTEGER NOT NULL DEFAULT 0,
     "syncTagsToNotes" BOOLEAN NOT NULL DEFAULT false,
+    "enableSentimentAnalysis" BOOLEAN NOT NULL DEFAULT false,
     "isSyncing" BOOLEAN NOT NULL DEFAULT false,
     "syncTarget" INTEGER NOT NULL DEFAULT 0,
     "syncCompleted" INTEGER NOT NULL DEFAULT 0,
