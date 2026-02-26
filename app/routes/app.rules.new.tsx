@@ -147,6 +147,67 @@ export default function NewRule() {
     const [targetTag, setTargetTag] = useState("");
     const [activePreset, setActivePreset] = useState<string | null>(null);
 
+    // AI State
+    const [aiPrompt, setAiPrompt] = useState("");
+    const [isGenerating, setIsGenerating] = useState(false);
+
+    const handleAIGenerate = async () => {
+        if (!aiPrompt) return;
+        setIsGenerating(true);
+        setActivePreset("custom_ai");
+        shopify.toast.show("Analyzing prompt...");
+
+        try {
+            const response = await fetch("/app/ai/rule", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ prompt: aiPrompt })
+            });
+
+            const data = await response.json();
+
+            if (data.error) {
+                shopify.toast.show(data.error, { isError: true });
+                setIsGenerating(false);
+                return;
+            }
+
+            const rule = data.rule;
+            setName(rule.description || "AI Generated Rule");
+            setTargetTag(rule.targetTag || "SmartTag");
+
+            if (rule.conditions && rule.conditions.length > 0) {
+                const condition = rule.conditions[0];
+
+                // Map snake_case AI response to camelCase React state
+                const fieldMap: Record<string, string> = {
+                    "total_spent": "totalSpent",
+                    "order_count": "orderCount",
+                    "last_order_date": "lastOrderDate",
+                    "email_domain": "emailDomain"
+                };
+
+                const operatorMap: Record<string, string> = {
+                    ">": "greaterThan",
+                    "<": "lessThan",
+                    "==": "equals",
+                    "CONTAINS": "contains"
+                };
+
+                setField(fieldMap[condition.field] || "totalSpent");
+                setOperator(operatorMap[condition.operator] || "equals");
+                setValue(condition.value || "");
+            }
+
+            shopify.toast.show("Rule configured magically! ✨");
+
+        } catch (error) {
+            shopify.toast.show("Failed to connect to AI engine.", { isError: true });
+        } finally {
+            setIsGenerating(false);
+        }
+    };
+
     const handleSubmit = () => {
         const formData = new FormData();
         formData.append("name", name);
@@ -274,6 +335,46 @@ export default function NewRule() {
                                         </Box>
                                     </div>
                                 </InlineStack>
+                            </BlockStack>
+                        </Card>
+                    </Box>
+
+                    {/* AI Magic Prompt Block */}
+                    <Box paddingBlockEnd="400">
+                        <Card background={activePreset === "custom_ai" ? "bg-surface-magic" : "bg-surface"}>
+                            <BlockStack gap="400">
+                                <InlineStack align="start" gap="200" blockAlign="center">
+                                    <Icon source={MagicIcon} tone="magic" />
+                                    <Text variant="headingMd" as="h3">AI Smart Constructor</Text>
+                                    <Badge tone="magic">Beta</Badge>
+                                </InlineStack>
+
+                                <Text as="p" tone="subdued">
+                                    Describe what kind of customer you want to tag in plain English, and the TagBot intelligence engine will instantly build the rule architecture for you.
+                                </Text>
+
+                                <BlockStack gap="200">
+                                    <TextField
+                                        label="Magic Prompt"
+                                        labelHidden
+                                        value={aiPrompt}
+                                        onChange={setAiPrompt}
+                                        multiline={3}
+                                        autoComplete="off"
+                                        placeholder="E.g. Tag customers who have spent more than $500 total as 'High-Value VIP'"
+                                    />
+                                    <InlineStack align="end">
+                                        <Button
+                                            variant="primary"
+                                            onClick={handleAIGenerate}
+                                            loading={isGenerating}
+                                            disabled={!aiPrompt.trim()}
+                                            tone="success" // Shopify Polaris equivalent of making it pop for an action
+                                        >
+                                            Generate Configuration
+                                        </Button>
+                                    </InlineStack>
+                                </BlockStack>
                             </BlockStack>
                         </Card>
                     </Box>
