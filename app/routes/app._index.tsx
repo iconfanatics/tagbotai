@@ -116,11 +116,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   return {
     currentPlanName: store.planName,
     monthlyTagCount: store.monthlyTagCount,
-    syncProgress: store.isSyncing ? {
-      target: store.syncTarget,
-      completed: store.syncCompleted,
-      message: store.syncMessage
-    } : null,
     dashboardDataPromise
   };
 };
@@ -252,26 +247,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
 export default function Index() {
   const shopify = useAppBridge();
-  const { currentPlanName, monthlyTagCount, syncProgress, dashboardDataPromise } = useLoaderData<typeof loader>();
+  const { currentPlanName, monthlyTagCount, dashboardDataPromise } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigate = useNavigate();
   const submit = useSubmit();
   const navigation = useNavigation();
   const revalidator = useRevalidator();
-  const isSyncing = navigation.state === "submitting" || syncProgress !== null;
+  const isSyncing = navigation.state === "submitting";
 
+  // Remove old sync polling — it now lives on the Cleanup page
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
-
-  // Live UI Polling for the background progress bar
-  useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (syncProgress !== null) {
-      interval = setInterval(() => {
-        revalidator.revalidate();
-      }, 2000);
-    }
-    return () => clearInterval(interval);
-  }, [syncProgress]);
 
   const handleSync = () => {
     submit({ action: "sync_customers" }, { method: "post" });
@@ -334,38 +319,6 @@ export default function Index() {
     }
   }
 
-  // Progress Bar tracking background jobs
-  let progressBanner = null;
-  if (syncProgress !== null) {
-    // Avoid divide-by-zero on initial ping
-    let percentage = 0;
-    if (syncProgress.target > 0) {
-      percentage = Math.max(0, Math.min(100, Math.round((syncProgress.completed / syncProgress.target) * 100)));
-    }
-
-    progressBanner = (
-      <Layout.Section>
-        <Banner tone="info" title="Background Automation Running">
-          <BlockStack gap="200">
-            <Text as="p">{syncProgress.message || "TagBot AI is evaluating past customers against your active rules. This runs in the background, minimizing impact on your store's performance."}</Text>
-            <Box paddingBlockStart="200" paddingBlockEnd="100">
-              {percentage > 0 ? (
-                <InlineStack align="space-between" blockAlign="center">
-                  <Text as="span">{syncProgress.completed.toLocaleString()} / {syncProgress.target.toLocaleString()} Processed</Text>
-                  <Text as="span" fontWeight="bold">{percentage}%</Text>
-                </InlineStack>
-              ) : (
-                <Text as="span" tone="subdued">Initializing queue...</Text>
-              )}
-            </Box>
-            <div style={{ width: '100%', height: '8px', backgroundColor: 'var(--p-color-bg-surface-secondary)', borderRadius: '4px', overflow: 'hidden' }}>
-              <div style={{ width: `${percentage}%`, height: '100%', backgroundColor: 'var(--p-color-bg-fill-magic)', transition: 'width 0.5s ease-out' }}></div>
-            </div>
-          </BlockStack>
-        </Banner>
-      </Layout.Section>
-    );
-  }
 
   return (
     <Page
@@ -423,7 +376,6 @@ export default function Index() {
         )}
 
         {limitBanner}
-        {progressBanner}
 
         <React.Suspense fallback={<DashboardSkeleton />}>
           <Await resolve={dashboardDataPromise}>

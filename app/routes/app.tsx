@@ -8,6 +8,8 @@ import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
 
 export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
 
+import { Spinner } from "@shopify/polaris";
+
 import { authenticate } from "../shopify.server";
 import { sendWelcomeEmail } from "../services/email.server";
 
@@ -83,6 +85,37 @@ export default function App() {
         <Outlet />
       </PolarisAppProvider>
     </AppProvider>
+  );
+}
+
+// Shown during React hydration on first load (cold start / initial page render)
+// Prevents a completely blank white screen before JS has initialized
+export function HydrateFallback() {
+  return (
+    <html lang="en">
+      <head>
+        <meta charSet="utf-8" />
+        <meta name="viewport" content="width=device-width,initial-scale=1" />
+        <link rel="stylesheet" href={polarisStyles} />
+        <title>TagBot AI — Loading...</title>
+      </head>
+      <body>
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          height: '100vh',
+          gap: '16px',
+          backgroundColor: '#f6f6f7'
+        }}>
+          <Spinner size="large" />
+          <p style={{ fontFamily: 'Inter, sans-serif', color: '#6d7175', fontSize: '14px', margin: 0 }}>
+            TagBot AI is loading...
+          </p>
+        </div>
+      </body>
+    </html>
   );
 }
 
