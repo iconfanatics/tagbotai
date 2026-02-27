@@ -58,6 +58,7 @@ model Store {
   rules                 Rule[]
   customers             Customer[]
   activityLogs          ActivityLog[]
+  workflowActions       WorkflowAction[]
 
   @@index([shop])
 }
@@ -122,4 +123,21 @@ model PricingConfig {
   proMonthly     Float    @default(29.99)
   eliteMonthly   Float    @default(49.99)
   updatedAt      DateTime @updatedAt
+}
+
+// Workflow actions triggered when specific tags are applied/removed
+model WorkflowAction {
+  id          String   @id @default(uuid())
+  storeId     String
+  store       Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  name        String                         // e.g. "Notify CRM when VIP tagged"
+  triggerTag  String                         // e.g. "VIP"
+  triggerOn   String   @default("TAG_ADDED") // TAG_ADDED | TAG_REMOVED
+  actionType  String                         // WEBHOOK | LOG | EMAIL_PREP
+  webhookUrl  String?                        // for WEBHOOK type
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([storeId])
 }

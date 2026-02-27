@@ -1,6 +1,7 @@
 import db from "../db.server";
 import { syncTagsToKlaviyo } from "./klaviyo.server";
 import { syncTagsToMailchimp } from "./mailchimp.server";
+import { dispatchWorkflowActions } from "./workflows.server";
 
 export async function manageCustomerTags(
   admin: any,
@@ -225,6 +226,12 @@ export async function manageCustomerTags(
     }
   }
 
+  // ── Workflow Actions (Additive, fire-and-forget, never blocks tagging) ──
+  if (tagsToAdd.length > 0 || tagsToRemove.length > 0) {
+    dispatchWorkflowActions(storeId, customerId, tagsToAdd, tagsToRemove)
+      .catch(err => console.error('[WORKFLOW] dispatch error:', err));
+  }
+
   return { success: true, tagsAdded: tagsToAdd, tagsRemoved: tagsToRemove };
 }
 
@@ -356,4 +363,3 @@ export async function sendVipDiscount(admin: any, storeId: string, customerId: s
     return false;
   }
 }
-
