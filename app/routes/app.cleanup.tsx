@@ -1,64 +1,60 @@
 import { data } from "react-router";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
-import { useLoaderData, useActionData, useSubmit, useNavigation, useNavigate, useRevalidator } from "react-router";
+import { useLoaderData, useActionData, useNavigate } from "react-router";
 import { Page, Layout, Card, Text, BlockStack, InlineStack, Badge, Button, ResourceList, ResourceItem, Box, TextField, Modal, Icon, Banner } from "@shopify/polaris";
 import { MagicIcon, DeleteIcon, ReplaceIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { getCachedStore } from "../services/cache.server";
-import { enqueueSyncJob } from "../services/queue.server";
-import { useState, useEffect } from "react";
+import { useState, useCallback } from "react";
 
+// Shape of what the action returns when a delete/merge is initiated
 interface ActionData {
     success: boolean;
     message?: string;
+    // When a cleanup is ready to start, the action returns the customer list for client-side processing
+    cleanupJob?: {
+        storeId: string;
+        customerIds: string[]; // Shopify GIDs: "gid://shopify/Customer/123"
+        tagsToAdd: string[];
+        tagsToRemove: string[];
+        label: string;
+    };
 }
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-    const { admin, session } = await authenticate.admin(request);
+    const { session } = await authenticate.admin(request);
     const shop = session.shop;
     const store = await getCachedStore(shop);
     if (!store) throw new Error("Store not found");
 
-    // 1. Fetch all unique tags from our local database to avoid expensive Shopify queries
     const customers = await db.customer.findMany({
         where: { storeId: store.id },
         select: { tags: true }
     });
 
-    // 2. Aggregate tags and count usage
     const tagCounts: Record<string, number> = {};
     for (const c of customers) {
         if (c.tags) {
-            const splitTags = c.tags.split(",").map(t => t.trim()).filter(Boolean);
-            for (const tag of splitTags) {
+            for (const tag of c.tags.split(",").map(t => t.trim()).filter(Boolean)) {
                 tagCounts[tag] = (tagCounts[tag] || 0) + 1;
             }
         }
     }
 
-    // 3. Format into a sorted array
     const sortedTags = Object.entries(tagCounts)
         .map(([name, count]) => ({ id: name, name, count }))
         .sort((a, b) => b.count - a.count);
 
-    // 4. Pass sync progress so the Cleanup page can render its own progress bar
-    const syncProgress = store.isSyncing ? {
-        target: store.syncTarget,
-        completed: store.syncCompleted,
-        message: store.syncMessage
-    } : null;
-
-    return data({ sortedTags, planName: store.planName, syncProgress });
+    return data({ sortedTags, planName: store.planName, storeId: store.id });
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-    const { admin, session } = await authenticate.admin(request);
+    const { session } = await authenticate.admin(request);
     const shop = session.shop;
     const store = await getCachedStore(shop);
     if (!store) return data({ success: false, message: "Store not found" });
 
-    // Premium feature gate check
     if (store.planName === "Free") {
         return data({ success: false, message: "Advanced Smart Cleanup is only available on Growth, Pro, and Elite plans." });
     }
@@ -68,124 +64,130 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     if (actionType === "delete_tag") {
         const targetTag = formData.get("targetTag") as string;
-
-        const affectedCustomers = await db.customer.findMany({
+        const affected = await db.customer.findMany({
             where: { storeId: store.id, tags: { contains: targetTag } },
-            select: { id: true, tags: true }
+            select: { id: true }
         });
+        if (affected.length === 0) return data({ success: true, message: "Tag is not applied anywhere — nothing to delete." });
 
-        if (affectedCustomers.length === 0) return data({ success: true, message: "Tag is not applied anywhere." });
-
-        const syncMsg = `Deleting tag "${targetTag}" from ${affectedCustomers.length} customers...`;
-
-        // PRE-SET isSyncing before the fire-and-forget queue, so the loader sees it immediately on re-run
-        await db.store.update({
-            where: { id: store.id },
-            data: { isSyncing: true, syncTarget: affectedCustomers.length, syncCompleted: 0, syncMessage: syncMsg }
+        return data({
+            success: true,
+            cleanupJob: {
+                storeId: store.id,
+                customerIds: affected.map(c => `gid://shopify/Customer/${c.id}`),
+                tagsToRemove: [targetTag],
+                tagsToAdd: [],
+                label: `Deleting "${targetTag}" from ${affected.length} customers`
+            }
         });
-
-        enqueueSyncJob({
-            shop,
-            storeId: store.id,
-            syncType: "CLEANUP",
-            syncMessage: syncMsg,
-            tagsToRemove: [targetTag],
-            customersToSync: affectedCustomers.map(c => ({
-                node: {
-                    id: `gid://shopify/Customer/${c.id}`,
-                    tags: c.tags ? c.tags.split(",").map(t => t.trim()).filter(t => t !== targetTag) : [],
-                    firstName: "", lastName: "", email: "", amountSpent: { amount: "0" }, numberOfOrders: "0"
-                }
-            }))
-        });
-
-        return data({ success: true, message: `Deletion started! Watch the progress bar below.` });
     }
 
     if (actionType === "merge_tag") {
         const sourceTag = formData.get("sourceTag") as string;
         const destinationTag = formData.get("destinationTag") as string;
-
         if (!sourceTag || !destinationTag || sourceTag === destinationTag) {
-            return data({ success: false, message: "Invalid Source or Destination tag selected." });
+            return data({ success: false, message: "Invalid source or destination tag." });
         }
-
-        const affectedCustomers = await db.customer.findMany({
+        const affected = await db.customer.findMany({
             where: { storeId: store.id, tags: { contains: sourceTag } },
-            select: { id: true, tags: true }
+            select: { id: true }
         });
+        if (affected.length === 0) return data({ success: true, message: "Source tag is not applied anywhere — nothing to merge." });
 
-        if (affectedCustomers.length === 0) return data({ success: true, message: "Source Tag is not applied anywhere." });
-
-        const syncMsg = `Merging "${sourceTag}" into "${destinationTag}" for ${affectedCustomers.length} customers...`;
-
-        // PRE-SET isSyncing before the fire-and-forget queue, so the loader sees it immediately on re-run
-        await db.store.update({
-            where: { id: store.id },
-            data: { isSyncing: true, syncTarget: affectedCustomers.length, syncCompleted: 0, syncMessage: syncMsg }
+        return data({
+            success: true,
+            cleanupJob: {
+                storeId: store.id,
+                customerIds: affected.map(c => `gid://shopify/Customer/${c.id}`),
+                tagsToRemove: [sourceTag],
+                tagsToAdd: [destinationTag],
+                label: `Merging "${sourceTag}" → "${destinationTag}" for ${affected.length} customers`
+            }
         });
-
-        enqueueSyncJob({
-            shop,
-            storeId: store.id,
-            syncType: "CLEANUP",
-            syncMessage: syncMsg,
-            tagsToRemove: [sourceTag],
-            tagsToAdd: [destinationTag],
-            customersToSync: affectedCustomers.map(c => {
-                let tags = c.tags ? c.tags.split(",").map(t => t.trim()) : [];
-                tags = tags.filter(t => t !== sourceTag);
-                if (!tags.includes(destinationTag)) tags.push(destinationTag);
-                return {
-                    node: {
-                        id: `gid://shopify/Customer/${c.id}`,
-                        tags,
-                        firstName: "", lastName: "", email: "", amountSpent: { amount: "0" }, numberOfOrders: "0"
-                    }
-                };
-            })
-        });
-
-        return data({ success: true, message: `Merge started! Watch the progress bar below.` });
     }
 
     return data({ success: false });
 };
 
 export default function SmartCleanup() {
-    const { sortedTags, planName, syncProgress } = useLoaderData<typeof loader>();
-    const actionData = useActionData() as ActionData;
-    const submit = useSubmit();
-    const navigation = useNavigation();
+    const { sortedTags, planName, storeId } = useLoaderData<typeof loader>();
+    const actionData = useActionData() as ActionData | undefined;
     const navigate = useNavigate();
-    const revalidator = useRevalidator();
 
-    const isSubmitting = navigation.state === "submitting";
     const isFree = planName === "Free" || planName === "";
-    const isRunning = syncProgress !== null;
 
+    // ── Client-side batch processing state ──────────────────────────────────
+    const [job, setJob] = useState<{
+        label: string;
+        total: number;
+        completed: number;
+        status: "idle" | "running" | "done" | "error";
+        errorMsg?: string;
+    }>({ label: "", total: 0, completed: 0, status: "idle" });
+
+    // Trigger the client-side loop when the action returns a cleanup job
+    const runCleanup = useCallback(async (cleanupJob: NonNullable<ActionData["cleanupJob"]>) => {
+        const { customerIds, tagsToAdd, tagsToRemove, label } = cleanupJob;
+        const total = customerIds.length;
+
+        setJob({ label, total, completed: 0, status: "running" });
+
+        for (let i = 0; i < customerIds.length; i++) {
+            try {
+                const fd = new FormData();
+                fd.set("shopifyCustomerId", customerIds[i]);
+                fd.set("tagsToAdd", JSON.stringify(tagsToAdd));
+                fd.set("tagsToRemove", JSON.stringify(tagsToRemove));
+                fd.set("storeId", storeId);
+                fd.set("completedSoFar", String(i));
+                fd.set("totalTarget", String(total));
+
+                const res = await fetch("/app/cleanup-process", { method: "POST", body: fd });
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            } catch (err: any) {
+                setJob(prev => ({ ...prev, status: "error", errorMsg: err.message }));
+                return;
+            }
+            setJob(prev => ({ ...prev, completed: i + 1 }));
+        }
+
+        setJob(prev => ({ ...prev, status: "done" }));
+    }, [storeId]);
+
+    // When actionData arrives with a cleanupJob, kick off the loop
+    const [lastProcessedJob, setLastProcessedJob] = useState<string | null>(null);
+    if (actionData?.cleanupJob && job.status === "idle") {
+        const jobKey = JSON.stringify(actionData.cleanupJob.customerIds);
+        if (jobKey !== lastProcessedJob) {
+            setLastProcessedJob(jobKey);
+            // Use setTimeout to avoid calling setState during render
+            setTimeout(() => runCleanup(actionData.cleanupJob!), 0);
+        }
+    }
+
+    // ── Progress helpers ────────────────────────────────────────────────────
+    const isRunning = job.status === "running";
+    const isDone = job.status === "done";
+    const isError = job.status === "error";
+    const percentage = job.total > 0 ? Math.round((job.completed / job.total) * 100) : 0;
+
+    // ── Merge modal state ───────────────────────────────────────────────────
     const [mergeModalOpen, setMergeModalOpen] = useState(false);
     const [selectedSourceTag, setSelectedSourceTag] = useState("");
     const [destinationTag, setDestinationTag] = useState("");
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
-    // Live polling: revalidate the loader every 1.5s while a cleanup job is active
-    useEffect(() => {
-        if (!isRunning) return;
-        const interval = setInterval(() => {
-            revalidator.revalidate();
-        }, 1500);
-        return () => clearInterval(interval);
-    }, [isRunning]);
-
-    // Compute progress percentage
-    let percentage = 0;
-    if (syncProgress && syncProgress.target > 0) {
-        percentage = Math.max(0, Math.min(100, Math.round((syncProgress.completed / syncProgress.target) * 100)));
-    }
-
-    const handleDelete = (tag: string) => {
-        if (confirm(`Are you sure you want to remove the tag "${tag}" from ALL customers? This cannot be undone.`)) {
-            submit({ action: "delete_tag", targetTag: tag }, { method: "post" });
+    const handleDelete = async (tag: string) => {
+        if (!confirm(`Remove tag "${tag}" from ALL customers? This cannot be undone.`)) return;
+        setIsSubmitting(true);
+        const fd = new FormData();
+        fd.set("action", "delete_tag");
+        fd.set("targetTag", tag);
+        const res = await fetch("/app/cleanup", { method: "POST", body: fd });
+        const result: ActionData = await res.json();
+        setIsSubmitting(false);
+        if (result.cleanupJob) {
+            runCleanup(result.cleanupJob);
         }
     };
 
@@ -195,14 +197,26 @@ export default function SmartCleanup() {
         setMergeModalOpen(true);
     };
 
-    const handleMergeSubmit = () => {
+    const handleMergeSubmit = async () => {
         if (!destinationTag.trim()) return;
-        submit({
-            action: "merge_tag",
-            sourceTag: selectedSourceTag,
-            destinationTag: destinationTag.trim()
-        }, { method: "post" });
         setMergeModalOpen(false);
+        setIsSubmitting(true);
+        const fd = new FormData();
+        fd.set("action", "merge_tag");
+        fd.set("sourceTag", selectedSourceTag);
+        fd.set("destinationTag", destinationTag.trim());
+        const res = await fetch("/app/cleanup", { method: "POST", body: fd });
+        const result: ActionData = await res.json();
+        setIsSubmitting(false);
+        if (result.cleanupJob) {
+            runCleanup(result.cleanupJob);
+        }
+    };
+
+    const handleDismiss = () => {
+        setJob({ label: "", total: 0, completed: 0, status: "idle" });
+        // Reload to refresh the tag list after cleanup
+        navigate(".", { replace: true });
     };
 
     return (
@@ -217,32 +231,21 @@ export default function SmartCleanup() {
                     <Layout.Section>
                         <Banner tone="critical" title="Premium Feature">
                             <BlockStack gap="200">
-                                <Text as="p">Smart Tag Cleanup is an advanced feature reserved for Growth, Pro, and Elite plans.</Text>
-                                <InlineStack>
-                                    <Button tone="critical" onClick={() => navigate('/app/pricing')}>Upgrade to Unlock</Button>
-                                </InlineStack>
+                                <Text as="p">Smart Tag Cleanup is available on Growth, Pro, and Elite plans.</Text>
+                                <Button tone="critical" onClick={() => navigate('/app/pricing')}>Upgrade to Unlock</Button>
                             </BlockStack>
                         </Banner>
                     </Layout.Section>
                 )}
 
-                {/* Action result banner */}
-                {actionData?.message && (
-                    <Layout.Section>
-                        <Banner tone={actionData.success ? "success" : "critical"}>
-                            {actionData.message}
-                        </Banner>
-                    </Layout.Section>
-                )}
-
-                {/* ── LIVE PROGRESS BAR ─────────────────────────────────── */}
-                {isRunning && (
+                {/* ── LIVE PROGRESS BAR ────────────────────────────────── */}
+                {(isRunning || isDone || isError) && (
                     <Layout.Section>
                         <Card>
                             <BlockStack gap="300">
                                 <InlineStack align="space-between" blockAlign="center">
                                     <Text variant="headingSm" as="h3">
-                                        {syncProgress?.message || "Processing..."}
+                                        {isError ? "⚠️ Error during cleanup" : isDone ? "✅ Cleanup Complete!" : job.label}
                                     </Text>
                                     <Text variant="bodyMd" fontWeight="bold" as="span">
                                         {percentage}%
@@ -251,37 +254,51 @@ export default function SmartCleanup() {
 
                                 {/* Progress track */}
                                 <Box paddingBlockEnd="100">
-                                    <div style={{ width: '100%', height: '10px', backgroundColor: 'var(--p-color-bg-surface-secondary)', borderRadius: '5px', overflow: 'hidden' }}>
+                                    <div style={{
+                                        width: '100%',
+                                        height: '12px',
+                                        backgroundColor: 'var(--p-color-bg-surface-secondary)',
+                                        borderRadius: '6px',
+                                        overflow: 'hidden'
+                                    }}>
                                         <div style={{
                                             width: `${percentage}%`,
                                             height: '100%',
-                                            backgroundColor: percentage === 100 ? 'var(--p-color-bg-fill-success)' : 'var(--p-color-bg-fill-magic)',
-                                            transition: 'width 0.6s ease-out'
+                                            backgroundColor: isError
+                                                ? 'var(--p-color-bg-fill-critical)'
+                                                : isDone
+                                                    ? 'var(--p-color-bg-fill-success)'
+                                                    : 'var(--p-color-bg-fill-magic)',
+                                            transition: 'width 0.3s ease-out'
                                         }} />
                                     </div>
                                 </Box>
 
-                                <Text as="p" tone="subdued">
-                                    {syncProgress?.completed?.toLocaleString() ?? 0} of {syncProgress?.target?.toLocaleString() ?? 0} customers processed
-                                </Text>
-
-                                {percentage === 100 && (
-                                    <Banner tone="success">
-                                        ✅ Cleanup completed successfully! Refresh the page to see the updated tag list.
-                                    </Banner>
-                                )}
+                                <InlineStack align="space-between" blockAlign="center">
+                                    <Text as="p" tone="subdued">
+                                        {isError
+                                            ? `Failed: ${job.errorMsg}`
+                                            : `${job.completed.toLocaleString()} of ${job.total.toLocaleString()} customers processed`
+                                        }
+                                    </Text>
+                                    {(isDone || isError) && (
+                                        <Button onClick={handleDismiss} size="slim">
+                                            {isDone ? "Done — Refresh List" : "Dismiss"}
+                                        </Button>
+                                    )}
+                                </InlineStack>
                             </BlockStack>
                         </Card>
                     </Layout.Section>
                 )}
-                {/* ────────────────────────────────────────────────────────── */}
+                {/* ───────────────────────────────────────────────────────── */}
 
                 <Layout.Section>
                     <Card padding="0">
                         <Box padding="400">
                             <BlockStack gap="400">
                                 <InlineStack align="space-between" blockAlign="center">
-                                    <InlineStack gap="200" align="start" blockAlign="center">
+                                    <InlineStack gap="200" blockAlign="center">
                                         <Icon source={MagicIcon} tone="magic" />
                                         <Text variant="headingMd" as="h3">Global Taxonomy</Text>
                                     </InlineStack>
@@ -289,7 +306,7 @@ export default function SmartCleanup() {
                                     <Badge tone="info">{`${sortedTags.length} Unique Tags`}</Badge>
                                 </InlineStack>
                                 <Text as="p" tone="subdued">
-                                    This list aggregates every tag currently applied across your tracked customer base. Consolidate variations (like "VIP" and "vip") to keep your analytics clean.
+                                    All unique tags across your tracked customers. Consolidate variations (like "VIP" and "vip") to keep your analytics clean.
                                 </Text>
                             </BlockStack>
                         </Box>
@@ -300,11 +317,7 @@ export default function SmartCleanup() {
                             renderItem={(item) => {
                                 const { id, name, count } = item;
                                 return (
-                                    <ResourceItem
-                                        id={id}
-                                        onClick={() => { }}
-                                        disabled={isFree}
-                                    >
+                                    <ResourceItem id={id} onClick={() => { }} disabled={isFree}>
                                         <InlineStack align="space-between" blockAlign="center">
                                             <BlockStack gap="100">
                                                 <Text variant="bodyMd" fontWeight="bold" as="h3">{name}</Text>
@@ -312,9 +325,9 @@ export default function SmartCleanup() {
                                             </BlockStack>
                                             <InlineStack gap="200">
                                                 {/* @ts-ignore */}
-                                                <Button size="micro" icon={ReplaceIcon} disabled={isFree || isSubmitting || isRunning} onClick={() => { openMergeModal(name); }}>Merge Into...</Button>
+                                                <Button size="micro" icon={ReplaceIcon} disabled={isFree || isSubmitting || isRunning} onClick={() => openMergeModal(name)}>Merge Into...</Button>
                                                 {/* @ts-ignore */}
-                                                <Button size="micro" tone="critical" icon={DeleteIcon} disabled={isFree || isSubmitting || isRunning} onClick={() => { handleDelete(name); }}>Delete All</Button>
+                                                <Button size="micro" tone="critical" icon={DeleteIcon} disabled={isFree || isSubmitting || isRunning} onClick={() => handleDelete(name)}>Delete All</Button>
                                             </InlineStack>
                                         </InlineStack>
                                     </ResourceItem>
@@ -331,15 +344,14 @@ export default function SmartCleanup() {
                     primaryAction={{
                         content: 'Execute Merge',
                         onAction: handleMergeSubmit,
-                        disabled: !destinationTag.trim(),
-                        loading: isSubmitting
+                        disabled: !destinationTag.trim() || isRunning
                     }}
                     secondaryActions={[{ content: 'Cancel', onAction: () => setMergeModalOpen(false) }]}
                 >
                     <Modal.Section>
                         <BlockStack gap="400">
                             <Text as="p">
-                                All customers with the tag <strong>"{selectedSourceTag}"</strong> will have it removed and replaced with the destination tag below.
+                                All customers with <strong>"{selectedSourceTag}"</strong> will have it replaced with the destination tag below.
                             </Text>
                             <TextField
                                 label="Destination Tag"
@@ -347,7 +359,7 @@ export default function SmartCleanup() {
                                 onChange={setDestinationTag}
                                 autoComplete="off"
                                 placeholder="E.g. VIP-Gold"
-                                helpText="Case-sensitive! 'vip' and 'VIP' are considered two different tags in Shopify."
+                                helpText="Case-sensitive — 'vip' and 'VIP' are two different tags in Shopify."
                             />
                         </BlockStack>
                     </Modal.Section>
