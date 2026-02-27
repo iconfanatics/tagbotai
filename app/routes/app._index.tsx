@@ -67,6 +67,20 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const sixtyDaysAgo = new Date();
   sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
 
+  // Safety net: if isSyncing has been true for > 10 minutes, the Vercel function was likely killed
+  // mid-job without triggering the finally block. Force-reset so the UI doesn't spin forever.
+  if (store.isSyncing && store.updatedAt) {
+    const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
+    if (store.updatedAt < tenMinutesAgo) {
+      await db.store.update({
+        where: { id: store.id },
+        data: { isSyncing: false, syncMessage: null }
+      });
+      store.isSyncing = false;
+      store.syncMessage = null;
+    }
+  }
+
   const isProOrElite = store.planName === "Pro Plan" || store.planName === "Elite Plan";
 
   const dashboardDataPromise = (async () => {

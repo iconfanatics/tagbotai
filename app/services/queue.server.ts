@@ -131,18 +131,20 @@ async function processSyncJob(payload: SyncJobPayload) {
             }
         }
 
-        // Complete job
-        await db.store.update({
-            where: { id: storeId },
-            data: { isSyncing: false }
-        });
-
+        // Complete job — always runs even if processing had partial errors
         console.log(`[QUEUE_WORKER] Finished processing ${customersToSync.length} customers for shop: ${shop}`);
     } catch (err: any) {
         console.error(`[QUEUE_WORKER] Failed to process sync job for ${shop}:`, err.message);
-        // Force reset the sync flag on critical failure
+    } finally {
+        // CRITICAL: always reset the sync flag, even on crash or Vercel serverless timeout
+        // Without this, the UI progress bar gets stuck infinitely.
         try {
-            await db.store.update({ where: { id: storeId }, data: { isSyncing: false } });
-        } catch (e) { }
+            await db.store.update({
+                where: { id: storeId },
+                data: { isSyncing: false, syncMessage: null }
+            });
+        } catch (e) {
+            console.error(`[QUEUE_WORKER] Failed to reset isSyncing flag for store ${storeId}:`, e);
+        }
     }
 }
