@@ -1,3 +1,39 @@
+# TagBot AI — Feature Changelog
+*Last updated: 2026-02-27*
+
+## Phase 36 — Cleanup Live Progress Bar and Blank Page Fix *(2026-02-27)*
+- Cleanup page rebuilt with self-contained live progress bar polling every 1.5s. Bar turns green at 100% with success message. Delete/Merge buttons disabled while a job runs.
+- Dashboard old "Background Automation Running" banner fully removed.
+- First-load blank page fixed with `HydrateFallback` in `app.tsx` — Polaris Spinner appears instead of white screen on cold start.
+
+## Phase 35 — Queue Bug Fix and Stuck Sync Spinner *(2026-02-27)*
+- Fixed crash where Tag Cleanup was routed through AI Rule Evaluation engine.
+- Added `syncType` flag (`RULES` vs `CLEANUP`) to the background queue.
+- Added `syncMessage` column to `Store` model. Required Turso migration: `ALTER TABLE Store ADD COLUMN syncMessage TEXT;`
+- Fixed stuck `isSyncing` spinner using `try/finally` instead of `catch` in queue worker.
+- Added 10-minute stale-lock auto-reset in the Dashboard loader as a fallback.
+
+## Phase 34 — Staging Environment Documentation *(2026-02-27)*
+- Created `STAGING-ENV-GUIDE.md` with step-by-step setup guide for safe pre-production testing.
+
+## Phase 33 — Smart Tag Cleanup Dashboard *(2026-02-26)*
+- New `/app/cleanup` page listing all unique tags with usage counts.
+- Bulk Delete All and Merge Into operations via the background queue.
+
+## Phase 32 — Advanced Churn Auto-Tagging *(2026-02-26)*
+- Auto-Tag as At-Risk bulk action added to the Dashboard Retention Alerts widget.
+- Queries VIPs with 60+ days inactivity and bulk-tags them in the background.
+
+## Phase 31 — AI Order Sentiment Analysis *(2026-02-26)*
+- orders/paid webhook reads order.note and applies semantic tags (Gifting, Urgent, etc.) via Gemini or OpenAI.
+- Toggle added to Settings page (enableSentimentAnalysis).
+
+## Phase 30 — Natural Language Rule Engine *(2026-02-25)*
+- Merchants can type plain English into the rule creator and the AI auto-fills the form fields.
+- Supports Google Gemini and OpenAI via ACTIVE_AI_PROVIDER environment variable.
+
+---
+
 # @shopify/shopify-app-template-react-router
 
 ## 2026.02.09
