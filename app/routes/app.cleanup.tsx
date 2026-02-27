@@ -76,11 +76,19 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
         if (affectedCustomers.length === 0) return data({ success: true, message: "Tag is not applied anywhere." });
 
+        const syncMsg = `Deleting tag "${targetTag}" from ${affectedCustomers.length} customers...`;
+
+        // PRE-SET isSyncing before the fire-and-forget queue, so the loader sees it immediately on re-run
+        await db.store.update({
+            where: { id: store.id },
+            data: { isSyncing: true, syncTarget: affectedCustomers.length, syncCompleted: 0, syncMessage: syncMsg }
+        });
+
         enqueueSyncJob({
             shop,
             storeId: store.id,
             syncType: "CLEANUP",
-            syncMessage: `Deleting tag "${targetTag}" from ${affectedCustomers.length} customers...`,
+            syncMessage: syncMsg,
             tagsToRemove: [targetTag],
             customersToSync: affectedCustomers.map(c => ({
                 node: {
@@ -91,7 +99,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             }))
         });
 
-        return data({ success: true, message: `Started deleting "${targetTag}" from ${affectedCustomers.length} customers. Watch the progress bar below.` });
+        return data({ success: true, message: `Deletion started! Watch the progress bar below.` });
     }
 
     if (actionType === "merge_tag") {
@@ -109,11 +117,19 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
         if (affectedCustomers.length === 0) return data({ success: true, message: "Source Tag is not applied anywhere." });
 
+        const syncMsg = `Merging "${sourceTag}" into "${destinationTag}" for ${affectedCustomers.length} customers...`;
+
+        // PRE-SET isSyncing before the fire-and-forget queue, so the loader sees it immediately on re-run
+        await db.store.update({
+            where: { id: store.id },
+            data: { isSyncing: true, syncTarget: affectedCustomers.length, syncCompleted: 0, syncMessage: syncMsg }
+        });
+
         enqueueSyncJob({
             shop,
             storeId: store.id,
             syncType: "CLEANUP",
-            syncMessage: `Merging "${sourceTag}" → "${destinationTag}" for ${affectedCustomers.length} customers...`,
+            syncMessage: syncMsg,
             tagsToRemove: [sourceTag],
             tagsToAdd: [destinationTag],
             customersToSync: affectedCustomers.map(c => {
@@ -130,7 +146,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             })
         });
 
-        return data({ success: true, message: `Merging "${sourceTag}" into "${destinationTag}" for ${affectedCustomers.length} customers. Watch the progress bar below.` });
+        return data({ success: true, message: `Merge started! Watch the progress bar below.` });
     }
 
     return data({ success: false });
