@@ -113,3 +113,13 @@ model ActivityLog {
   reason     String? // e.g., "Customer spent ($120) which is greater than rule threshold ($100)"
   createdAt  DateTime @default(now())
 }
+
+// Singleton config edited by Super Admin to control pricing shown on Plans page
+model PricingConfig {
+  key            String   @id @default("default")
+  yearlyDiscount Int      @default(15)
+  growthMonthly  Float    @default(14.99)
+  proMonthly     Float    @default(29.99)
+  eliteMonthly   Float    @default(49.99)
+  updatedAt      DateTime @updatedAt
+}

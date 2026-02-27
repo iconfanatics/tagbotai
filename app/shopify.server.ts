@@ -30,6 +30,13 @@ const shopify = shopifyApp({
         interval: BillingInterval.Every30Days,
       }],
     },
+    "Growth Plan Yearly": {
+      lineItems: [{
+        amount: 152.90, // 14.99 * 12 * 0.85 = ~$152.90/yr (15% off)
+        currencyCode: "USD",
+        interval: BillingInterval.Annual,
+      }],
+    },
     "Pro Plan": {
       lineItems: [{
         amount: 29.99,
@@ -37,11 +44,25 @@ const shopify = shopifyApp({
         interval: BillingInterval.Every30Days,
       }],
     },
+    "Pro Plan Yearly": {
+      lineItems: [{
+        amount: 305.90, // 29.99 * 12 * 0.85 = ~$305.90/yr (15% off)
+        currencyCode: "USD",
+        interval: BillingInterval.Annual,
+      }],
+    },
     "Elite Plan": {
       lineItems: [{
         amount: 49.99,
         currencyCode: "USD",
         interval: BillingInterval.Every30Days,
+      }],
+    },
+    "Elite Plan Yearly": {
+      lineItems: [{
+        amount: 509.90, // 49.99 * 12 * 0.85 = ~$509.90/yr (15% off)
+        currencyCode: "USD",
+        interval: BillingInterval.Annual,
       }],
     },
   },
