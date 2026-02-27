@@ -30,6 +30,7 @@ CREATE TABLE "Store" (
     "isSyncing" BOOLEAN NOT NULL DEFAULT false,
     "syncTarget" INTEGER NOT NULL DEFAULT 0,
     "syncCompleted" INTEGER NOT NULL DEFAULT 0,
+    "syncMessage" TEXT,
     "klaviyoApiKey" TEXT,
     "mailchimpApiKey" TEXT,
     "mailchimpServerPrefix" TEXT,

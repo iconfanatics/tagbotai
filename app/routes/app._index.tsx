@@ -104,7 +104,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     monthlyTagCount: store.monthlyTagCount,
     syncProgress: store.isSyncing ? {
       target: store.syncTarget,
-      completed: store.syncCompleted
+      completed: store.syncCompleted,
+      message: store.syncMessage
     } : null,
     dashboardDataPromise
   };
@@ -332,7 +333,7 @@ export default function Index() {
       <Layout.Section>
         <Banner tone="info" title="Background Automation Running">
           <BlockStack gap="200">
-            <Text as="p">TagBot AI is evaluating past customers against your active rules. This runs in the background, minimizing impact on your store's performance.</Text>
+            <Text as="p">{syncProgress.message || "TagBot AI is evaluating past customers against your active rules. This runs in the background, minimizing impact on your store's performance."}</Text>
             <Box paddingBlockStart="200" paddingBlockEnd="100">
               {percentage > 0 ? (
                 <InlineStack align="space-between" blockAlign="center">

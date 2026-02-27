@@ -75,6 +75,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         enqueueSyncJob({
             shop,
             storeId: store.id,
+            syncType: "CLEANUP",
+            syncMessage: `TagBot AI is deleting all instances of the tag "${targetTag}". This relies on standard Shopify API rate limits.`,
+            tagsToRemove: [targetTag],
             customersToSync: affectedCustomers.map(c => ({
                 node: {
                     id: `gid://shopify/Customer/${c.id}`,
@@ -106,6 +109,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         enqueueSyncJob({
             shop,
             storeId: store.id,
+            syncType: "CLEANUP",
+            syncMessage: `TagBot AI is merging the tag "${sourceTag}" into "${destinationTag}".`,
+            tagsToRemove: [sourceTag],
+            tagsToAdd: [destinationTag],
             customersToSync: affectedCustomers.map(c => {
                 let tags = c.tags ? c.tags.split(",").map(t => t.trim()) : [];
                 tags = tags.filter(t => t !== sourceTag); // Remove old

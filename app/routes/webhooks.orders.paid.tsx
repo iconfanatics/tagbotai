@@ -73,6 +73,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     if (customer && activeRules.length > 0) {
         const standardRules = activeRules.filter(r => !r.collectionId);
         const collectionRules = activeRules.filter(r => r.collectionId);
+        const existingTags = customer.tags ? customer.tags.split(",").map((t: string) => t.trim()) : [];
 
         // 1. Evaluate standard rules (Total Spent, Order Count, etc)
         const { tagsToAdd, tagsToRemove } = await calculateCustomerTags(customer, standardRules);
@@ -129,7 +130,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                     }
 
                     // Compare against collection rules
-                    const existingTags = customer.tags ? customer.tags.split(",").map(t => t.trim()) : [];
                     for (const rule of collectionRules) {
                         const targetCollectionGid = `gid://shopify/Collection/${rule.collectionId}`;
 

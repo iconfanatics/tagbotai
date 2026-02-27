@@ -48,6 +48,7 @@ model Store {
   isSyncing             Boolean       @default(false)
   syncTarget            Int        @default(0)
   syncCompleted         Int        @default(0)
+  syncMessage           String?
   klaviyoApiKey         String?
   mailchimpApiKey       String?
   mailchimpServerPrefix String?

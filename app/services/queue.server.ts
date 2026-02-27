@@ -7,6 +7,10 @@ interface SyncJobPayload {
     shop: string;
     storeId: string;
     customersToSync: any[];
+    syncType?: "RULES" | "CLEANUP";
+    syncMessage?: string;
+    tagsToAdd?: string[];
+    tagsToRemove?: string[];
 }
 
 /**
@@ -34,7 +38,12 @@ async function processSyncJob(payload: SyncJobPayload) {
         // Initialize sync progress 
         await db.store.update({
             where: { id: storeId },
-            data: { isSyncing: true, syncTarget: customersToSync.length, syncCompleted: 0 }
+            data: {
+                isSyncing: true,
+                syncTarget: customersToSync.length,
+                syncCompleted: 0,
+                syncMessage: payload.syncMessage || "TagBot AI is evaluating past customers against your active rules. This runs in the background, minimizing impact on your store's performance."
+            }
         });
 
         let completed = 0;
@@ -62,7 +71,26 @@ async function processSyncJob(payload: SyncJobPayload) {
                 }
             });
 
-            if (activeRules.length > 0) {
+            if (payload.syncType === "CLEANUP") {
+                const addTagNames = payload.tagsToAdd || [];
+                const removeTagNames = payload.tagsToRemove || [];
+
+                if (addTagNames.length > 0 || removeTagNames.length > 0) {
+                    await manageCustomerTags(admin, storeId, customerId, addTagNames, removeTagNames);
+
+                    // Log activities
+                    for (const tag of addTagNames) {
+                        await db.activityLog.create({
+                            data: { storeId, customerId, action: "TAG_ADDED", tagContext: tag, reason: "Manual Tag Cleanup (Merge)" }
+                        });
+                    }
+                    for (const tag of removeTagNames) {
+                        await db.activityLog.create({
+                            data: { storeId, customerId, action: "TAG_REMOVED", tagContext: tag, reason: "Manual Tag Cleanup" }
+                        });
+                    }
+                }
+            } else if (activeRules.length > 0) {
                 const { tagsToAdd, tagsToRemove } = await calculateCustomerTags(upsertedCustomer, activeRules);
 
                 const addTagNames = tagsToAdd.map(t => t.tag);
