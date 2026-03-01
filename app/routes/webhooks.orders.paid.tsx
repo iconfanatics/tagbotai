@@ -5,6 +5,7 @@ import { calculateCustomerTags } from "../services/rule.server";
 import { manageCustomerTags, sendVipDiscount } from "../services/tags.server";
 import { getCachedStore } from "../services/cache.server";
 import { analyzeSentiment } from "../services/ai.server";
+import { evaluateOrderRules } from "../services/order-rules.server";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
     const { admin, shop, payload, topic } = await authenticate.webhook(request);
@@ -165,7 +166,20 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             }
         }
 
-        // Asynchronously update tags in Shopify if there are changes
+        // 4. Evaluate Order-Based Rules (source, payment, city, quantity, discounts, pre-order)
+        try {
+            const existingPlusNewTags = [...existingTags, ...addTagNames];
+            const orderTagResults = evaluateOrderRules(order, activeRules, existingPlusNewTags);
+            for (const item of orderTagResults) {
+                if (!addTagNames.includes(item.tag)) {
+                    addTagNames.push(item.tag);
+                    tagsToAddLog.push(item);
+                }
+            }
+        } catch (err) {
+            console.error("[ORDER_RULES] Failed to evaluate order rules:", err);
+        }
+
         if (addTagNames.length > 0 || removeTagNames.length > 0) {
             try {
                 await manageCustomerTags(admin, store.id, customerId, addTagNames, removeTagNames);
