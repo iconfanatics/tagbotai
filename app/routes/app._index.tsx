@@ -266,12 +266,18 @@ export default function Index() {
     if (currentPlanName === "Free" || currentPlanName === "") {
       setIsUpgradeModalOpen(true);
     } else {
-      shopify.toast.show(`CSV Export Started${tag ? ` for ${tag}s` : ''}...`);
-      let url = `/app/export${window.location.search}`;
-      if (tag) {
-        url += url.includes("?") ? `&tag=${tag}` : `?tag=${tag}`;
-      }
-      window.open(url, "_blank");
+      shopify.toast.show(`Preparing CSV export${tag ? ` for ${tag}s` : ""}…`);
+      // Preserve all Shopify session params (host, shop, etc.) in the URL
+      const params = new URLSearchParams(window.location.search);
+      if (tag) params.set("tag", tag);
+      const exportUrl = `/app/export?${params.toString()}`;
+      // Use same-iframe anchor to keep the session cookie — window.open loses it in a new tab
+      const anchor = document.createElement("a");
+      anchor.href = exportUrl;
+      anchor.download = "";
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
     }
   };
 

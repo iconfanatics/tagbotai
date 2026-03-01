@@ -77,10 +77,20 @@ export default function RulesManagement() {
         if (currentPlanName === "Free" || currentPlanName === "") {
             setIsUpgradeModalOpen(true);
         } else {
-            shopify.toast.show(`CSV Export Started for segment: ${ruleName}...`);
-            let url = `/app/export${window.location.search}`;
-            url += url.includes("?") ? `&ruleId=${ruleId}` : `?ruleId=${ruleId}`;
-            window.open(url, "_blank");
+            shopify.toast.show(`Preparing CSV export for: ${ruleName}…`);
+            // Build the URL preserving the Shopify session query params (host, shop, etc.)
+            const params = new URLSearchParams(window.location.search);
+            params.set("ruleId", ruleId);
+            const exportUrl = `/app/export?${params.toString()}`;
+
+            // Trigger the download in the SAME iframe context so the session cookie is sent.
+            // window.open() opens a new tab which loses the embedded session.
+            const anchor = document.createElement("a");
+            anchor.href = exportUrl;
+            anchor.download = "";   // let the server set the filename via Content-Disposition
+            document.body.appendChild(anchor);
+            anchor.click();
+            document.body.removeChild(anchor);
         }
     };
 
