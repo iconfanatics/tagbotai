@@ -490,7 +490,7 @@ export default function NewRule() {
                                                 <Text as="span" variant="bodySm" tone="subdued">When an order arrives where</Text>
                                                 <Badge>{ORDER_FIELDS.find(f => f.value === orderField)?.label.split("(")[0].trim() || orderField}</Badge>
                                                 <Badge tone="info">{orderOperator}</Badge>
-                                                <Badge tone="success">"{orderValue || "…"}"</Badge>
+                                                <Badge tone="success">{`"${orderValue || "…"}"`}</Badge>
                                                 <Text as="span" variant="bodySm" tone="subdued">→ tag customer as</Text>
                                                 <Badge tone="magic">{targetTag || "?"}</Badge>
                                             </InlineStack>

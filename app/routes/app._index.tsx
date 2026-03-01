@@ -467,7 +467,7 @@ export default function Index() {
                           <BlockStack gap="300">
                             <InlineStack align="space-between" blockAlign="center">
                               <Text variant="headingMd" as="h3">Customer Segments</Text>
-                              <Badge tone="info">{totalCustomers} total</Badge>
+                              <Badge tone="info">{`${totalCustomers} total`}</Badge>
                             </InlineStack>
                             <Divider />
                             <div style={{ height: 260 }}>
@@ -487,7 +487,7 @@ export default function Index() {
                                 <Text variant="headingMd" as="h3">Order Tags Breakdown</Text>
                                 <Badge tone="magic">New</Badge>
                               </InlineStack>
-                              <Badge>{orderTagsFired} fired</Badge>
+                              <Badge>{`${orderTagsFired} fired`}</Badge>
                             </InlineStack>
                             <Divider />
                             <div style={{ height: 260 }}>
