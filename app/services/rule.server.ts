@@ -14,13 +14,17 @@ function evaluateCondition(customer: Customer, condition: Condition): boolean {
     if (customerValue === null || customerValue === undefined) return false;
 
     switch (operator) {
-        // Number comparisons
+        // Number comparisons — always coerce both sides to Number
         case "greaterThan":
             return Number(customerValue) > Number(value);
         case "lessThan":
             return Number(customerValue) < Number(value);
         case "equals":
-            return customerValue === value;
+            // Use Number comparison first; fall back to string if NaN
+            const numCust = Number(customerValue);
+            const numVal = Number(value);
+            if (!isNaN(numCust) && !isNaN(numVal)) return numCust === numVal;
+            return String(customerValue).toLowerCase() === String(value).toLowerCase();
 
         // Date Comparisons
         case "isBefore":
@@ -37,6 +41,11 @@ function evaluateCondition(customer: Customer, condition: Condition): boolean {
 export function evaluateRule(customer: Customer, rule: Rule): { isMatch: boolean; reason: string } {
     try {
         const conditions: Condition[] = JSON.parse(rule.conditions);
+
+        // Skip order-category rules — they are evaluated by order-rules.server.ts, not here
+        if (conditions.some((c: any) => c.ruleCategory === "order")) {
+            return { isMatch: false, reason: "Order-based rule (skipped for customer eval)" };
+        }
 
         // AND logic: all conditions must be true
         const isMatch = conditions.every((condition) => evaluateCondition(customer, condition));
