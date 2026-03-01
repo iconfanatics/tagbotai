@@ -368,6 +368,56 @@ export default function FeaturesGuide() {
                             </BlockStack>
                         </Card>
 
+                        <Card background="bg-surface-magic">
+                            <BlockStack gap="400">
+                                <InlineStack gap="200" align="start" blockAlign="center">
+                                    <Icon source={PlayCircleIcon} tone="magic" />
+                                    <Text variant="headingMd" as="h2">16. Order-Based Tagging Rules</Text>
+                                    {/* @ts-ignore */}
+                                    <Badge tone="magic">New</Badge>
+                                </InlineStack>
+                                <Text as="p">
+                                    Tag customers based on <strong>order-level properties</strong> — traffic source, payment method, shipping location, item quantity, discount codes, and pre-orders. Fires automatically on every <code>orders/paid</code> webhook.
+                                </Text>
+                                <Box padding="300" background="bg-surface-secondary" borderRadius="200">
+                                    <Text variant="headingSm" as="h3">10 Available Order Conditions:</Text>
+                                    <List>
+                                        <List.Item><strong>Traffic Source</strong>: facebook, tiktok, instagram, google (from referring_site)</List.Item>
+                                        <List.Item><strong>Payment Method</strong>: paypal, stripe, cash_on_delivery, bogus</List.Item>
+                                        <List.Item><strong>Shipping City</strong>: exact or partial city name match</List.Item>
+                                        <List.Item><strong>Shipping Country</strong>: 2-letter ISO code (US, UK, BD, AU)</List.Item>
+                                        <List.Item><strong>Item Count</strong>: total items in the order (e.g. &gt; 3 = "Bulk Buyer")</List.Item>
+                                        <List.Item><strong>Order Subtotal</strong>: dollar amount before discounts</List.Item>
+                                        <List.Item><strong>Discount Code Used</strong>: true/false — did the order use any code?</List.Item>
+                                        <List.Item><strong>Specific Discount Code</strong>: match a specific code like SAVE15 or SUMMER</List.Item>
+                                        <List.Item><strong>Discount Percentage</strong>: % discount applied (e.g. &gt; 15%)</List.Item>
+                                        <List.Item><strong>Pre-Order</strong>: whether any line item has a pre-order property</List.Item>
+                                    </List>
+                                </Box>
+                                <Box padding="300" background="bg-surface-secondary" borderRadius="200">
+                                    <Text variant="headingSm" as="h3">How to Test:</Text>
+                                    <List type="number">
+                                        <List.Item>Go to <strong>Rules → Create Rule</strong>.</List.Item>
+                                        <List.Item>In the <strong>Order-Based Presets</strong> section, click any preset (e.g. "Facebook Buyer", "COD Customer", "Bulk Buyer") — it auto-fills everything.</List.Item>
+                                        <List.Item>Or manually: change Trigger Type to <strong>Order Properties</strong>, select a field like "Payment Method", set operator to "equals", enter "paypal", and set your tag.</List.Item>
+                                        <List.Item>Click <strong>Save Rule</strong>.</List.Item>
+                                        <List.Item>Place a test order on your Shopify store matching the condition (e.g. pay with PayPal, or use a referral link with "facebook" in it).</List.Item>
+                                        <List.Item>Check the customer in Shopify Admin — the tag should be applied immediately after the order is paid.</List.Item>
+                                        <List.Item>Check the Home Dashboard → <strong>Recent Activity</strong> table to see the TAG_ADDED log entry with the order rule reason.</List.Item>
+                                    </List>
+                                </Box>
+                                <Box padding="300" background="bg-surface-secondary" borderRadius="200">
+                                    <Text variant="headingSm" as="h3">Quick Preset Test Ideas:</Text>
+                                    <List>
+                                        <List.Item><strong>Discount Hunter</strong>: Create rule → Place an order using any discount code → Customer gets "Discount-User" tag</List.Item>
+                                        <List.Item><strong>Bulk Buyer</strong>: Create rule → Place order with 4+ items → Customer gets "Bulk-Buyer" tag</List.Item>
+                                        <List.Item><strong>COD Customer</strong>: Create rule → Place a COD order → Customer gets "COD-Customer" tag</List.Item>
+                                    </List>
+                                </Box>
+                                <Text as="p" tone="subdued" variant="bodySm">⚠️ Requires Growth plan or higher. Order rules fire on the webhook — no manual sync needed.</Text>
+                            </BlockStack>
+                        </Card>
+
                     </BlockStack>
                 </Layout.Section>
             </Layout>
