@@ -1,81 +1,72 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
-import { useLoaderData, useNavigate, useSubmit, useNavigation, useActionData, useRevalidator, Await } from "react-router";
+import { useLoaderData, useNavigate, useSubmit, useNavigation, useActionData, Await, redirect } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import db from "../db.server";
 import { getCachedStore } from "../services/cache.server";
 import { enqueueSyncJob } from "../services/queue.server";
-import { calculateCustomerTags } from "../services/rule.server";
-import { manageCustomerTags, sendVipDiscount } from "../services/tags.server";
-import { Page, Layout, Card, Text, BlockStack, InlineStack, Badge, DataTable, Button, Banner, Icon, Box, Modal, Spinner, CalloutCard, Divider, Grid, SkeletonBodyText, SkeletonDisplayText } from "@shopify/polaris";
-import { HashtagIcon, PersonIcon, AlertCircleIcon, MagicIcon, RefreshIcon, PlusIcon, AutomationIcon, ExportIcon, ViewIcon, OrderIcon } from "@shopify/polaris-icons";
+import {
+  Page, Layout, Card, Text, BlockStack, InlineStack, Badge, DataTable,
+  Button, Banner, Icon, Box, Modal, Spinner, Divider, Grid,
+  SkeletonBodyText, SkeletonDisplayText
+} from "@shopify/polaris";
+import {
+  HashtagIcon, PersonIcon, AlertCircleIcon, MagicIcon, RefreshIcon,
+  PlusIcon, ViewIcon, OrderIcon, ExportIcon, DiscountIcon, PaymentIcon
+} from "@shopify/polaris-icons";
 
-// Lazy-load the heavy Recharts library
 const DashboardChart = React.lazy(() => import("../components/DashboardChart"));
-
-// Memoize the polaris DataTable to prevent re-renders when parent state (like syncing) changes
 const MemoizedDataTable = React.memo(DataTable);
 
 const DashboardSkeleton = () => (
   <>
     <Layout.Section>
       <Grid>
-        {[1, 2, 3, 4].map((i) => (
+        {[1, 2, 3, 4].map(i => (
           <Grid.Cell key={i} columnSpan={{ xs: 6, sm: 3, md: 3, lg: 3, xl: 3 }}>
-            <Card roundedAbove="sm">
-              <Box padding="400">
-                <BlockStack gap="400">
-                  <SkeletonDisplayText size="small" />
-                  <SkeletonBodyText lines={2} />
-                </BlockStack>
-              </Box>
-            </Card>
+            <Card roundedAbove="sm"><Box padding="400"><BlockStack gap="400"><SkeletonDisplayText size="small" /><SkeletonBodyText lines={2} /></BlockStack></Box></Card>
           </Grid.Cell>
         ))}
       </Grid>
     </Layout.Section>
     <Layout.Section>
-      <Card roundedAbove="sm">
-        <Box padding="400">
-          <SkeletonBodyText lines={6} />
-        </Box>
-      </Card>
+      <Card roundedAbove="sm"><Box padding="400"><SkeletonBodyText lines={8} /></Box></Card>
     </Layout.Section>
   </>
 );
 
+// ─── Loader ───────────────────────────────────────────────────────────────────
+
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
-  const shop = session.shop;
-
-  const store = await getCachedStore(shop);
+  const store = await getCachedStore(session.shop);
 
   if (!store) {
     return {
       currentPlanName: "Free",
       monthlyTagCount: 0,
-      syncProgress: null,
-      dashboardDataPromise: Promise.resolve({ metrics: [0, 0, 0, 0, 0, 0, []], churningCustomers: [] })
+      dashboardDataPromise: Promise.resolve({
+        metrics: [0, 0, 0, 0, 0, 0, []],
+        churningCustomers: [],
+        orderRuleCount: 0,
+        orderTagsFired: 0,
+        topOrderTags: [] as { tag: string; count: number }[]
+      })
     };
   }
 
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
   const sixtyDaysAgo = new Date();
   sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
 
-  // Safety net: if isSyncing has been true for > 10 minutes, the Vercel function was likely killed
-  // mid-job without triggering the finally block. Force-reset so the UI doesn't spin forever.
+  // Reset stuck sync
   if (store.isSyncing && store.updatedAt) {
     const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
     if (store.updatedAt < tenMinutesAgo) {
-      await db.store.update({
-        where: { id: store.id },
-        data: { isSyncing: false, syncMessage: null }
-      });
+      await db.store.update({ where: { id: store.id }, data: { isSyncing: false, syncMessage: null } });
       store.isSyncing = false;
       store.syncMessage = null;
     }
@@ -91,7 +82,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         db.customer.count({ where: { storeId: store.id, lastOrderDate: { lt: thirtyDaysAgo } } }),
         db.customer.count({ where: { storeId: store.id, orderCount: { gt: 1 }, NOT: { tags: { contains: "VIP" } } } }),
         db.customer.count({ where: { storeId: store.id, orderCount: { lte: 1 }, NOT: { tags: { contains: "VIP" } } } }),
-        db.customer.count({ where: { storeId: store.id } }), // Total customers
+        db.customer.count({ where: { storeId: store.id } }),
         db.activityLog.findMany({
           where: { storeId: store.id },
           orderBy: { createdAt: "desc" },
@@ -100,17 +91,51 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         })
       ]),
       isProOrElite ? db.customer.findMany({
-        where: {
-          storeId: store.id,
-          orderCount: { gt: 3 },
-          lastOrderDate: { lt: sixtyDaysAgo }
-        },
+        where: { storeId: store.id, orderCount: { gt: 3 }, lastOrderDate: { lt: sixtyDaysAgo } },
         take: 5,
-        orderBy: { lastOrderDate: 'asc' }
+        orderBy: { lastOrderDate: "asc" }
       }) : Promise.resolve([])
     ]);
 
-    return { metrics, churningCustomers };
+    // Order-tag metrics
+    const allRules = await db.rule.findMany({ where: { storeId: store.id } });
+    const orderRules = allRules.filter(r => {
+      try {
+        const conds = JSON.parse(r.conditions);
+        return conds.some((c: any) => c.ruleCategory === "order");
+      } catch { return false; }
+    });
+
+    const orderRuleCount = orderRules.length;
+
+    // Count tags fired by order rules
+    const orderTagNames = orderRules.map(r => r.targetTag);
+    let orderTagsFired = 0;
+    const topOrderTagMap: Record<string, number> = {};
+
+    if (orderTagNames.length > 0) {
+      const logs = await db.activityLog.findMany({
+        where: {
+          storeId: store.id,
+          action: "TAG_ADDED",
+          tagContext: { in: orderTagNames }
+        },
+        select: { tagContext: true }
+      });
+      orderTagsFired = logs.length;
+      for (const log of logs) {
+        if (log.tagContext) {
+          topOrderTagMap[log.tagContext] = (topOrderTagMap[log.tagContext] || 0) + 1;
+        }
+      }
+    }
+
+    const topOrderTags = Object.entries(topOrderTagMap)
+      .map(([tag, count]) => ({ tag, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 6);
+
+    return { metrics, churningCustomers, orderRuleCount, orderTagsFired, topOrderTags };
   })();
 
   return {
@@ -120,10 +145,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   };
 };
 
+// ─── Action ───────────────────────────────────────────────────────────────────
+
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
   const shop = session.shop;
-
   const store = await getCachedStore(shop);
   if (!store) return { success: false, message: "Store not found" };
 
@@ -134,13 +160,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const customerId = formData.get("customerId") as string;
     if (customerId) {
       await db.activityLog.create({
-        data: {
-          storeId: store.id,
-          customerId,
-          action: "EMAIL_SENT",
-          tagContext: "Win-back Campaign Simulated",
-          reason: "Manual trigger from Retention Dashboard"
-        }
+        data: { storeId: store.id, customerId, action: "EMAIL_SENT", tagContext: "Win-back Campaign Simulated", reason: "Manual trigger from Dashboard" }
       });
       return { success: true, message: "Simulated Email Sent Successfully!" };
     }
@@ -150,49 +170,32 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     try {
       const sixtyDaysAgo = new Date();
       sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
-
       const activeVips = await db.customer.findMany({
-        where: {
-          storeId: store.id,
-          totalSpent: { gt: 50 },
-          orderCount: { gt: 3 },
-          lastOrderDate: { lt: sixtyDaysAgo },
-          NOT: { tags: { contains: "At-Risk" } }
-        },
+        where: { storeId: store.id, totalSpent: { gt: 50 }, orderCount: { gt: 3 }, lastOrderDate: { lt: sixtyDaysAgo }, NOT: { tags: { contains: "At-Risk" } } },
         select: { id: true, email: true, firstName: true, lastName: true, tags: true }
       });
-
       if (activeVips.length > 0) {
-        // Send to background queue to iteratively apply the "At-Risk" tag in Shopify
-        // We convert the Prisma Customer objects to match the API signature the Sync queue expects
         enqueueSyncJob({
           shop,
           storeId: store.id,
           customersToSync: activeVips.map(vip => ({
             node: {
               id: `gid://shopify/Customer/${vip.id}`,
-              firstName: vip.firstName || "",
-              lastName: vip.lastName || "",
-              email: vip.email || "",
-              amountSpent: { amount: "0" }, // The background rule engine will just see "At-Risk" if we build a rule
-              numberOfOrders: "0",
+              firstName: vip.firstName || "", lastName: vip.lastName || "",
+              email: vip.email || "", amountSpent: { amount: "0" }, numberOfOrders: "0",
               tags: vip.tags ? vip.tags.split(",").map(t => t.trim()) : []
             }
           }))
         });
-
-        // Pre-log for fast UI feedback
         for (const vip of activeVips) {
           await db.activityLog.create({
             data: { storeId: store.id, customerId: vip.id, action: "TAG_ADDED", tagContext: "At-Risk", reason: "AI Churn Auto-Tag Triggered" }
           });
         }
-        return { success: true, message: `Dispatched background job to tag ${activeVips.length} churning VIPs correctly.` };
+        return { success: true, message: `Dispatched job to tag ${activeVips.length} churning VIPs.` };
       }
       return { success: true, message: "All churning VIPs are already tagged." };
-
     } catch (e: any) {
-      console.error("Failed to enqueue auto-tag churn job", e);
       return { success: false, message: e.message || "Failed to tag churning customers" };
     }
   }
@@ -200,50 +203,47 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   if (actionType === "sync_customers") {
     try {
       const isFree = store.planName === "Free" || store.planName === "";
-      const fetchLimit = isFree ? 50 : 250;
-
-      const response = await admin.graphql(
-        `#graphql
-              query getCustomers {
-                customers(first: ${fetchLimit}) {
-                  edges {
-                    node {
-                      id
-                      email
-                      firstName
-                      lastName
-                      amountSpent {
-                        amount
-                      }
-                      numberOfOrders
-                      tags
-                    }
-                  }
-                }
-              }
-            `
-      );
-
-      const data = await response.json();
+      const res = await admin.graphql(`#graphql
+        query { customers(first: ${isFree ? 50 : 250}) {
+          edges { node { id email firstName lastName amountSpent { amount } numberOfOrders tags } }
+        } }`);
+      const data = await res.json();
       const customersToSync = data.data?.customers?.edges || [];
-
       if (customersToSync.length > 0) {
-        enqueueSyncJob({
-          shop,
-          storeId: store.id,
-          customersToSync
-        });
+        enqueueSyncJob({ shop, storeId: store.id, customersToSync });
       }
-
-      return { success: true, message: `Successfully queued ${customersToSync.length} customers for background syncing.` };
+      return { success: true, message: `Queued ${customersToSync.length} customers for syncing.` };
     } catch (e: any) {
-      console.error(e);
       return { success: false, message: e.message || "Failed to sync customers" };
     }
   }
 
   return { success: false };
+};
+
+// ─── KPI Card component ──────────────────────────────────────────────────────
+
+function KpiCard({ label, value, icon, tone, bg }: {
+  label: string; value: string | number; icon: any;
+  tone?: "base" | "magic" | "critical" | "success" | "subdued";
+  bg?: string;
+}) {
+  return (
+    <Card roundedAbove="sm" background={bg as any}>
+      <Box padding="400">
+        <BlockStack gap="200">
+          <InlineStack align="space-between" blockAlign="center">
+            <Text variant="bodySm" as="span" tone="subdued" fontWeight="medium">{label}</Text>
+            <Icon source={icon} tone={tone || "base"} />
+          </InlineStack>
+          <Text variant="heading2xl" as="h2" tone={tone as any}>{typeof value === "number" ? value.toLocaleString() : value}</Text>
+        </BlockStack>
+      </Box>
+    </Card>
+  );
 }
+
+// ─── Dashboard Component ──────────────────────────────────────────────────────
 
 export default function Index() {
   const shopify = useAppBridge();
@@ -252,28 +252,20 @@ export default function Index() {
   const navigate = useNavigate();
   const submit = useSubmit();
   const navigation = useNavigation();
-  const revalidator = useRevalidator();
   const isSyncing = navigation.state === "submitting";
-
-  // Remove old sync polling — it now lives on the Cleanup page
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
 
-  const handleSync = () => {
-    submit({ action: "sync_customers" }, { method: "post" });
-  };
+  const handleSync = () => submit({ action: "sync_customers" }, { method: "post" });
 
   const handleExport = (tag?: string) => {
     if (currentPlanName === "Free" || currentPlanName === "") {
       setIsUpgradeModalOpen(true);
     } else {
-      shopify.toast.show(`Preparing CSV export${tag ? ` for ${tag}s` : ""}…`);
-      // Preserve all Shopify session params (host, shop, etc.) in the URL
+      shopify.toast.show(`Preparing CSV export${tag ? ` for ${tag}` : ""}…`);
       const params = new URLSearchParams(window.location.search);
       if (tag) params.set("tag", tag);
-      const exportUrl = `/app/export?${params.toString()}`;
-      // Use same-iframe anchor to keep the session cookie — window.open loses it in a new tab
       const anchor = document.createElement("a");
-      anchor.href = exportUrl;
+      anchor.href = `/app/export?${params.toString()}`;
       anchor.download = "";
       document.body.appendChild(anchor);
       anchor.click();
@@ -281,28 +273,21 @@ export default function Index() {
     }
   };
 
-  // Tag Limit Checking Logic
+  // Tag limits
   let tagLimit = Infinity;
   if (currentPlanName === "Free" || currentPlanName === "") tagLimit = 100;
   else if (currentPlanName === "Growth Plan") tagLimit = 1000;
+  const currentMonthlyTags = monthlyTagCount || 0;
 
   let limitBanner = null;
-  const currentMonthlyTags = monthlyTagCount || 0;
   if (tagLimit !== Infinity) {
     if (currentMonthlyTags >= tagLimit) {
       limitBanner = (
         <Layout.Section>
           <Banner tone="critical" title="Monthly Tagging Limit Reached">
             <BlockStack gap="200">
-              <Text as="p">
-                You have reached your limit of {tagLimit} automated tags for this billing cycle. TagBot AI has paused applying new tags to avoid overage charges.
-              </Text>
-              <Text as="p" fontWeight="bold">
-                Please upgrade to a premium plan to instantly resume automation.
-              </Text>
-              <Box paddingBlockStart="200">
-                <Button onClick={() => navigate('/app/pricing')} tone="critical">Upgrade Plan</Button>
-              </Box>
+              <Text as="p">You've used all {tagLimit} automated tags this billing cycle. Upgrade to resume.</Text>
+              <Button onClick={() => navigate('/app/pricing')} tone="critical">Upgrade Plan</Button>
             </BlockStack>
           </Banner>
         </Layout.Section>
@@ -311,73 +296,55 @@ export default function Index() {
       limitBanner = (
         <Layout.Section>
           <Banner tone="warning" title="Approaching Tagging Limit">
-            <BlockStack gap="200">
-              <Text as="p">
-                You have used {monthlyTagCount} out of {tagLimit} automated tags for this billing cycle. Consider upgrading your plan to ensure uninterrupted automation when the limit is reached.
-              </Text>
-              <Box paddingBlockStart="200">
-                <Button onClick={() => navigate('/app/pricing')}>View Plans</Button>
-              </Box>
-            </BlockStack>
+            <Text as="p">{monthlyTagCount} of {tagLimit} tags used this cycle.</Text>
           </Banner>
         </Layout.Section>
       );
     }
   }
 
-
   return (
     <Page
-      title="TagBot AI: Smart Segmentation"
-      primaryAction={{ content: 'Sync Customers', icon: RefreshIcon, onAction: handleSync, loading: isSyncing }}
+      title="TagBot AI Dashboard"
+      primaryAction={{ content: "Sync Customers", icon: RefreshIcon, onAction: handleSync, loading: isSyncing }}
       actionGroups={[
         {
-          title: 'Export Customers',
+          title: "Export",
           icon: ExportIcon,
           actions: [
-            { content: 'All Segments (CSV)', onAction: () => handleExport() },
-            { content: 'Active VIPs (CSV)', onAction: () => handleExport("VIP") },
-            { content: 'At-Risk (CSV)', onAction: () => handleExport("At-Risk") }
+            { content: "All Segments (CSV)", onAction: () => handleExport() },
+            { content: "VIPs (CSV)", onAction: () => handleExport("VIP") },
+            { content: "At-Risk (CSV)", onAction: () => handleExport("At-Risk") }
           ]
         }
       ]}
       secondaryActions={[
-        { content: 'View Automations', icon: ViewIcon, onAction: () => navigate('/app/rules') },
-        { content: 'New Rule', icon: PlusIcon, onAction: () => navigate('/app/rules/new') }
+        { content: "View Rules", icon: ViewIcon, onAction: () => navigate("/app/rules") },
+        { content: "New Rule", icon: PlusIcon, onAction: () => navigate("/app/rules/new") }
       ]}
     >
+      <style>{`
+        .dashboard-section-title { display: flex; align-items: center; gap: 8px; padding: 4px 0 8px; }
+        .dashboard-section-title .icon { width: 20px; height: 20px; color: var(--p-color-icon-secondary); }
+      `}</style>
+
       <Layout>
         {/* Upgrade Modal */}
         <Modal
           open={isUpgradeModalOpen}
           onClose={() => setIsUpgradeModalOpen(false)}
-          title="Upgrade to Pro"
-          primaryAction={{
-            content: 'View Plans',
-            onAction: () => navigate('/app/pricing'),
-          }}
-          secondaryActions={[
-            {
-              content: 'Cancel',
-              onAction: () => setIsUpgradeModalOpen(false),
-            },
-          ]}
+          title="Upgrade to Export"
+          primaryAction={{ content: "View Plans", onAction: () => navigate("/app/pricing") }}
+          secondaryActions={[{ content: "Cancel", onAction: () => setIsUpgradeModalOpen(false) }]}
         >
           <Modal.Section>
-            <BlockStack gap="300">
-              <Text as="p">
-                Data export functionality is available on our <strong>Pro</strong> and <strong>Elite</strong> plans.
-                Upgrade your subscription to unlock CSV exports, AI insights, and unlimited monthly tagging.
-              </Text>
-            </BlockStack>
+            <Text as="p">CSV exports are available on <strong>Pro</strong> and <strong>Elite</strong> plans.</Text>
           </Modal.Section>
         </Modal>
 
         {actionData?.message && (
           <Layout.Section>
-            <Banner tone={actionData.success ? "success" : "critical"}>
-              {actionData.message}
-            </Banner>
+            <Banner tone={actionData.success ? "success" : "critical"}>{actionData.message}</Banner>
           </Layout.Section>
         )}
 
@@ -385,100 +352,106 @@ export default function Index() {
 
         <React.Suspense fallback={<DashboardSkeleton />}>
           <Await resolve={dashboardDataPromise}>
-            {(resolvedData) => {
-              const { metrics, churningCustomers } = resolvedData as any;
+            {(resolved) => {
+              const { metrics, churningCustomers, orderRuleCount, orderTagsFired, topOrderTags } = resolved as any;
               const [tagsAppliedCount, activeVipsCount, atRiskCount, returningCount, newCount, totalCustomers, recentLogs] = metrics;
 
-              // AI message logic
-              const atRiskPercentage = totalCustomers > 0 ? Math.round((atRiskCount / totalCustomers) * 100) : 0;
-              let aiInsightMessage = "You don't have many active customers yet. Start running campaigns to gather data!";
-              if (atRiskPercentage > 30) {
-                aiInsightMessage = `Warning: ${atRiskPercentage}% of your total customers haven't purchased in the last 30 days. Consider creating a high-discount Re-engagement rule.`;
-              } else if (activeVipsCount > 0 && atRiskCount > 0) {
-                aiInsightMessage = `Good job retaining VIPs! However, you have ${atRiskCount} at-risk customers. Grouping them helps you target a re-engagement email campaign.`;
-              } else if (totalCustomers > 0) {
-                aiInsightMessage = "Your customer base is highly active! Keep engaging them with new product drops.";
-              }
+              // ── Chart data ────────────────────────────────────
+              const segmentChartData = [
+                { name: "New", value: newCount, fill: "#818cf8" },
+                { name: "Returning", value: returningCount, fill: "#fbbf24" },
+                { name: "VIP", value: activeVipsCount, fill: "#34d399" },
+                { name: "At-Risk", value: atRiskCount, fill: "#f87171" },
+              ].filter(d => d.value > 0);
 
-              const chartData = [
-                { name: 'New Customers', value: newCount, fill: '#E6BDE5' },
-                { name: 'Returning', value: returningCount, fill: '#FFB800' },
-                { name: 'VIP', value: activeVipsCount, fill: '#00A0AC' }
-              ].filter((item: any) => item.value > 0);
+              const orderTagChartData = topOrderTags.map((t: any, i: number) => ({
+                name: t.tag,
+                value: t.count,
+                fill: ["#818cf8", "#34d399", "#fbbf24", "#f87171", "#a78bfa", "#38bdf8"][i % 6]
+              }));
 
+              // ── AI Insight ────────────────────────────────────
+              const atRiskPct = totalCustomers > 0 ? Math.round((atRiskCount / totalCustomers) * 100) : 0;
+              let aiInsight = "Start syncing customers to generate insights.";
+              if (atRiskPct > 30) aiInsight = `⚠️ ${atRiskPct}% of your customers are at-risk — consider a re-engagement campaign.`;
+              else if (activeVipsCount > 0 && atRiskCount > 0) aiInsight = `${activeVipsCount} VIPs are active. ${atRiskCount} customers haven't ordered in 30 days — target them with a win-back offer.`;
+              else if (totalCustomers > 0) aiInsight = "Your customer base looks healthy! Keep the momentum going.";
+              if (orderRuleCount > 0 && orderTagsFired > 0) aiInsight += ` Your ${orderRuleCount} order rules have fired ${orderTagsFired} times.`;
+
+              // ── Log rows ──────────────────────────────────────
               const logRows = recentLogs.map((log: any) => [
-                log.customer?.firstName ? `${log.customer.firstName} ${log.customer.lastName || ''}` : "Guest",
+                log.customer?.firstName ? `${log.customer.firstName} ${log.customer.lastName || ""}` : "Guest",
                 log.customer?.email || `ID: ${log.customerId}`,
-                log.action === "TAG_ADDED" ? <Badge tone="success">{log.tagContext}</Badge> : <Badge tone="critical">{`${log.tagContext} Removed`}</Badge>,
-                <Text as="span">{log.reason || (log.rule?.name || "Manual/Deleted Rule")}</Text>,
+                log.action === "TAG_ADDED"
+                  ? <Badge tone="success">{log.tagContext}</Badge>
+                  : <Badge tone="critical">{`${log.tagContext} ✕`}</Badge>,
+                <Text as="span" variant="bodySm">{log.reason || (log.rule?.name || "Manual / Deleted Rule")}</Text>,
                 new Date(log.createdAt).toLocaleString()
               ]);
 
               const churningRows = churningCustomers.map((c: any) => [
-                c.firstName ? `${c.firstName} ${c.lastName || ''}` : c.email || c.id,
-                c.lastOrderDate ? new Date(c.lastOrderDate).toLocaleDateString() : 'N/A',
+                c.firstName ? `${c.firstName} ${c.lastName || ""}` : c.email || c.id,
+                c.lastOrderDate ? new Date(c.lastOrderDate).toLocaleDateString() : "N/A",
                 c.orderCount.toString(),
-                <Button size="micro" onClick={() => submit({ action: 'send_winback_offer', customerId: c.id }, { method: 'post' })}>
-                  Send Win-back Offer
+                <Button size="micro" onClick={() => submit({ action: "send_winback_offer", customerId: c.id }, { method: "post" })}>
+                  Send Win-back
                 </Button>
               ]);
 
               return (
                 <>
-                  {/* Top Row KPI Cards */}
+                  {/* ── Row 1: Customer KPIs ──────────────────── */}
                   <Layout.Section>
+                    <Box paddingBlockEnd="100">
+                      <InlineStack gap="200" blockAlign="center">
+                        <Icon source={PersonIcon} tone="subdued" />
+                        <Text variant="headingSm" as="h3" tone="subdued">Customer Overview</Text>
+                      </InlineStack>
+                    </Box>
                     <Grid>
                       <Grid.Cell columnSpan={{ xs: 6, sm: 3, md: 3, lg: 3, xl: 3 }}>
-                        <Card roundedAbove="sm">
-                          <Box padding="400">
-                            <BlockStack gap="200">
-                              <InlineStack align="space-between">
-                                <Text variant="headingSm" as="h6" tone="subdued">Total Customers</Text>
-                                <Icon source={OrderIcon} tone="base" />
-                              </InlineStack>
-                              <Text variant="heading3xl" as="h2">{totalCustomers.toLocaleString()}</Text>
-                            </BlockStack>
-                          </Box>
-                        </Card>
+                        <KpiCard label="Total Customers" value={totalCustomers} icon={PersonIcon} />
                       </Grid.Cell>
+                      <Grid.Cell columnSpan={{ xs: 6, sm: 3, md: 3, lg: 3, xl: 3 }}>
+                        <KpiCard label="Tags Applied" value={tagsAppliedCount} icon={HashtagIcon} />
+                      </Grid.Cell>
+                      <Grid.Cell columnSpan={{ xs: 6, sm: 3, md: 3, lg: 3, xl: 3 }}>
+                        <KpiCard label="Active VIPs" value={activeVipsCount} icon={PersonIcon} tone="magic" bg="bg-surface-magic" />
+                      </Grid.Cell>
+                      <Grid.Cell columnSpan={{ xs: 6, sm: 3, md: 3, lg: 3, xl: 3 }}>
+                        <KpiCard label="At-Risk" value={atRiskCount} icon={AlertCircleIcon} tone="critical" bg="bg-surface-critical-active" />
+                      </Grid.Cell>
+                    </Grid>
+                  </Layout.Section>
 
+                  {/* ── Row 2: Order Tag KPIs ─────────────────── */}
+                  <Layout.Section>
+                    <Box paddingBlockEnd="100">
+                      <InlineStack gap="200" blockAlign="center">
+                        <Icon source={OrderIcon} tone="magic" />
+                        <Text variant="headingSm" as="h3" tone="subdued">Order-Based Tags</Text>
+                        <Badge tone="magic">New</Badge>
+                      </InlineStack>
+                    </Box>
+                    <Grid>
+                      <Grid.Cell columnSpan={{ xs: 6, sm: 3, md: 3, lg: 3, xl: 3 }}>
+                        <KpiCard label="Order Rules Active" value={orderRuleCount} icon={OrderIcon} tone="magic" />
+                      </Grid.Cell>
+                      <Grid.Cell columnSpan={{ xs: 6, sm: 3, md: 3, lg: 3, xl: 3 }}>
+                        <KpiCard label="Order Tags Fired" value={orderTagsFired} icon={HashtagIcon} tone="success" />
+                      </Grid.Cell>
+                      <Grid.Cell columnSpan={{ xs: 6, sm: 3, md: 3, lg: 3, xl: 3 }}>
+                        <KpiCard label="Top Order Tag" value={topOrderTags[0]?.tag || "—"} icon={DiscountIcon} />
+                      </Grid.Cell>
                       <Grid.Cell columnSpan={{ xs: 6, sm: 3, md: 3, lg: 3, xl: 3 }}>
                         <Card roundedAbove="sm">
                           <Box padding="400">
                             <BlockStack gap="200">
-                              <InlineStack align="space-between">
-                                <Text variant="headingSm" as="h6" tone="subdued">Total Tags Applied</Text>
-                                <Icon source={HashtagIcon} tone="base" />
+                              <Text variant="bodySm" as="span" tone="subdued" fontWeight="medium">Quick Actions</Text>
+                              <InlineStack gap="200" wrap>
+                                <Button size="micro" icon={PlusIcon} onClick={() => navigate("/app/rules/new")}>New Order Rule</Button>
+                                <Button size="micro" icon={ViewIcon} onClick={() => navigate("/app/rules")} variant="plain">View All</Button>
                               </InlineStack>
-                              <Text variant="heading3xl" as="h2">{tagsAppliedCount.toLocaleString()}</Text>
-                            </BlockStack>
-                          </Box>
-                        </Card>
-                      </Grid.Cell>
-
-                      <Grid.Cell columnSpan={{ xs: 6, sm: 3, md: 3, lg: 3, xl: 3 }}>
-                        <Card roundedAbove="sm" background="bg-surface-magic">
-                          <Box padding="400">
-                            <BlockStack gap="200">
-                              <InlineStack align="space-between">
-                                <Text variant="headingSm" as="h6" tone="magic">Active VIPs</Text>
-                                <Icon source={PersonIcon} tone="magic" />
-                              </InlineStack>
-                              <Text variant="heading3xl" as="h2" tone="magic">{activeVipsCount.toLocaleString()}</Text>
-                            </BlockStack>
-                          </Box>
-                        </Card>
-                      </Grid.Cell>
-
-                      <Grid.Cell columnSpan={{ xs: 6, sm: 3, md: 3, lg: 3, xl: 3 }}>
-                        <Card roundedAbove="sm" background="bg-surface-critical-active">
-                          <Box padding="400">
-                            <BlockStack gap="200">
-                              <InlineStack align="space-between">
-                                <Text variant="headingSm" as="h6" tone="critical">At-Risk Customers</Text>
-                                <Icon source={AlertCircleIcon} tone="critical" />
-                              </InlineStack>
-                              <Text variant="heading3xl" as="h2" tone="critical">{atRiskCount.toLocaleString()}</Text>
                             </BlockStack>
                           </Box>
                         </Card>
@@ -486,96 +459,102 @@ export default function Index() {
                     </Grid>
                   </Layout.Section>
 
-                  {/* Middle Section: Chart & Insights */}
+                  {/* ── Row 3: Charts side by side ────────────── */}
                   <Layout.Section>
                     <Grid>
-                      {/* Left Column: Segment Distribution */}
-                      <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 3, lg: 6, xl: 6 }}>
+                      <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 6, lg: 6, xl: 6 }}>
                         <Card roundedAbove="sm">
-                          <BlockStack gap="400">
-                            <Text variant="headingMd" as="h3">Audience Segments</Text>
+                          <BlockStack gap="300">
+                            <InlineStack align="space-between" blockAlign="center">
+                              <Text variant="headingMd" as="h3">Customer Segments</Text>
+                              <Badge tone="info">{totalCustomers} total</Badge>
+                            </InlineStack>
                             <Divider />
-                            <div style={{ height: '240px', width: '100%', display: 'flex', justifyContent: 'center' }}>
-                              <React.Suspense fallback={
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-                                  <Spinner accessibilityLabel="Loading chart" size="large" />
-                                </div>
-                              }>
-                                <DashboardChart chartData={chartData} />
+                            <div style={{ height: 260 }}>
+                              <React.Suspense fallback={<div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%" }}><Spinner size="large" /></div>}>
+                                <DashboardChart chartData={segmentChartData} type="donut" height={260} />
                               </React.Suspense>
                             </div>
                           </BlockStack>
                         </Card>
                       </Grid.Cell>
 
-                      {/* Right Column: AI Insights */}
-                      <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 3, lg: 6, xl: 6 }}>
-                        <CalloutCard
-                          title="TagBot AI Insights"
-                          illustration="https://cdn.shopify.com/s/assets/admin/checkout/settings-customizecart-705f57c725ac05be5a34ec20c05b94298cb8afd10bf5ac5a56767eb215a77f0a.svg"
-                          primaryAction={{
-                            content: 'Create "VIP-At-Risk" Rule',
-                            onAction: () => navigate('/app/rules/new'),
-                          }}
-                        >
-                          <BlockStack gap="400">
-                            <Text as="p" variant="bodyMd">
-                              {aiInsightMessage}
-                            </Text>
-                            <InlineStack align="start">
-                              <Badge tone="magic" icon={MagicIcon}>AI Generated Recommendation</Badge>
+                      <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 6, lg: 6, xl: 6 }}>
+                        <Card roundedAbove="sm">
+                          <BlockStack gap="300">
+                            <InlineStack align="space-between" blockAlign="center">
+                              <InlineStack gap="200" blockAlign="center">
+                                <Text variant="headingMd" as="h3">Order Tags Breakdown</Text>
+                                <Badge tone="magic">New</Badge>
+                              </InlineStack>
+                              <Badge>{orderTagsFired} fired</Badge>
                             </InlineStack>
+                            <Divider />
+                            <div style={{ height: 260 }}>
+                              <React.Suspense fallback={<div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%" }}><Spinner size="large" /></div>}>
+                                <DashboardChart chartData={orderTagChartData} type="bar" height={260} />
+                              </React.Suspense>
+                            </div>
                           </BlockStack>
-                        </CalloutCard>
+                        </Card>
                       </Grid.Cell>
                     </Grid>
                   </Layout.Section>
 
-                  {/* Retention Alerts */}
+                  {/* ── Row 4: AI Insights ────────────────────── */}
+                  <Layout.Section>
+                    <Card roundedAbove="sm" background="bg-surface-magic">
+                      <BlockStack gap="300">
+                        <InlineStack gap="200" blockAlign="center">
+                          <Icon source={MagicIcon} tone="magic" />
+                          <Text variant="headingMd" as="h3">AI Insights</Text>
+                          <Badge tone="magic" icon={MagicIcon}>Auto-generated</Badge>
+                        </InlineStack>
+                        <Text as="p" variant="bodyMd">{aiInsight}</Text>
+                        <InlineStack gap="200">
+                          <Button size="micro" onClick={() => navigate("/app/rules/new")}>Create Rule</Button>
+                          <Button size="micro" variant="plain" onClick={() => navigate("/app/predict")}>Run Segmentation</Button>
+                        </InlineStack>
+                      </BlockStack>
+                    </Card>
+                  </Layout.Section>
+
+                  {/* ── Row 5: Retention Alerts ───────────────── */}
                   {currentPlanName !== "Pro Plan" && currentPlanName !== "Elite Plan" ? (
                     <Layout.Section>
-                      <Card padding="0">
-                        <Box padding="400">
-                          <BlockStack gap="400">
-                            <InlineStack gap="200" align="start" blockAlign="center">
-                              <Icon source={AlertCircleIcon} tone="critical" />
-                              <Text variant="headingMd" as="h3" tone="critical">AI Retention Alerts (High Value Churn)</Text>
-                            </InlineStack>
-                            <Text as="p" tone="subdued">Identify VIP customers who haven't purchased in over 60 days. <Text as="strong">Upgrade to Pro</Text> to unlock this AI capability.</Text>
-                            <Box paddingBlockStart="200">
-                              <Button onClick={() => navigate('/app/pricing')}>Unlock AI Insights</Button>
-                            </Box>
-                          </BlockStack>
-                        </Box>
+                      <Card>
+                        <BlockStack gap="300">
+                          <InlineStack gap="200" blockAlign="center">
+                            <Icon source={AlertCircleIcon} tone="critical" />
+                            <Text variant="headingMd" as="h3" tone="critical">Retention Alerts</Text>
+                            <Badge tone="warning">Pro</Badge>
+                          </InlineStack>
+                          <Text as="p" tone="subdued">Identify VIP customers who haven't purchased in 60+ days. Upgrade to unlock.</Text>
+                          <Button onClick={() => navigate("/app/pricing")}>Unlock Retention Alerts</Button>
+                        </BlockStack>
                       </Card>
                     </Layout.Section>
                   ) : churningCustomers.length > 0 && (
                     <Layout.Section>
                       <Card padding="0">
                         <Box padding="400">
-                          <BlockStack gap="400">
-                            <InlineStack gap="200" align="start" blockAlign="center">
+                          <InlineStack align="space-between" blockAlign="center">
+                            <InlineStack gap="200" blockAlign="center">
                               <Icon source={AlertCircleIcon} tone="critical" />
-                              <Text variant="headingMd" as="h3" tone="critical">Action Required: Retention Alerts (High Value Churn)</Text>
+                              <Text variant="headingMd" as="h3" tone="critical">Retention Alerts</Text>
                             </InlineStack>
-
-                            <InlineStack align="space-between" blockAlign="center">
-                              <Text as="p" tone="subdued">These VIP customers have &gt; 3 orders but haven't purchased in over 60 days. Don't lose them!</Text>
-                              <Button
-                                variant="primary"
-                                tone="critical"
-                                size="micro"
-                                loading={navigation.state === "submitting"}
-                                onClick={() => submit({ action: 'auto_tag_churn' }, { method: 'post' })}
-                              >
-                                Auto-Tag as "At-Risk"
-                              </Button>
-                            </InlineStack>
-                          </BlockStack>
+                            <Button
+                              variant="primary" tone="critical" size="micro"
+                              loading={navigation.state === "submitting"}
+                              onClick={() => submit({ action: "auto_tag_churn" }, { method: "post" })}
+                            >
+                              Auto-Tag "At-Risk"
+                            </Button>
+                          </InlineStack>
                         </Box>
                         <MemoizedDataTable
-                          columnContentTypes={['text', 'text', 'numeric', 'text']}
-                          headings={['Customer', 'Last Order Date', 'Total Orders', 'Action']}
+                          columnContentTypes={["text", "text", "numeric", "text"]}
+                          headings={["Customer", "Last Order", "Orders", "Action"]}
                           rows={churningRows}
                           hasZebraStripingOnData
                         />
@@ -583,25 +562,31 @@ export default function Index() {
                     </Layout.Section>
                   )}
 
-                  {/* Bottom Section: Activity Log */}
+                  {/* ── Row 6: Recent Activity ────────────────── */}
                   <Layout.Section>
                     <Card padding="0">
                       <Box padding="400">
                         <InlineStack align="space-between" blockAlign="center">
-                          <Text variant="headingMd" as="h3">Recent Automation Activity</Text>
-                          <Button size="micro" onClick={() => navigate('/app/rules')}>Manage Rules</Button>
+                          <Text variant="headingMd" as="h3">Recent Activity</Text>
+                          <Button size="micro" onClick={() => navigate("/app/rules")}>Manage Rules</Button>
                         </InlineStack>
                       </Box>
                       <Divider />
                       {recentLogs.length > 0 ? (
                         <MemoizedDataTable
-                          columnContentTypes={['text', 'text', 'text', 'text', 'text']}
-                          headings={['Customer Name', 'Email', 'Tag Action', 'Attributed To', 'Timestamp']}
+                          columnContentTypes={["text", "text", "text", "text", "text"]}
+                          headings={["Customer", "Email", "Tag", "Source", "Time"]}
                           rows={logRows}
+                          hasZebraStripingOnData
                         />
                       ) : (
-                        <Box padding="400">
-                          <Text as="p" tone="subdued">No automated tagging activity yet. Create a rule and sync customers to see historical evaluations.</Text>
+                        <Box padding="500">
+                          <BlockStack gap="200" inlineAlign="center">
+                            <Text as="p" tone="subdued" alignment="center">No tagging activity yet. Create a rule and sync customers to get started.</Text>
+                            <InlineStack align="center" gap="200">
+                              <Button onClick={() => navigate("/app/rules/new")}>Create First Rule</Button>
+                            </InlineStack>
+                          </BlockStack>
                         </Box>
                       )}
                     </Card>
@@ -616,6 +601,4 @@ export default function Index() {
   );
 }
 
-export const headers = (headersArgs: any) => {
-  return boundary.headers(headersArgs);
-};
+export const headers = (headersArgs: any) => boundary.headers(headersArgs);
