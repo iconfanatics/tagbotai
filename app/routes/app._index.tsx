@@ -203,12 +203,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   if (actionType === "sync_customers") {
     try {
       const isFree = store.planName === "Free" || store.planName === "";
-      const res = await admin.graphql(`#graphql
-        query { customers(first: ${isFree ? 50 : 250}) {
-          edges { node { id email firstName lastName amountSpent { amount } numberOfOrders tags } }
-        } }`);
-      const data = await res.json();
-      const customersToSync = data.data?.customers?.edges || [];
+      const { fetchAllCustomers } = await import("../services/shopify-helpers.server");
+      const customersToSync = await fetchAllCustomers(admin, isFree);
       if (customersToSync.length > 0) {
         enqueueSyncJob({ shop, storeId: store.id, customersToSync });
       }
