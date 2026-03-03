@@ -77,7 +77,8 @@ export async function generateTestData(shop: string) {
                     `, {
                         variables: {
                             input: {
-                                customerId, email, tags: `${source}, ${payment}`,
+                                purchasingEntity: { customerId },
+                                email, tags: `${source}, ${payment}`,
                                 lineItems: Array.from({ length: itemCount }).map(() => ({
                                     title: `Dummy Product ${randomInt(1, 100)}`,
                                     originalUnitPrice: (randomInt(1000, 10000) / 100).toFixed(2),
