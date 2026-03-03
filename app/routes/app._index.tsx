@@ -274,12 +274,21 @@ export default function Index() {
       shopify.toast.show(`Preparing CSV export${tag ? ` for ${tag}` : ""}…`);
       const params = new URLSearchParams(window.location.search);
       if (tag) params.set("tag", tag);
-      const anchor = document.createElement("a");
-      anchor.href = `/app/export?${params.toString()}`;
-      anchor.download = "";
-      document.body.appendChild(anchor);
-      anchor.click();
-      document.body.removeChild(anchor);
+      const exportUrl = `/app/export?${params.toString()}`;
+      window.fetch(exportUrl)
+        .then(async (response) => {
+          if (!response.ok) throw new Error("Export failed");
+          const blob = await response.blob();
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = tag ? `export-${tag}.csv` : "export-all.csv";
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          window.URL.revokeObjectURL(url);
+        })
+        .catch(() => shopify.toast.show("Failed to export", { isError: true }));
     }
   };
 

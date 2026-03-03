@@ -83,14 +83,20 @@ export default function RulesManagement() {
             params.set("ruleId", ruleId);
             const exportUrl = `/app/export?${params.toString()}`;
 
-            // Trigger the download in the SAME iframe context so the session cookie is sent.
-            // window.open() opens a new tab which loses the embedded session.
-            const anchor = document.createElement("a");
-            anchor.href = exportUrl;
-            anchor.download = "";   // let the server set the filename via Content-Disposition
-            document.body.appendChild(anchor);
-            anchor.click();
-            document.body.removeChild(anchor);
+            window.fetch(exportUrl)
+                .then(async (response) => {
+                    if (!response.ok) throw new Error("Export failed");
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = `export-${ruleName.replace(/\\s+/g, '-')}.csv`;
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    window.URL.revokeObjectURL(url);
+                })
+                .catch(() => shopify.toast.show("Failed to export", { isError: true }));
         }
     };
 
