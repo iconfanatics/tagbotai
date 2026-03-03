@@ -96,7 +96,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   // Resolve all data eagerly + in parallel — no deferred promises.
   // A deferred promise with no errorElement causes a silent blank page on error.
-  const EMPTY = { metrics: [0, 0, 0, 0, 0, 0, []] as any, churningCustomers: [], orderRuleCount: 0, orderTagsFired: 0, topOrderTags: [] };
+  const EMPTY: {
+    metrics: any[];
+    churningCustomers: { id: string; firstName: string | null; lastName: string | null; email: string | null; lastOrderDate: Date | null; orderCount: number; totalSpent: number; tags: string | null; storeId: string; createdAt: Date; updatedAt: Date }[];
+    orderRuleCount: number;
+    orderTagsFired: number;
+    topOrderTags: { tag: string; count: number }[];
+  } = { metrics: [0, 0, 0, 0, 0, 0, []] as any, churningCustomers: [], orderRuleCount: 0, orderTagsFired: 0, topOrderTags: [] };
 
   let dashboardData = EMPTY;
   try {
