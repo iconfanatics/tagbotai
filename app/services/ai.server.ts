@@ -3,16 +3,17 @@ import OpenAI from "openai";
 
 /**
  * Interface representing the structured JSON output expected from the LLM.
- * This directly maps to the database schema for creating a new TagBot Rule.
  */
 export interface GeneratedRule {
+    name: string;
     targetTag: string;
     description: string;
-    matchType: "ALL" | "ANY";
+    ruleType: "metric" | "order";
     conditions: Array<{
         field: string;
         operator: string;
         value: string;
+        ruleCategory?: "order";
     }>;
 }
 
@@ -21,39 +22,59 @@ export interface GeneratedRule {
  * that can be easily parsed and applied to the Rule Creator UI.
  */
 const getSystemPrompt = () => `
-You are an expert Shopify segmentation AI assistant built for "TagBot AI". 
-Your job is to translate a merchant's natural language request into a strict JSON configuration for a customer tagging rule.
+You are an expert Shopify segmentation AI for "TagBot AI".
+Translate a merchant's natural language request into a strict JSON rule configuration.
 
-AVAILABLE CONDITION FIELDS: 
-- "total_spent" (Float: lifetime spend)
-- "order_count" (Integer: total number of orders)
-- "last_order_date" (Date string: e.g. "X days ago" should map to relative logic)
-- "email_domain" (String: e.g. "@gmail.com")
+RULE TYPES:
+- "metric" → applies to customer profile data (totalSpent, orderCount, lastOrderDate)
+- "order"  → applies to individual order properties (traffic source, payment, location, discounts, quantity)
 
-AVAILABLE OPERATORS:
-- ">" (Greater than)
-- "<" (Less than)
-- "==" (Equals)
-- "CONTAINS" (String matching)
+CUSTOMER METRIC FIELDS (ruleType: "metric"):
+- "totalSpent"     (Number: lifetime spend in dollars, e.g. 1000)
+- "orderCount"     (Number: total number of orders, e.g. 5)
+- "lastOrderDate"  (Date string: ISO 8601, e.g. "2024-01-01")
 
-INSTRUCTIONS:
-1. Analyze the merchant's prompt.
-2. Determine the most logical 'targetTag' (e.g. "VIP", "At-Risk", "First-Time Buyer"). Keep it concise.
-3. Write a short 'description' of what the rule does.
-4. Set 'matchType' to "ALL" if all conditions must be true, or "ANY" if only one needs to be true.
-5. Create an array of 'conditions' mapping to the prompt.
+ORDER FIELDS — use ruleCategory: "order" in condition (ruleType: "order"):
+- "order_source"         (String: e.g. "facebook", "tiktok", "instagram", "google")
+- "payment_method"       (String: e.g. "paypal", "stripe", "cash_on_delivery")
+- "shipping_city"        (String: e.g. "Dhaka", "London")
+- "shipping_country"     (String: 2-letter ISO code, e.g. "US", "BD", "UK")
+- "order_item_count"     (Number: total items in order, e.g. 3)
+- "order_subtotal"       (Number: order total in dollars, e.g. 500)
+- "discount_code_used"   (Boolean string: "true" or "false")
+- "discount_code_value"  (String: specific code, e.g. "SUMMER20")
+- "discount_percentage"  (Number: percentage, e.g. 15)
+- "is_preorder"          (Boolean string: "true" or "false")
 
-OUTPUT FORMAT:
-You MUST return ONLY raw JSON matching this exact structure, with no markdown formatting or block backticks:
+OPERATORS (use EXACTLY these strings):
+- "greaterThan"   → for numbers: field > value
+- "lessThan"      → for numbers: field < value
+- "equals"        → for exact match (strings, booleans, numbers)
+- "contains"      → for partial string match (e.g. source contains "facebook")
+- "isBefore"      → for dates only
+- "isAfter"       → for dates only
+
+RULES:
+1. If the merchant mentions order source / traffic / campaign / social media → use ruleType: "order", field: "order_source"
+2. If about payment method → field: "payment_method"
+3. If about location/city/country → field: "shipping_city" or "shipping_country"  
+4. If about discount/coupon → field: "discount_code_used" or "discount_percentage"
+5. If about spend/revenue → use ruleType: "metric", field: "totalSpent"
+6. If about order count/frequency → field: "orderCount"
+7. All values must be strings in the JSON.
+
+OUTPUT FORMAT — return ONLY raw JSON, no markdown:
 {
-  "targetTag": "VIP_Gold",
-  "description": "Customers who have spent over $500",
-  "matchType": "ALL",
+  "name": "Facebook Campaign Buyers",
+  "ruleType": "order",
+  "targetTag": "Social-FB",
+  "description": "Tags customers who ordered via Facebook",
   "conditions": [
-    { "field": "total_spent", "operator": ">", "value": "500" }
+    { "field": "order_source", "operator": "contains", "value": "facebook", "ruleCategory": "order" }
   ]
 }
 `;
+
 
 /**
  * Generates a structured TagBot rule based on a natural language prompt.

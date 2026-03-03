@@ -88,16 +88,19 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         }
     });
 
+    // Fire-and-forget: do NOT await this — redirect immediately
     if (ruleType === "metric") {
-        try {
-            const isFree = store.planName === "Free" || store.planName === "";
-            const { fetchAllCustomers } = await import("../services/shopify-helpers.server");
-            const customersToSync = await fetchAllCustomers(admin, isFree);
-            if (customersToSync.length > 0) {
-                const { enqueueSyncJob } = await import("../services/queue.server");
-                enqueueSyncJob({ shop: session.shop, storeId: store.id, customersToSync });
-            }
-        } catch (e) { console.error("Auto-sync failed:", e); }
+        Promise.resolve().then(async () => {
+            try {
+                const isFree = store.planName === "Free" || store.planName === "";
+                const { fetchAllCustomers } = await import("../services/shopify-helpers.server");
+                const customersToSync = await fetchAllCustomers(admin, isFree);
+                if (customersToSync.length > 0) {
+                    const { enqueueSyncJob } = await import("../services/queue.server");
+                    enqueueSyncJob({ shop: session.shop, storeId: store.id, customersToSync });
+                }
+            } catch (e) { console.error("Auto-sync failed:", e); }
+        });
     }
 
     return redirect("/app/rules");
@@ -530,7 +533,10 @@ export default function NewRule() {
 
                                 <InlineStack gap="200" blockAlign="end" wrap={false}>
                                     <div style={{ flex: 1 }}>
-                                        <div style={{ background: "rgba(255,255,255,0.15)", borderRadius: 8, border: "1px solid rgba(255,255,255,0.25)" }}>
+                                        <div
+                                            style={{ background: "rgba(255,255,255,0.15)", borderRadius: 8, border: "1px solid rgba(255,255,255,0.25)" }}
+                                            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) handleAiGenerate(); }}
+                                        >
                                             <TextField
                                                 label=""
                                                 labelHidden
@@ -538,7 +544,6 @@ export default function NewRule() {
                                                 onChange={setAiPrompt}
                                                 placeholder="e.g. Tag customers who spent more than $500 and ordered 3+ times as Gold VIP"
                                                 autoComplete="off"
-                                                onKeyDown={(e: any) => { if (e.key === "Enter") handleAiGenerate(); }}
                                                 multiline={2}
                                             />
                                         </div>
