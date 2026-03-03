@@ -1,17 +1,17 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { authenticate } from "../shopify.server";
 import { getCachedStore } from "../services/cache.server";
 import db from "../db.server";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
-import { useLoaderData, useSubmit, useActionData, useNavigation, useNavigate, redirect } from "react-router";
+import { useLoaderData, useSubmit, useActionData, useNavigation, useNavigate, useFetcher, redirect } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import {
     Page, Layout, Card, FormLayout, TextField, Select, Button, Banner,
-    BlockStack, Text, InlineStack, Box, Divider, Icon, Badge, Modal
+    BlockStack, Text, InlineStack, Box, Icon, Badge, Modal, Spinner
 } from "@shopify/polaris";
 import {
     CashDollarIcon, PersonIcon, ClockIcon, SearchIcon, MagicIcon,
-    OrderIcon, PaymentIcon, DiscountIcon, EditIcon, PlusIcon, XIcon, LocationIcon
+    OrderIcon, PaymentIcon, DiscountIcon, EditIcon, PlusIcon, LocationIcon
 } from "@shopify/polaris-icons";
 
 // ─── Loader ───────────────────────────────────────────────────────────────────
@@ -30,6 +30,23 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     if (!store) return { error: "Store not found" };
 
     const fd = await request.formData();
+    const actionType = fd.get("actionType") as string;
+
+    // ── AI Generation ────────────────────────────────────────────
+    if (actionType === "generate_ai_rule") {
+        const prompt = fd.get("prompt") as string;
+        if (!prompt?.trim()) return { aiError: "Please describe your rule." };
+        try {
+            const { generateRuleConditions } = await import("../services/ai.server");
+            const generated = await generateRuleConditions(prompt);
+            if (!generated) return { aiError: "AI could not generate a rule. Try rephrasing." };
+            return { aiGenerated: generated };
+        } catch (e: any) {
+            return { aiError: e.message || "AI generation failed." };
+        }
+    }
+
+    // ── Save Rule ────────────────────────────────────────────────
     const name = fd.get("name") as string;
     const ruleType = fd.get("ruleType") as string;
     const targetTag = fd.get("targetTag") as string;
@@ -298,6 +315,11 @@ export default function NewRule() {
     const isSubmitting = navigation.state === "submitting";
     const isFreePlan = !planName || planName === "Free";
 
+    // AI Fetcher
+    const aiFetcher = useFetcher<typeof action>();
+    const isGenerating = aiFetcher.state !== "idle";
+    const [aiPrompt, setAiPrompt] = useState("");
+
     // Gallery state
     const [search, setSearch] = useState("");
     const [activeCategory, setActiveCategory] = useState<Category>("all");
@@ -314,6 +336,30 @@ export default function NewRule() {
     const [orderOperator, setOrderOperator] = useState("contains");
     const [orderValue, setOrderValue] = useState("");
     const [targetTag, setTargetTag] = useState("");
+
+    // Auto-populate form when AI returns a result
+    useEffect(() => {
+        const gen = (aiFetcher.data as any)?.aiGenerated;
+        if (!gen) return;
+        setSelectedTemplate(null);
+        setName(gen.name || aiPrompt);
+        setTargetTag(gen.targetTag || "");
+        if (gen.ruleType === "order") {
+            setRuleType("order");
+            const cond = gen.conditions?.[0];
+            if (cond) { setOrderField(cond.field || "order_source"); setOrderOperator(cond.operator || "contains"); setOrderValue(String(cond.value || "")); }
+        } else {
+            setRuleType("metric");
+            const cond = gen.conditions?.[0];
+            if (cond) { setField(cond.field || "totalSpent"); setOperator(cond.operator || "greaterThan"); setValue(String(cond.value || "")); }
+        }
+        setIsModalOpen(true);
+    }, [aiFetcher.data]);
+
+    const handleAiGenerate = () => {
+        if (!aiPrompt.trim()) return;
+        aiFetcher.submit({ actionType: "generate_ai_rule", prompt: aiPrompt }, { method: "post" });
+    };
 
     // Filtered templates
     const filtered = useMemo(() => {
@@ -456,8 +502,65 @@ export default function NewRule() {
                 primaryAction={{ content: "Start from Scratch", icon: PlusIcon, onAction: openBlank }}
             >
                 <Layout>
+                    {/* ── AI Generator ─────────────────────────────────── */}
+                    <Layout.Section>
+                        <div style={{
+                            background: "linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #a855f7 100%)",
+                            borderRadius: 12, padding: "24px 28px",
+                            color: "#fff", position: "relative", overflow: "hidden"
+                        }}>
+                            {/* Decorative glow */}
+                            <div style={{ position: "absolute", top: -40, right: -40, width: 140, height: 140, background: "rgba(255,255,255,0.06)", borderRadius: "50%" }} />
+                            <div style={{ position: "absolute", bottom: -30, left: -20, width: 100, height: 100, background: "rgba(255,255,255,0.04)", borderRadius: "50%" }} />
+
+                            <BlockStack gap="300">
+                                <InlineStack gap="200" blockAlign="center">
+                                    <Icon source={MagicIcon} />
+                                    <Text variant="headingMd" as="h2" tone="text-inverse">Generate with AI ✨</Text>
+                                </InlineStack>
+                                <Text as="p" tone="text-inverse" variant="bodySm">
+                                    Describe your rule in plain English and AI will build it for you automatically.
+                                </Text>
+
+                                {(aiFetcher.data as any)?.aiError && (
+                                    <div style={{ background: "rgba(255,100,100,0.2)", borderRadius: 8, padding: "8px 12px" }}>
+                                        <Text as="p" tone="text-inverse" variant="bodySm">{(aiFetcher.data as any).aiError}</Text>
+                                    </div>
+                                )}
+
+                                <InlineStack gap="200" blockAlign="end" wrap={false}>
+                                    <div style={{ flex: 1 }}>
+                                        <div style={{ background: "rgba(255,255,255,0.15)", borderRadius: 8, border: "1px solid rgba(255,255,255,0.25)" }}>
+                                            <TextField
+                                                label=""
+                                                labelHidden
+                                                value={aiPrompt}
+                                                onChange={setAiPrompt}
+                                                placeholder="e.g. Tag customers who spent more than $500 and ordered 3+ times as Gold VIP"
+                                                autoComplete="off"
+                                                onKeyDown={(e: any) => { if (e.key === "Enter") handleAiGenerate(); }}
+                                                multiline={2}
+                                            />
+                                        </div>
+                                    </div>
+                                    <div style={{ flexShrink: 0 }}>
+                                        <Button
+                                            onClick={handleAiGenerate}
+                                            loading={isGenerating}
+                                            disabled={!aiPrompt.trim()}
+                                            size="large"
+                                        >
+                                            {isGenerating ? "Generating…" : "Generate Rule"}
+                                        </Button>
+                                    </div>
+                                </InlineStack>
+                            </BlockStack>
+                        </div>
+                    </Layout.Section>
+
                     {/* Search + Category filters */}
                     <Layout.Section>
+
                         <Card>
                             <BlockStack gap="400">
                                 <TextField
