@@ -20,15 +20,15 @@ export async function generateTestData(shop: string) {
         console.log(`[TEST DATA] Starting generation for ${shop}...`);
         const { admin } = await unauthenticated.admin(shop);
 
-        // Create 15 diverse customers to stay within 10s serverless lambda timeouts
-        for (let i = 0; i < 15; i++) {
+        // Create 10 diverse customers, each with up to 3 real orders, to stay within 10s serverless lambda timeouts
+        for (let i = 0; i < 10; i++) {
             const firstName = randomItem(FIRST_NAMES);
             const lastName = randomItem(LAST_NAMES);
             const domain = randomItem(DOMAINS);
             const email = `${firstName.toLowerCase()}.${lastName.toLowerCase()}.${Date.now() + i}@${domain}`;
             const city = randomItem(CITIES);
             const country = randomItem(COUNTRIES);
-            const orderCount = randomInt(0, 10);
+            const orderCount = randomInt(0, 3);
             const totalSpent = (randomInt(0, 500000) / 100).toFixed(2); // $0 to $5000.00
 
             const isVIP = randomBoolean(0.15);
@@ -61,7 +61,7 @@ export async function generateTestData(shop: string) {
                     continue; // Skip order if customer fails
                 }
 
-                if (orderCount > 0) {
+                for (let j = 0; j < orderCount; j++) {
                     const source = randomItem(SOURCES);
                     const payment = randomItem(PAYMENT_METHODS);
                     const itemCount = randomInt(1, 4);
@@ -93,11 +93,31 @@ export async function generateTestData(shop: string) {
 
                     const draftData = await draftRes.json();
                     if (draftData.data?.draftOrderCreate?.userErrors?.length) {
-                        console.error(`[TEST DATA] Order Error (${email}):`, draftData.data.draftOrderCreate.userErrors);
+                        console.error(`[TEST DATA] Draft Order Error (${email}):`, draftData.data.draftOrderCreate.userErrors);
+                        continue;
+                    }
+
+                    // Complete the draft order to create a REAL order in the store (updates customer lifetime value, counts, etc)
+                    const draftOrderId = draftData.data?.draftOrderCreate?.draftOrder?.id;
+                    if (draftOrderId) {
+                        const completeRes = await admin.graphql(`
+                            mutation draftOrderComplete($id: ID!) {
+                                draftOrderComplete(id: $id, paymentPending: false) {
+                                    draftOrder { id }
+                                    userErrors { field message }
+                                }
+                            }
+                        `, {
+                            variables: { id: draftOrderId }
+                        });
+                        const completeData = await completeRes.json();
+                        if (completeData.data?.draftOrderComplete?.userErrors?.length) {
+                            console.error(`[TEST DATA] Complete Order Error (${email}):`, completeData.data.draftOrderComplete.userErrors);
+                        }
                     }
                 }
 
-                console.log(`[TEST DATA] ${i + 1}/15 created: ${email}`);
+                console.log(`[TEST DATA] ${i + 1}/10 created: ${email}`);
                 // Small sleep to ensure we don't max the 1000 point GraphQL bucket, but keep it fast enough for serverless limits
                 await new Promise(res => setTimeout(res, 50));
             } catch (err: any) {
@@ -106,8 +126,8 @@ export async function generateTestData(shop: string) {
             }
         }
 
-        console.log(`[TEST DATA] 15 customers generated successfully.`);
-        return 15;
+        console.log(`[TEST DATA] 10 customers generated successfully.`);
+        return 10;
     } catch (error) {
         console.error("[TEST DATA ERROR]", error);
         throw error;

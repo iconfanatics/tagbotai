@@ -301,7 +301,7 @@ export default function SuperAdminIndex() {
                                     <Button size="micro" onClick={() => handleUpgrade(store.id, "upgrade_pro")} disabled={store.planName === "Pro Plan" || isUpdating}>Set Pro</Button>
                                     <Button size="micro" tone="critical" onClick={() => handleUpgrade(store.id, "upgrade_elite")} disabled={store.planName === "Elite Plan" || isUpdating}>Set Elite</Button>
                                     <Button size="micro" variant="tertiary" onClick={() => handleUpgrade(store.id, "downgrade_free")} disabled={store.planName === "Free" || isUpdating}>Reset Free</Button>
-                                    <Button size="micro" icon={MagicIcon} onClick={() => submit({ intent: "generate_test_data", shop: store.shop }, { method: "post" })} disabled={isUpdating}>Generate 15 Test Customers</Button>
+                                    <Button size="micro" icon={MagicIcon} onClick={() => submit({ intent: "generate_test_data", shop: store.shop }, { method: "post" })} disabled={isUpdating}>Generate 10 Test Customers</Button>
                                 </InlineStack>
                             ])}
                             hasZebraStripingOnData
