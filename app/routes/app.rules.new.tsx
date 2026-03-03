@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { authenticate } from "../shopify.server";
 import { getCachedStore } from "../services/cache.server";
 import db from "../db.server";
@@ -7,11 +7,11 @@ import { useLoaderData, useSubmit, useActionData, useNavigation, useNavigate, re
 import { useAppBridge } from "@shopify/app-bridge-react";
 import {
     Page, Layout, Card, FormLayout, TextField, Select, Button, Banner,
-    BlockStack, Text, InlineStack, Box, Divider, Icon, Badge, Tabs
+    BlockStack, Text, InlineStack, Box, Divider, Icon, Badge, Modal
 } from "@shopify/polaris";
 import {
     CashDollarIcon, PersonIcon, ClockIcon, SearchIcon, MagicIcon,
-    CheckIcon, OrderIcon, PaymentIcon, DiscountIcon, LocationIcon
+    OrderIcon, PaymentIcon, DiscountIcon, EditIcon, PlusIcon, XIcon, LocationIcon
 } from "@shopify/polaris-icons";
 
 // ─── Loader ───────────────────────────────────────────────────────────────────
@@ -25,13 +25,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 // ─── Action ───────────────────────────────────────────────────────────────────
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-    const { session } = await authenticate.admin(request);
+    const { session, admin } = await authenticate.admin(request);
     const store = await getCachedStore(session.shop);
     if (!store) return { error: "Store not found" };
 
-    const { admin } = await authenticate.admin(request);
     const fd = await request.formData();
-
     const name = fd.get("name") as string;
     const ruleType = fd.get("ruleType") as string;
     const targetTag = fd.get("targetTag") as string;
@@ -51,13 +49,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         const cv = field !== "lastOrderDate" ? Number(value) : value;
         conditions = [{ field, operator, value: cv }];
         description = `Customer ${field} ${operator} ${cv}`;
-
     } else if (ruleType === "collection") {
         collectionId = fd.get("collectionId") as string;
         collectionName = fd.get("collectionName") as string;
         if (!collectionId || !collectionName) return { error: "Collection ID and Name are required." };
         description = `Purchases from: ${collectionName}`;
-
     } else if (ruleType === "order") {
         const orderField = fd.get("orderField") as string;
         const orderOperator = fd.get("orderOperator") as string;
@@ -87,7 +83,30 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         } catch (e) { console.error("Auto-sync failed:", e); }
     }
 
-    return redirect("/app");
+    return redirect("/app/rules");
+};
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+type Category = "all" | "customer" | "order" | "payment" | "location" | "discount";
+
+type Template = {
+    key: string;
+    label: string;
+    description: string;
+    longDescription: string;
+    icon: any;
+    category: Category;
+    popular?: boolean;
+    planRequired?: "growth" | "pro";
+    ruleType: string;
+    field?: string;
+    operator?: string;
+    value?: string;
+    orderField?: string;
+    orderOperator?: string;
+    orderValue?: string;
+    tag: string;
 };
 
 // ─── Config ───────────────────────────────────────────────────────────────────
@@ -110,7 +129,7 @@ const getOps = (field: string) => {
         return [{ label: "Greater than (>)", value: "greaterThan" }, { label: "Less than (<)", value: "lessThan" }, { label: "Equals (=)", value: "equals" }];
     if (["discount_code_used", "is_preorder"].includes(field))
         return [{ label: "Equals (=)", value: "equals" }];
-    return [{ label: "Contains", value: "contains" }, { label: "Exactly equals", value: "equals" }, { label: "Does not equal", value: "notEquals" }];
+    return [{ label: "Contains", value: "contains" }, { label: "Exactly equals", value: "equals" }];
 };
 
 const getHint = (field: string) => ({
@@ -120,31 +139,151 @@ const getHint = (field: string) => ({
     discount_code_used: "Enter: true — to match orders WITH a code, false — without",
     is_preorder: "Enter: true — to match pre-order orders",
     discount_code_value: "Partial match supported. E.g.: SAVE15 or SUMMER",
-}[field] || "");
+} as any)[field] || "";
 
-// ─── Presets ─────────────────────────────────────────────────────────────────
+// ─── Templates ────────────────────────────────────────────────────────────────
 
-type Preset = {
-    key: string; label: string; description: string;
-    icon: any; category: "customer" | "order";
-    ruleType: string; field?: string; operator?: string; value?: string;
-    orderField?: string; orderOperator?: string; orderValue?: string;
-    tag: string;
-};
+const TEMPLATES: Template[] = [
+    // Customer
+    {
+        key: "big_spender", label: "High-value Customers", popular: true,
+        category: "customer", icon: CashDollarIcon,
+        description: "Total spent ≥ $1,000",
+        longDescription: "When customer has total spent greater than or equal to $1,000, automatically add tag Gold-VIP to customer.",
+        ruleType: "metric", field: "totalSpent", operator: "greaterThan", value: "1000", tag: "Gold-VIP",
+    },
+    {
+        key: "medium_spend", label: "Medium Spend Customers", popular: true,
+        category: "customer", icon: CashDollarIcon,
+        description: "Total spent $200–$999",
+        longDescription: "When customer has total spent greater than or equal to $200 and less than $1,000, automatically add tag Silver-VIP to customer.",
+        ruleType: "metric", field: "totalSpent", operator: "greaterThan", value: "200", tag: "Silver-VIP",
+    },
+    {
+        key: "loyalist", label: "Loyal Customers", popular: true,
+        category: "customer", icon: PersonIcon,
+        description: "Customer has 5+ orders",
+        longDescription: "When customer has orders number greater than or equal to 5, automatically add tag Loyal-Customer to customer.",
+        ruleType: "metric", field: "orderCount", operator: "greaterThan", value: "5", tag: "Loyal-Customer",
+    },
+    {
+        key: "window_shopper", label: "Window Shoppers",
+        category: "customer", icon: SearchIcon,
+        description: "Registered but never ordered",
+        longDescription: "When customer has 0 orders placed, automatically add tag Prospect to customer.",
+        ruleType: "metric", field: "orderCount", operator: "equals", value: "0", tag: "Prospect",
+    },
+    {
+        key: "at_risk", label: "At-Risk Customers", popular: true,
+        category: "customer", icon: ClockIcon,
+        description: "No purchase in last 90 days",
+        longDescription: "When customer's last order was more than 90 days ago, automatically add tag At-Risk to customer.",
+        ruleType: "metric", field: "lastOrderDate", operator: "isBefore", value: "", tag: "At-Risk",
+    },
+    // Order — Traffic Source
+    {
+        key: "facebook_buyer", label: "Facebook Campaign Orders", popular: true,
+        category: "order", icon: OrderIcon,
+        description: "Traffic source contains Facebook",
+        longDescription: "When orders are created and traffic source contains facebook, automatically add tag Facebook to customer.",
+        ruleType: "order", orderField: "order_source", orderOperator: "contains", orderValue: "facebook", tag: "Social-FB",
+    },
+    {
+        key: "tiktok_buyer", label: "TikTok Campaign Orders",
+        category: "order", icon: OrderIcon,
+        description: "Traffic source contains TikTok",
+        longDescription: "When orders are created and traffic source contains tiktok, automatically add tag TikTok to customer.",
+        ruleType: "order", orderField: "order_source", orderOperator: "contains", orderValue: "tiktok", tag: "Social-TT",
+    },
+    {
+        key: "instagram_buyer", label: "Instagram Campaign Orders",
+        category: "order", icon: OrderIcon,
+        description: "Traffic source contains Instagram",
+        longDescription: "When orders are created and traffic source contains instagram, automatically add tag Instagram to customer.",
+        ruleType: "order", orderField: "order_source", orderOperator: "contains", orderValue: "instagram", tag: "Social-IG",
+    },
+    {
+        key: "google_buyer", label: "Google Ads Orders",
+        category: "order", icon: OrderIcon,
+        description: "Traffic source contains Google",
+        longDescription: "When orders are created and traffic source contains google, automatically add tag Google-Ads to customer.",
+        ruleType: "order", orderField: "order_source", orderOperator: "contains", orderValue: "google", tag: "Google-Ads",
+    },
+    // Payment
+    {
+        key: "cod_customer", label: "COD Customers", popular: true,
+        category: "payment", icon: PaymentIcon,
+        description: "Paid with Cash on Delivery",
+        longDescription: "When order payment method contains cash_on_delivery, automatically add tag COD-Customer to customer.",
+        ruleType: "order", orderField: "payment_method", orderOperator: "contains", orderValue: "cash_on_delivery", tag: "COD-Customer",
+    },
+    {
+        key: "paypal_buyer", label: "PayPal Customers",
+        category: "payment", icon: PaymentIcon,
+        description: "Paid via PayPal",
+        longDescription: "When order payment method contains paypal, automatically add tag PayPal-Customer to customer.",
+        ruleType: "order", orderField: "payment_method", orderOperator: "contains", orderValue: "paypal", tag: "PayPal-Customer",
+    },
+    {
+        key: "stripe_buyer", label: "Stripe Customers",
+        category: "payment", icon: PaymentIcon,
+        description: "Paid via Stripe",
+        longDescription: "When order payment method contains stripe, automatically add tag Stripe-Customer to customer.",
+        ruleType: "order", orderField: "payment_method", orderOperator: "contains", orderValue: "stripe", tag: "Stripe-Customer",
+    },
+    // Location
+    {
+        key: "local_buyer", label: "Local City Buyers",
+        category: "location", icon: LocationIcon,
+        description: "Ships to a specific city",
+        longDescription: "When order shipping city matches a specific value, automatically add tag Local-Customer to customer.",
+        ruleType: "order", orderField: "shipping_city", orderOperator: "contains", orderValue: "", tag: "Local-Customer",
+    },
+    {
+        key: "country_buyer", label: "Country-Specific Buyers",
+        category: "location", icon: LocationIcon,
+        description: "Ships to a specific country",
+        longDescription: "When order shipping country equals a specific 2-letter code, automatically add tag [Country]-Customer to customer.",
+        ruleType: "order", orderField: "shipping_country", orderOperator: "equals", orderValue: "", tag: "Country-Customer",
+    },
+    // Discount
+    {
+        key: "discount_user", label: "Discount Hunters", popular: true,
+        category: "discount", icon: DiscountIcon,
+        description: "Used any discount code",
+        longDescription: "When orders are created with any discount code, automatically add tag Discount-User to customer.",
+        ruleType: "order", orderField: "discount_code_used", orderOperator: "equals", orderValue: "true", tag: "Discount-User",
+    },
+    {
+        key: "heavy_discount", label: "Heavy Discount Buyers",
+        category: "discount", icon: DiscountIcon,
+        description: "Discount applied was > 15%",
+        longDescription: "When order discount percentage is greater than 15%, automatically add tag Heavy-Discounter to customer.",
+        ruleType: "order", orderField: "discount_percentage", orderOperator: "greaterThan", orderValue: "15", tag: "Heavy-Discounter",
+    },
+    {
+        key: "bulk_buyer", label: "Bulk Buyers",
+        category: "order", icon: OrderIcon,
+        description: "Ordered 3+ items in one order",
+        longDescription: "When an order has more than 3 items, automatically add tag Bulk-Buyer to customer.",
+        ruleType: "order", orderField: "order_item_count", orderOperator: "greaterThan", orderValue: "3", tag: "Bulk-Buyer",
+    },
+    {
+        key: "preorder", label: "Pre-Order Customers",
+        category: "order", icon: ClockIcon,
+        description: "Bought a pre-order item",
+        longDescription: "When one of the order items is a pre-order, automatically add tag Pre-Order to customer.",
+        ruleType: "order", orderField: "is_preorder", orderOperator: "equals", orderValue: "true", tag: "Pre-Order",
+    },
+];
 
-const PRESETS: Preset[] = [
-    { key: "big_spender", label: "Big Spenders", description: "Lifetime spend > $1,000", icon: CashDollarIcon, category: "customer", ruleType: "metric", field: "totalSpent", operator: "greaterThan", value: "1000", tag: "VIP" },
-    { key: "loyalist", label: "Loyalists", description: "More than 5 orders", icon: PersonIcon, category: "customer", ruleType: "metric", field: "orderCount", operator: "greaterThan", value: "5", tag: "Loyal" },
-    { key: "window_shopper", label: "Window Shoppers", description: "Zero orders placed", icon: SearchIcon, category: "customer", ruleType: "metric", field: "orderCount", operator: "equals", value: "0", tag: "Prospect" },
-    { key: "at_risk", label: "At Risk", description: "No orders in 90 days", icon: ClockIcon, category: "customer", ruleType: "metric", field: "lastOrderDate", operator: "isBefore", value: "", tag: "AtRisk" },
-    { key: "facebook_buyer", label: "Facebook Buyer", description: "Came from Facebook", icon: OrderIcon, category: "order", ruleType: "order", orderField: "order_source", orderOperator: "contains", orderValue: "facebook", tag: "Social-FB" },
-    { key: "tiktok_buyer", label: "TikTok Buyer", description: "Came from TikTok", icon: OrderIcon, category: "order", ruleType: "order", orderField: "order_source", orderOperator: "contains", orderValue: "tiktok", tag: "Social-TT" },
-    { key: "cod_customer", label: "COD Customer", description: "Paid with cash on delivery", icon: PaymentIcon, category: "order", ruleType: "order", orderField: "payment_method", orderOperator: "contains", orderValue: "cash_on_delivery", tag: "COD-Customer" },
-    { key: "paypal_buyer", label: "PayPal Buyer", description: "Paid with PayPal", icon: PaymentIcon, category: "order", ruleType: "order", orderField: "payment_method", orderOperator: "equals", orderValue: "paypal", tag: "PayPal-Customer" },
-    { key: "bulk_buyer", label: "Bulk Buyer", description: "Ordered 3+ items", icon: OrderIcon, category: "order", ruleType: "order", orderField: "order_item_count", orderOperator: "greaterThan", orderValue: "3", tag: "Bulk-Buyer" },
-    { key: "discount_user", label: "Discount Hunter", description: "Used a discount code", icon: DiscountIcon, category: "order", ruleType: "order", orderField: "discount_code_used", orderOperator: "equals", orderValue: "true", tag: "Discount-User" },
-    { key: "heavy_discount", label: "Heavy Discount", description: "Discount > 15%", icon: DiscountIcon, category: "order", ruleType: "order", orderField: "discount_percentage", orderOperator: "greaterThan", orderValue: "15", tag: "Heavy-Discounter" },
-    { key: "preorder", label: "Pre-Order", description: "Bought a pre-order item", icon: ClockIcon, category: "order", ruleType: "order", orderField: "is_preorder", orderOperator: "equals", orderValue: "true", tag: "Pre-Order-Customer" },
+const CATEGORIES: { label: string; value: Category }[] = [
+    { label: "All", value: "all" },
+    { label: "Customer", value: "customer" },
+    { label: "Order", value: "order" },
+    { label: "Payment", value: "payment" },
+    { label: "Location", value: "location" },
+    { label: "Discount", value: "discount" },
 ];
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -159,382 +298,295 @@ export default function NewRule() {
     const isSubmitting = navigation.state === "submitting";
     const isFreePlan = !planName || planName === "Free";
 
-    // Builder state
-    const [name, setName] = useState("");
-    const [ruleType, setRuleType] = useState<"metric" | "collection" | "order">("metric");
-    const [targetTag, setTargetTag] = useState("");
-    const [activePreset, setActivePreset] = useState<string | null>(null);
+    // Gallery state
+    const [search, setSearch] = useState("");
+    const [activeCategory, setActiveCategory] = useState<Category>("all");
+    const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
+    const [isModalOpen, setIsModalOpen] = useState(false);
 
-    // Metric
+    // Form state
+    const [name, setName] = useState("");
+    const [ruleType, setRuleType] = useState("metric");
     const [field, setField] = useState("totalSpent");
     const [operator, setOperator] = useState("greaterThan");
     const [value, setValue] = useState("");
-
-    // Collection
-    const [collectionId, setCollectionId] = useState("");
-    const [collectionName, setCollectionName] = useState("");
-
-    // Order
     const [orderField, setOrderField] = useState("order_source");
     const [orderOperator, setOrderOperator] = useState("contains");
     const [orderValue, setOrderValue] = useState("");
+    const [targetTag, setTargetTag] = useState("");
 
-    // AI
-    const [aiPrompt, setAiPrompt] = useState("");
-    const [isGenerating, setIsGenerating] = useState(false);
-    const [showAI, setShowAI] = useState(false);
+    // Filtered templates
+    const filtered = useMemo(() => {
+        return TEMPLATES.filter(t => {
+            const matchCat = activeCategory === "all" || t.category === activeCategory;
+            const matchSearch = !search || t.label.toLowerCase().includes(search.toLowerCase()) || t.description.toLowerCase().includes(search.toLowerCase());
+            return matchCat && matchSearch;
+        });
+    }, [search, activeCategory]);
 
-    const handleOrderFieldChange = (v: string) => {
-        setOrderField(v);
-        setOrderOperator(getOps(v)[0].value);
-        setOrderValue("");
-    };
-
-    const applyPreset = (p: Preset) => {
-        setActivePreset(p.key);
-        setName(p.label);
-        setTargetTag(p.tag);
-        setRuleType(p.ruleType as any);
-
-        if (p.ruleType === "metric") {
-            setField(p.field!);
-            setOperator(p.operator!);
-            if (p.key === "at_risk") {
-                const d = new Date(); d.setDate(d.getDate() - 90);
-                setValue(d.toISOString().split("T")[0]);
-            } else {
-                setValue(p.value!);
-            }
-        } else if (p.ruleType === "order") {
-            setOrderField(p.orderField!);
-            setOrderOperator(p.orderOperator!);
-            setOrderValue(p.orderValue!);
+    const applyTemplate = (t: Template) => {
+        setSelectedTemplate(t);
+        setName(t.label);
+        setRuleType(t.ruleType);
+        setTargetTag(t.tag);
+        if (t.ruleType === "metric") {
+            setField(t.field || "totalSpent");
+            setOperator(t.operator || "greaterThan");
+            setValue(t.value || "");
+        } else if (t.ruleType === "order") {
+            setOrderField(t.orderField || "order_source");
+            setOrderOperator(t.orderOperator || "contains");
+            setOrderValue(t.orderValue || "");
         }
+        setIsModalOpen(true);
     };
 
-    const handleAIGenerate = async () => {
-        if (!aiPrompt.trim()) return;
-        setIsGenerating(true);
-        shopify.toast.show("Analysing prompt…");
-        try {
-            const res = await fetch("/app/ai/rule", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: aiPrompt }) });
-            const data = await res.json();
-            if (data.error) { shopify.toast.show(data.error, { isError: true }); return; }
-            const rule = data.rule;
-            setActivePreset("custom_ai");
-            setName(rule.description || "AI Rule");
-            setTargetTag(rule.targetTag || "SmartTag");
-            setRuleType("metric");
-            const fm: Record<string, string> = { total_spent: "totalSpent", order_count: "orderCount", last_order_date: "lastOrderDate" };
-            const om: Record<string, string> = { ">": "greaterThan", "<": "lessThan", "==": "equals", "CONTAINS": "contains" };
-            if (rule.conditions?.[0]) {
-                const c = rule.conditions[0];
-                setField(fm[c.field] || "totalSpent");
-                setOperator(om[c.operator] || "equals");
-                setValue(c.value || "");
-            }
-            shopify.toast.show("Rule configured! ✨");
-        } catch { shopify.toast.show("AI engine unreachable.", { isError: true }); }
-        finally { setIsGenerating(false); }
+    const openBlank = () => {
+        setSelectedTemplate(null);
+        setName(""); setTargetTag(""); setRuleType("metric");
+        setField("totalSpent"); setOperator("greaterThan"); setValue("");
+        setOrderField("order_source"); setOrderOperator("contains"); setOrderValue("");
+        setIsModalOpen(true);
     };
 
     const handleSubmit = () => {
-        const fd = new FormData();
-        fd.append("name", name); fd.append("ruleType", ruleType); fd.append("targetTag", targetTag);
-        fd.append("field", field); fd.append("operator", operator); fd.append("value", value);
-        fd.append("collectionId", collectionId); fd.append("collectionName", collectionName);
-        fd.append("orderField", orderField); fd.append("orderOperator", orderOperator); fd.append("orderValue", orderValue);
+        const fd: Record<string, string> = { name, ruleType, targetTag };
+        if (ruleType === "metric") Object.assign(fd, { field, operator, value });
+        else if (ruleType === "order") Object.assign(fd, { orderField, orderOperator, orderValue });
         submit(fd, { method: "post" });
     };
 
-    const customerPresets = PRESETS.filter(p => p.category === "customer");
-    const orderPresets = PRESETS.filter(p => p.category === "order");
-
-    const isLocked = (rt: string) => isFreePlan && (rt === "collection" || rt === "order");
-
-    const ruleTypeOptions = [
-        { label: "Customer Metrics", value: "metric" },
-        { label: `Collection Purchase${isFreePlan ? " 🔒" : ""}`, value: "collection" },
-        { label: `Order Properties${isFreePlan ? " 🔒" : ""}`, value: "order" },
+    const metricFieldOptions = [
+        { label: "Total Spent ($)", value: "totalSpent" },
+        { label: "Number of Orders", value: "orderCount" },
+        { label: "Last Order Date", value: "lastOrderDate" },
     ];
+    const metricOperatorOptions = field === "lastOrderDate"
+        ? [{ label: "Before", value: "isBefore" }, { label: "After", value: "isAfter" }]
+        : [{ label: "Greater than (>)", value: "greaterThan" }, { label: "Less than (<)", value: "lessThan" }, { label: "Equals (=)", value: "equals" }];
+
+    const orderFieldOptions = ORDER_FIELDS.map(f => ({ label: f.label, value: f.value }));
+    const orderOperatorOptions = getOps(orderField);
 
     return (
-        <Page
-            title="Create Rule"
-            backAction={{ content: "Rules", url: "/app/rules" }}
-            subtitle="Set a condition, choose what tag to apply, and TagBot handles the rest."
-        >
-            <style>{`
-                .preset-chip { cursor:pointer; border-radius:8px; border:1.5px solid var(--p-color-border); padding:12px 14px; transition:all .15s; background:#fff; }
-                .preset-chip:hover { border-color:var(--p-color-border-magic); background:var(--p-color-bg-surface-magic-hover, #f3f0ff); transform:translateY(-1px); }
-                .preset-chip.active { border-color:var(--p-color-border-magic); background:var(--p-color-bg-fill-magic-secondary, #ede9fe); }
-            `}</style>
-
-            <Layout>
-                <Layout.Section>
+        <>
+            {/* ── Form Modal ───────────────────────────────────────────── */}
+            <Modal
+                open={isModalOpen}
+                onClose={() => setIsModalOpen(false)}
+                title={selectedTemplate ? `Customize: ${selectedTemplate.label}` : "Create Custom Rule"}
+                primaryAction={{
+                    content: isSubmitting ? "Saving…" : "Save Rule",
+                    onAction: handleSubmit,
+                    loading: isSubmitting,
+                }}
+                secondaryActions={[{ content: "Cancel", onAction: () => setIsModalOpen(false) }]}
+                size="large"
+            >
+                <Modal.Section>
                     {actionData?.error && (
                         <Box paddingBlockEnd="400">
                             <Banner tone="critical">{actionData.error}</Banner>
                         </Box>
                     )}
+                    <FormLayout>
+                        <TextField
+                            label="Rule Name"
+                            value={name}
+                            onChange={setName}
+                            placeholder="e.g. High-value Customers"
+                            autoComplete="off"
+                        />
+                        <Select
+                            label="Rule Type"
+                            options={[
+                                { label: "Customer Metric", value: "metric" },
+                                { label: "Order Properties", value: "order" },
+                            ]}
+                            value={ruleType}
+                            onChange={v => { setRuleType(v); }}
+                        />
 
-                    {/* ── Step 1: Quick Presets ──────────────────────────── */}
-                    <Box paddingBlockEnd="400">
+                        {ruleType === "metric" && (
+                            <FormLayout.Group>
+                                <Select label="Customer Field" options={metricFieldOptions} value={field} onChange={v => { setField(v); setOperator("greaterThan"); }} />
+                                <Select label="Operator" options={metricOperatorOptions} value={operator} onChange={setOperator} />
+                                <TextField
+                                    label={field === "lastOrderDate" ? "Date (YYYY-MM-DD)" : "Value"}
+                                    value={value}
+                                    onChange={setValue}
+                                    placeholder={field === "totalSpent" ? "1000" : field === "orderCount" ? "5" : "2024-01-01"}
+                                    autoComplete="off"
+                                />
+                            </FormLayout.Group>
+                        )}
+
+                        {ruleType === "order" && (
+                            <FormLayout.Group>
+                                <Select label="Order Field" options={orderFieldOptions} value={orderField} onChange={v => { setOrderField(v); setOrderOperator(getOps(v)[0]?.value || "contains"); }} />
+                                <Select label="Operator" options={orderOperatorOptions} value={orderOperator} onChange={setOrderOperator} />
+                                <TextField
+                                    label="Value"
+                                    value={orderValue}
+                                    onChange={setOrderValue}
+                                    helpText={getHint(orderField)}
+                                    placeholder="e.g. facebook, paypal, true"
+                                    autoComplete="off"
+                                />
+                            </FormLayout.Group>
+                        )}
+
+                        <TextField
+                            label="Tag to Apply"
+                            value={targetTag}
+                            onChange={setTargetTag}
+                            placeholder="e.g. VIP, Loyal-Customer"
+                            helpText="This tag will be added to the customer in Shopify."
+                            autoComplete="off"
+                        />
+                    </FormLayout>
+                </Modal.Section>
+            </Modal>
+
+            {/* ── Gallery Page ─────────────────────────────────────────── */}
+            <Page
+                title="Rule Templates"
+                subtitle="Choose a template to get started, or create a custom rule from scratch."
+                backAction={{ content: "Rules", url: "/app/rules" }}
+                primaryAction={{ content: "Start from Scratch", icon: PlusIcon, onAction: openBlank }}
+            >
+                <Layout>
+                    {/* Search + Category filters */}
+                    <Layout.Section>
                         <Card>
                             <BlockStack gap="400">
-                                <InlineStack align="space-between" blockAlign="center">
-                                    <BlockStack gap="100">
-                                        <Text variant="headingMd" as="h2">Quick Presets</Text>
-                                        <Text as="p" tone="subdued" variant="bodySm">Click any template to auto-fill the rule — or build from scratch below.</Text>
-                                    </BlockStack>
-                                    <Button
-                                        variant={showAI ? "secondary" : "plain"}
-                                        icon={MagicIcon}
-                                        onClick={() => setShowAI(!showAI)}
-                                        tone="success"
-                                    >
-                                        AI Generator
-                                    </Button>
+                                <TextField
+                                    label=""
+                                    labelHidden
+                                    prefix={<Icon source={SearchIcon} />}
+                                    placeholder="Search templates… e.g. Facebook, COD, Discount"
+                                    value={search}
+                                    onChange={setSearch}
+                                    autoComplete="off"
+                                    clearButton
+                                    onClearButtonClick={() => setSearch("")}
+                                />
+                                <InlineStack gap="200" wrap>
+                                    {CATEGORIES.map(c => (
+                                        <button
+                                            key={c.value}
+                                            onClick={() => setActiveCategory(c.value)}
+                                            style={{
+                                                padding: "6px 14px",
+                                                borderRadius: 20,
+                                                border: activeCategory === c.value ? "2px solid #6366f1" : "1.5px solid rgba(0,0,0,0.12)",
+                                                background: activeCategory === c.value ? "#6366f1" : "transparent",
+                                                color: activeCategory === c.value ? "#fff" : "#374151",
+                                                fontWeight: activeCategory === c.value ? 600 : 400,
+                                                fontSize: 13,
+                                                cursor: "pointer",
+                                                transition: "all 0.15s ease",
+                                            }}
+                                        >
+                                            {c.label}
+                                        </button>
+                                    ))}
                                 </InlineStack>
-
-                                {/* AI Generator (collapsible) */}
-                                {showAI && (
-                                    <Box padding="300" background="bg-surface-magic" borderRadius="200">
-                                        <BlockStack gap="300">
-                                            <InlineStack gap="200" blockAlign="center">
-                                                <Icon source={MagicIcon} tone="magic" />
-                                                <Text variant="headingSm" as="h3">Describe your rule in plain English</Text>
-                                                <Badge tone="magic">Beta</Badge>
-                                            </InlineStack>
-                                            <TextField
-                                                label="" labelHidden value={aiPrompt} onChange={setAiPrompt}
-                                                multiline={2} autoComplete="off"
-                                                placeholder="E.g. Tag customers who have spent more than $500 as VIP Gold"
-                                            />
-                                            <InlineStack align="end">
-                                                <Button variant="primary" tone="success" onClick={handleAIGenerate} loading={isGenerating} disabled={!aiPrompt.trim()}>
-                                                    ✨ Generate Rule
-                                                </Button>
-                                            </InlineStack>
-                                        </BlockStack>
-                                    </Box>
-                                )}
-
-                                <Divider />
-
-                                {/* Customer presets */}
-                                <BlockStack gap="200">
-                                    <InlineStack gap="150" blockAlign="center">
-                                        <Icon source={PersonIcon} tone="base" />
-                                        <Text variant="headingSm" as="h3">Customer Behaviour</Text>
-                                    </InlineStack>
-                                    <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                                        {customerPresets.map(p => (
-                                            <div key={p.key} className={`preset-chip${activePreset === p.key ? " active" : ""}`} style={{ minWidth: 130 }} onClick={() => applyPreset(p)}>
-                                                <BlockStack gap="100">
-                                                    <Icon source={p.icon} tone={activePreset === p.key ? "magic" : "subdued"} />
-                                                    <Text variant="bodySm" fontWeight="semibold" as="span">{p.label}</Text>
-                                                    <Text variant="bodySm" tone="subdued" as="span">{p.description}</Text>
-                                                </BlockStack>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </BlockStack>
-
-                                {/* Order presets */}
-                                <BlockStack gap="200">
-                                    <InlineStack gap="150" blockAlign="center">
-                                        <Icon source={OrderIcon} tone="magic" />
-                                        <Text variant="headingSm" as="h3">Order Properties</Text>
-                                        <Badge tone="magic">New</Badge>
-                                        {isFreePlan && <Badge tone="warning">Growth+</Badge>}
-                                    </InlineStack>
-                                    <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                                        {orderPresets.map(p => (
-                                            <div
-                                                key={p.key}
-                                                className={`preset-chip${activePreset === p.key ? " active" : ""}${isFreePlan ? " is-locked" : ""}`}
-                                                style={{ minWidth: 130, opacity: isFreePlan ? 0.6 : 1, cursor: isFreePlan ? "not-allowed" : "pointer" }}
-                                                onClick={() => isFreePlan ? navigate("/app/pricing") : applyPreset(p)}
-                                            >
-                                                <BlockStack gap="100">
-                                                    <Icon source={p.icon} tone={activePreset === p.key ? "magic" : "subdued"} />
-                                                    <Text variant="bodySm" fontWeight="semibold" as="span">{p.label}</Text>
-                                                    <Text variant="bodySm" tone="subdued" as="span">{p.description}</Text>
-                                                </BlockStack>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </BlockStack>
                             </BlockStack>
                         </Card>
-                    </Box>
+                    </Layout.Section>
 
-                    {/* ── Step 2–4: Rule Builder ─────────────────────────── */}
-                    <Card>
-                        <BlockStack gap="500">
-
-                            {/* Rule Name */}
-                            <BlockStack gap="150">
-                                <Text variant="headingMd" as="h2">
-                                    <InlineStack gap="200" blockAlign="center">
-                                        <Box as="span" background="bg-fill-magic" borderRadius="full" padding="025">
-                                            <Text as="span" variant="headingSm" tone="magic">1</Text>
-                                        </Box>
-                                        Rule Name
-                                    </InlineStack>
-                                </Text>
-                                <TextField
-                                    label="Rule name" labelHidden
-                                    value={name} onChange={setName} autoComplete="off"
-                                    placeholder="e.g. Facebook Buyers from New York"
-                                />
-                            </BlockStack>
-
-                            <Divider />
-
-                            {/* Rule Type + Conditions */}
-                            <BlockStack gap="300">
-                                <Text variant="headingMd" as="h2">
-                                    <InlineStack gap="200" blockAlign="center">
-                                        <Box as="span" background="bg-fill-magic" borderRadius="full" padding="025">
-                                            <Text as="span" variant="headingSm" tone="magic">2</Text>
-                                        </Box>
-                                        Trigger Condition
-                                    </InlineStack>
-                                </Text>
-
-                                <Select
-                                    label="Trigger type" labelHidden
-                                    options={ruleTypeOptions}
-                                    value={ruleType}
-                                    onChange={(v) => { setRuleType(v as any); setActivePreset(null); }}
-                                />
-
-                                {/* METRIC */}
-                                {ruleType === "metric" && (
-                                    <FormLayout.Group>
-                                        <Select
-                                            label="Customer attribute"
-                                            options={[
-                                                { label: "Total Lifetime Spend ($)", value: "totalSpent" },
-                                                { label: "Number of Orders", value: "orderCount" },
-                                                { label: "Last Order Date", value: "lastOrderDate" },
-                                            ]}
-                                            value={field} onChange={setField}
-                                        />
-                                        <Select
-                                            label="Operator"
-                                            options={[
-                                                { label: "Greater than (>)", value: "greaterThan" },
-                                                { label: "Less than (<)", value: "lessThan" },
-                                                { label: "Equals (=)", value: "equals" },
-                                                { label: "Before date", value: "isBefore" },
-                                                { label: "After date", value: "isAfter" },
-                                            ]}
-                                            value={operator} onChange={setOperator}
-                                        />
-                                        <TextField
-                                            label={field === "lastOrderDate" ? "Date (YYYY-MM-DD)" : "Value"}
-                                            value={value} onChange={setValue} autoComplete="off"
-                                            type={field === "lastOrderDate" ? "text" : "number"}
-                                            placeholder={field === "lastOrderDate" ? "2024-01-01" : "500"}
-                                        />
-                                    </FormLayout.Group>
-                                )}
-
-                                {/* COLLECTION */}
-                                {ruleType === "collection" && isFreePlan && (
-                                    <Banner tone="warning">
-                                        Collection rules require a <strong>Growth</strong> plan or higher.{" "}
-                                        <Button variant="plain" onClick={() => navigate("/app/pricing")}>Upgrade now →</Button>
-                                    </Banner>
-                                )}
-                                {ruleType === "collection" && !isFreePlan && (
-                                    <FormLayout.Group>
-                                        <TextField label="Collection ID" value={collectionId} onChange={setCollectionId} autoComplete="off" helpText="Numeric ID from the Shopify collection URL." placeholder="4432104928" />
-                                        <TextField label="Collection Name" value={collectionName} onChange={setCollectionName} autoComplete="off" placeholder="Summer 2024" />
-                                    </FormLayout.Group>
-                                )}
-
-                                {/* ORDER PROPERTIES */}
-                                {ruleType === "order" && isFreePlan && (
-                                    <Banner tone="warning">
-                                        Order-based rules require a <strong>Growth</strong> plan or higher.{" "}
-                                        <Button variant="plain" onClick={() => navigate("/app/pricing")}>Upgrade now →</Button>
-                                    </Banner>
-                                )}
-                                {ruleType === "order" && !isFreePlan && (
-                                    <BlockStack gap="300">
-                                        <FormLayout.Group>
-                                            <Select label="Order field" options={ORDER_FIELDS} value={orderField} onChange={handleOrderFieldChange} />
-                                            <Select label="Operator" options={getOps(orderField)} value={orderOperator} onChange={setOrderOperator} />
-                                            <TextField
-                                                label="Match value" value={orderValue} onChange={setOrderValue} autoComplete="off"
-                                                placeholder={({
-                                                    order_source: "facebook", payment_method: "paypal", shipping_city: "New York",
-                                                    shipping_country: "US", order_item_count: "3", order_subtotal: "100",
-                                                    discount_code_used: "true", discount_code_value: "SAVE15",
-                                                    discount_percentage: "15", is_preorder: "true"
-                                                }[orderField]) || "value"}
-                                                helpText={getHint(orderField)}
-                                            />
-                                        </FormLayout.Group>
-                                        {/* Preview */}
-                                        <Box padding="300" background="bg-surface-secondary" borderRadius="200">
-                                            <InlineStack gap="200" blockAlign="center" wrap>
-                                                <Text as="span" variant="bodySm" tone="subdued">When an order arrives where</Text>
-                                                <Badge>{ORDER_FIELDS.find(f => f.value === orderField)?.label.split("(")[0].trim() || orderField}</Badge>
-                                                <Badge tone="info">{orderOperator}</Badge>
-                                                <Badge tone="success">{`"${orderValue || "…"}"`}</Badge>
-                                                <Text as="span" variant="bodySm" tone="subdued">→ tag customer as</Text>
-                                                <Badge tone="magic">{targetTag || "?"}</Badge>
-                                            </InlineStack>
-                                        </Box>
+                    {/* Template Cards Grid */}
+                    <Layout.Section>
+                        {filtered.length === 0 ? (
+                            <Card>
+                                <Box padding="600">
+                                    <BlockStack gap="200" inlineAlign="center">
+                                        <Text as="p" tone="subdued" alignment="center">No templates match your search. Try a different keyword or category.</Text>
+                                        <Button onClick={openBlank}>Create Custom Rule</Button>
                                     </BlockStack>
-                                )}
-                            </BlockStack>
+                                </Box>
+                            </Card>
+                        ) : (
+                            <div style={{
+                                display: "grid",
+                                gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))",
+                                gap: 16,
+                            }}>
+                                {filtered.map(t => {
+                                    const isLocked = (t.category === "order" || t.category === "payment" || t.category === "location" || t.category === "discount") && isFreePlan;
+                                    return (
+                                        <div
+                                            key={t.key}
+                                            style={{
+                                                background: "#fff",
+                                                border: "1.5px solid rgba(0,0,0,0.08)",
+                                                borderRadius: 12,
+                                                padding: "20px 20px 16px",
+                                                position: "relative",
+                                                transition: "box-shadow 0.2s, border-color 0.2s",
+                                                boxShadow: "0 1px 4px rgba(0,0,0,0.04)",
+                                                opacity: isLocked ? 0.7 : 1,
+                                            }}
+                                            onMouseEnter={e => { if (!isLocked) (e.currentTarget as HTMLDivElement).style.boxShadow = "0 4px 20px rgba(99,102,241,0.12)"; (e.currentTarget as HTMLDivElement).style.borderColor = "#6366f1"; }}
+                                            onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = "0 1px 4px rgba(0,0,0,0.04)"; (e.currentTarget as HTMLDivElement).style.borderColor = "rgba(0,0,0,0.08)"; }}
+                                        >
+                                            {/* Edit button */}
+                                            <button
+                                                onClick={() => isLocked ? navigate("/app/pricing") : applyTemplate(t)}
+                                                style={{
+                                                    position: "absolute", top: 12, right: 12,
+                                                    background: "rgba(0,0,0,0.05)", border: "none",
+                                                    borderRadius: 6, padding: "4px 8px",
+                                                    cursor: "pointer", display: "flex", alignItems: "center",
+                                                    gap: 4, fontSize: 12, color: "#374151",
+                                                }}
+                                                title={isLocked ? "Upgrade to use this template" : "Use this template"}
+                                            >
+                                                <Icon source={isLocked ? MagicIcon : EditIcon} />
+                                                {isLocked ? "Upgrade" : "Use"}
+                                            </button>
 
-                            <Divider />
+                                            {/* Content */}
+                                            <BlockStack gap="200">
+                                                <InlineStack gap="200" blockAlign="center">
+                                                    <div style={{ color: "#6366f1" }}>
+                                                        <Icon source={t.icon} tone="magic" />
+                                                    </div>
+                                                    <Text variant="headingSm" as="h3" fontWeight="bold">{t.label}</Text>
+                                                </InlineStack>
 
-                            {/* Target Tag */}
-                            <BlockStack gap="150">
-                                <Text variant="headingMd" as="h2">
-                                    <InlineStack gap="200" blockAlign="center">
-                                        <Box as="span" background="bg-fill-magic" borderRadius="full" padding="025">
-                                            <Text as="span" variant="headingSm" tone="magic">3</Text>
-                                        </Box>
-                                        Tag to Apply
-                                    </InlineStack>
-                                </Text>
-                                <TextField
-                                    label="Tag name" labelHidden
-                                    value={targetTag} onChange={setTargetTag} autoComplete="off"
-                                    placeholder="e.g. VIP, COD-Customer, Facebook-Buyer"
-                                    helpText="This exact tag will be applied to the customer in Shopify."
-                                    connectedRight={
-                                        targetTag ? <Box padding="150"><Badge tone="info">{targetTag}</Badge></Box> : undefined
-                                    }
-                                />
-                            </BlockStack>
+                                                <Text as="p" tone="subdued" variant="bodySm">{t.longDescription}</Text>
 
-                            <Divider />
+                                                <div style={{ marginTop: 8 }}>
+                                                    <InlineStack gap="150" wrap>
+                                                        {t.popular && <Badge tone="magic">Most popular</Badge>}
+                                                        <Badge tone="info">{t.category.charAt(0).toUpperCase() + t.category.slice(1)}</Badge>
+                                                        {isLocked && <Badge tone="warning">Growth+</Badge>}
+                                                    </InlineStack>
+                                                </div>
+                                            </BlockStack>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </Layout.Section>
 
-                            {/* Save */}
-                            <InlineStack align="end" gap="300">
-                                <Button onClick={() => navigate("/app/rules")}>Cancel</Button>
-                                <Button
-                                    variant="primary" icon={CheckIcon}
-                                    onClick={handleSubmit} loading={isSubmitting}
-                                    disabled={isLocked(ruleType) || !name.trim() || !targetTag.trim()}
-                                >
-                                    Save Rule
-                                </Button>
+                    {/* Footer CTA */}
+                    <Layout.Section>
+                        <Card background="bg-surface-magic">
+                            <InlineStack align="space-between" blockAlign="center" wrap>
+                                <BlockStack gap="100">
+                                    <Text variant="headingSm" as="h3">Want something specific?</Text>
+                                    <Text as="p" tone="subdued" variant="bodySm">Can't find a template? Build your own rule with any condition.</Text>
+                                </BlockStack>
+                                <Button icon={PlusIcon} onClick={openBlank}>Create Custom Rule</Button>
                             </InlineStack>
-                        </BlockStack>
-                    </Card>
-                </Layout.Section>
-            </Layout>
-        </Page>
+                        </Card>
+                    </Layout.Section>
+                </Layout>
+            </Page>
+        </>
     );
 }
