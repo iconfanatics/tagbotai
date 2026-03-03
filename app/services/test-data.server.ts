@@ -60,6 +60,7 @@ export async function generateTestData(shop: string) {
                     console.error(`[TEST DATA] Customer Error (${email}):`, data.data.customerCreate.userErrors);
                     continue; // Skip order if customer fails
                 }
+                const customerId = data.data?.customerCreate?.customer?.id;
 
                 for (let j = 0; j < orderCount; j++) {
                     const source = randomItem(SOURCES);
@@ -76,7 +77,7 @@ export async function generateTestData(shop: string) {
                     `, {
                         variables: {
                             input: {
-                                email, tags: `${source}, ${payment}`,
+                                customerId, email, tags: `${source}, ${payment}`,
                                 lineItems: Array.from({ length: itemCount }).map(() => ({
                                     title: `Dummy Product ${randomInt(1, 100)}`,
                                     originalUnitPrice: (randomInt(1000, 10000) / 100).toFixed(2),
