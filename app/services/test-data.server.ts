@@ -34,77 +34,79 @@ export async function generateTestData(shop: string) {
             const isVIP = randomBoolean(0.15);
             const tags = isVIP ? "Test Data, VIP" : "Test Data";
 
-            await admin.graphql(`
-                mutation customerCreate($input: CustomerInput!) {
-                    customerCreate(input: $input) {
-                        customer { id }
-                        userErrors { field message }
-                    }
-                }
-            `, {
-                variables: {
-                    input: {
-                        firstName,
-                        lastName,
-                        email,
-                        tags,
-                        taxExempt: false,
-                        addresses: [
-                            {
-                                address1: `${randomInt(100, 9999)} Main St`,
-                                city,
-                                countryCode: country,
-                                zip: `${randomInt(10000, 99999)}`,
-                                firstName,
-                                lastName
-                            }
-                        ]
-                    }
-                }
-            });
-
-            // Note: We cannot easily backdate 'lastOrderDate' or fake 'totalSpent'/'orderCount' directly safely
-            // via the simple Customer API (Shopify derives them from actual Orders).
-            // To simulate the full AI capabilities (Traffic source, Payment method), we create actual Draft Orders.
-            if (orderCount > 0) {
-                // Determine a customer ID we just created above, but because we are generating fast, 
-                // we'll just create anonymous draft orders with the email to link them.
-                const source = randomItem(SOURCES);
-                const payment = randomItem(PAYMENT_METHODS);
-                const itemCount = randomInt(1, 4);
-
-                await admin.graphql(`
-                    mutation draftOrderCreate($input: DraftOrderInput!) {
-                                draftOrderCreate(input: $input) {
-                            draftOrder { id }
+            try {
+                const res = await admin.graphql(`
+                    mutation customerCreate($input: CustomerInput!) {
+                        customerCreate(input: $input) {
+                            customer { id }
                             userErrors { field message }
-                                }
-                            }
-                                `, {
+                        }
+                    }
+                `, {
                     variables: {
                         input: {
-                            email,
-                            tags: `${source}, ${payment}`, // Using tags to simulate customAttributes 
-                            lineItems: Array.from({ length: itemCount }).map(() => ({
-                                title: `Dummy Product ${randomInt(1, 100)}`,
-                                originalUnitPrice: (randomInt(1000, 10000) / 100).toFixed(2),
-                                quantity: randomInt(1, 3)
-                            })),
-                            customAttributes: [
-                                { key: "order_source", value: source },
-                                { key: "payment_method", value: payment }
-                            ],
-                            shippingLine: {
-                                title: "Standard Shipping",
-                                price: "5.00"
-                            }
+                            firstName, lastName, email, tags, taxExempt: false,
+                            addresses: [{
+                                address1: `${randomInt(100, 9999)} Main St`,
+                                city, countryCode: country, zip: `${randomInt(10000, 99999)}`,
+                                firstName, lastName
+                            }]
                         }
                     }
                 });
-            }
 
-            // Small delay to respect rate limits
-            await new Promise(res => setTimeout(res, 300));
+                const data = await res.json();
+                if (data.data?.customerCreate?.userErrors?.length) {
+                    console.error(`[TEST DATA] Customer Error (${email}):`, data.data.customerCreate.userErrors);
+                    continue; // Skip order if customer fails
+                }
+
+                if (orderCount > 0) {
+                    const source = randomItem(SOURCES);
+                    const payment = randomItem(PAYMENT_METHODS);
+                    const itemCount = randomInt(1, 4);
+
+                    const draftRes = await admin.graphql(`
+                        mutation draftOrderCreate($input: DraftOrderInput!) {
+                            draftOrderCreate(input: $input) {
+                                draftOrder { id }
+                                userErrors { field message }
+                            }
+                        }
+                    `, {
+                        variables: {
+                            input: {
+                                email, tags: `${source}, ${payment}`,
+                                lineItems: Array.from({ length: itemCount }).map(() => ({
+                                    title: `Dummy Product ${randomInt(1, 100)}`,
+                                    originalUnitPrice: (randomInt(1000, 10000) / 100).toFixed(2),
+                                    quantity: randomInt(1, 3)
+                                })),
+                                customAttributes: [
+                                    { key: "order_source", value: source },
+                                    { key: "payment_method", value: payment }
+                                ],
+                                shippingLine: { title: "Standard Shipping", price: "5.00" }
+                            }
+                        }
+                    });
+
+                    const draftData = await draftRes.json();
+                    if (draftData.data?.draftOrderCreate?.userErrors?.length) {
+                        console.error(`[TEST DATA] Order Error (${email}):`, draftData.data.draftOrderCreate.userErrors);
+                    }
+                }
+
+                console.log(`[TEST DATA] ${i + 1}/50 created: ${email}`);
+
+                // Sleep to avoid hammering the Shopify GraphQL API bucket
+                await new Promise(res => setTimeout(res, 800));
+
+            } catch (err: any) {
+                console.error(`[TEST DATA] GraphQL throws on ${i}:`, err.message);
+                // If it's a rate limit, sleep longer
+                await new Promise(res => setTimeout(res, 3000));
+            }
         }
 
         console.log(`[TEST DATA] 50 customers generated successfully.`);
