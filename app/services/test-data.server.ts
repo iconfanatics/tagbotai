@@ -20,8 +20,8 @@ export async function generateTestData(shop: string) {
         console.log(`[TEST DATA] Starting generation for ${shop}...`);
         const { admin } = await unauthenticated.admin(shop);
 
-        // Create 50 diverse customers matching our data model via GraphQL
-        for (let i = 0; i < 50; i++) {
+        // Create 15 diverse customers to stay within 10s serverless lambda timeouts
+        for (let i = 0; i < 15; i++) {
             const firstName = randomItem(FIRST_NAMES);
             const lastName = randomItem(LAST_NAMES);
             const domain = randomItem(DOMAINS);
@@ -97,19 +97,17 @@ export async function generateTestData(shop: string) {
                     }
                 }
 
-                console.log(`[TEST DATA] ${i + 1}/50 created: ${email}`);
-
-                // Sleep to avoid hammering the Shopify GraphQL API bucket
-                await new Promise(res => setTimeout(res, 800));
-
+                console.log(`[TEST DATA] ${i + 1}/15 created: ${email}`);
+                // Small sleep to ensure we don't max the 1000 point GraphQL bucket, but keep it fast enough for serverless limits
+                await new Promise(res => setTimeout(res, 50));
             } catch (err: any) {
                 console.error(`[TEST DATA] GraphQL throws on ${i}:`, err.message);
-                // If it's a rate limit, sleep longer
-                await new Promise(res => setTimeout(res, 3000));
+                await new Promise(res => setTimeout(res, 500));
             }
         }
 
-        console.log(`[TEST DATA] 50 customers generated successfully.`);
+        console.log(`[TEST DATA] 15 customers generated successfully.`);
+        return 15;
     } catch (error) {
         console.error("[TEST DATA ERROR]", error);
         throw error;
