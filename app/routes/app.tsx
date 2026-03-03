@@ -81,7 +81,7 @@ export default function App() {
           <Link to="/app/workflows">Workflows</Link>
           <Link to="/app/predict">Predictive</Link>
           <Link to="/app/integrations">Integrations</Link>
-          <Link to="/app/pricing">Plans</Link>
+          <Link to="/app/pricing">Pricing Plans</Link>
           <Link to="/app/settings">Settings</Link>
           <Link to="/app/guide">Testing Guide</Link>
         </ui-nav-menu>

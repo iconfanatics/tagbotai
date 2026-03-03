@@ -111,7 +111,7 @@ export default function Pricing() {
             monthly: 0,
             yearly: 0,
             description: "Start automating for free.",
-            features: ["100 tags per month", "Basic Dashboard"],
+            features: ["Up to 100 active tags/mo", "Basic Customer Metrics", "Manual Dashboard Sync", "Community Support"],
             tone: undefined,
             popular: false,
         },
@@ -120,7 +120,7 @@ export default function Pricing() {
             monthly: growthMonthly,
             yearly: growthYearly,
             description: "For growing stores that need more volume.",
-            features: ["1,000 tags per month", "Basic Dashboard", "Email Support"],
+            features: ["Up to 1,000 active tags/mo", "Order-based Rules (FB, TikTok, etc.)", "All Pre-built Templates", "Email Support"],
             tone: "magic" as const,
             popular: false,
         },
@@ -128,8 +128,8 @@ export default function Pricing() {
             name: "Pro Plan",
             monthly: proMonthly,
             yearly: proYearly,
-            description: "Unlimited tagging with advanced AI insights.",
-            features: ["Unlimited tags", "AI Insights Engine", "CSV Data Export"],
+            description: "Unlimited tagging with advanced AI power.",
+            features: ["Unlimited tags", "✨ Generate Rules with AI", "CSV Data Export", "Priority Response Time"],
             tone: "magic" as const,
             popular: true,
         },
@@ -137,8 +137,8 @@ export default function Pricing() {
             name: "Elite Plan",
             monthly: eliteMonthly,
             yearly: eliteYearly,
-            description: "Enterprise features & external integrations.",
-            features: ["Unlimited tags", "Klaviyo / Mailchimp", "Priority 24/7 Support"],
+            description: "Enterprise workflows & custom integrations.",
+            features: ["Unlimited tags", "Klaviyo / Mailchimp Sync", "Dedicated Account Manager", "Custom Feature Requests"],
             tone: undefined,
             popular: false,
         },
@@ -277,14 +277,24 @@ export default function Pricing() {
                                                         </Text>
                                                     )}
 
-                                                    <Text as="p" variant="bodyMd" tone="subdued">{plan.description}</Text>
+                                                    {/* Plan description */}
+                                                    <Box paddingBlockEnd="200">
+                                                        <Text as="p" variant="bodyMd" tone="subdued">{plan.description}</Text>
+                                                    </Box>
                                                     <Divider />
+
+                                                    {/* Premium Checkmark Features List */}
                                                     <div className="pricing-features">
-                                                        <List>
+                                                        <BlockStack gap="200">
                                                             {plan.features.map(f => (
-                                                                <List.Item key={f}>{f}</List.Item>
+                                                                <InlineStack key={f} gap="200" blockAlign="start" wrap={false}>
+                                                                    <div style={{ color: 'var(--p-color-icon-magic)', flexShrink: 0, marginTop: '2px' }}>
+                                                                        <Icon source={CheckIcon} />
+                                                                    </div>
+                                                                    <Text as="span" variant="bodyMd">{f}</Text>
+                                                                </InlineStack>
                                                             ))}
-                                                        </List>
+                                                        </BlockStack>
                                                     </div>
                                                 </BlockStack>
 
