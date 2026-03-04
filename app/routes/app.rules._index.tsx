@@ -84,42 +84,53 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
 
     if (actionType === "sync_batch") {
-        const cursor = formData.get("cursor") as string;
-        const store = await getCachedStore(session.shop);
-        if (!store) return { success: false };
+        try {
+            const cursor = formData.get("cursor") as string;
+            const store = await getCachedStore(session.shop);
+            if (!store) return { success: false, error: "Store not found" };
 
-        const afterClause = cursor ? `, after: "${cursor}"` : "";
-        const res = await admin.graphql(`
-            #graphql
-            query fetchCustomers {
-                customers(first: 5${afterClause}) {
-                    edges { cursor node { id email firstName lastName amountSpent { amount } numberOfOrders tags } }
-                    pageInfo { hasNextPage }
+            const afterClause = cursor ? `, after: "${cursor}"` : "";
+            const res = await admin.graphql(`
+                #graphql
+                query fetchCustomers {
+                    customers(first: 5${afterClause}) {
+                        edges { cursor node { id email firstName lastName amountSpent { amount } numberOfOrders tags } }
+                        pageInfo { hasNextPage }
+                    }
                 }
+            `);
+
+            const data = await res.json();
+
+            if ((data as any).errors) {
+                console.error("[SYNC_BATCH] GraphQL Error:", (data as any).errors);
+                return { success: false, error: "GraphQL Error" };
             }
-        `);
 
-        const data = await res.json();
-        const edges = data.data?.customers?.edges || [];
-        const pageInfo = data.data?.customers?.pageInfo;
+            const edges = data.data?.customers?.edges || [];
+            const pageInfo = data.data?.customers?.pageInfo;
 
-        const activeRules = await db.rule.findMany({ where: { storeId: store.id, isActive: true } });
+            const activeRules = await db.rule.findMany({ where: { storeId: store.id, isActive: true } });
 
-        // Dynamically import processOneCustomer to avoid circular dependency
-        const { processOneCustomer } = await import("../services/queue.server");
+            // Dynamically import processOneCustomer to avoid circular dependency
+            const { processOneCustomer } = await import("../services/queue.server");
 
-        await Promise.all(edges.map((edge: any) =>
-            processOneCustomer(admin, store.id, edge, activeRules, { shop: session.shop, storeId: store.id } as any)
-                .catch(err => console.error("[SYNC_BATCH] Error:", err))
-        ));
+            await Promise.all(edges.map((edge: any) =>
+                processOneCustomer(admin, store.id, edge, activeRules, { shop: session.shop, storeId: store.id } as any)
+                    .catch(err => console.error("[SYNC_BATCH] Error processing customer:", err))
+            ));
 
-        await db.store.update({
-            where: { id: store.id },
-            data: { syncCompleted: { increment: edges.length } }
-        });
+            await db.store.update({
+                where: { id: store.id },
+                data: { syncCompleted: { increment: edges.length } }
+            });
 
-        const nextCursor = edges.length > 0 ? edges[edges.length - 1].cursor : null;
-        return { success: true, cursor: nextCursor, hasNextPage: pageInfo?.hasNextPage ?? false };
+            const nextCursor = edges.length > 0 ? edges[edges.length - 1].cursor : null;
+            return { success: true, cursor: nextCursor, hasNextPage: pageInfo?.hasNextPage ?? false };
+        } catch (error: any) {
+            console.error("[SYNC_BATCH] Critical Error:", error);
+            return { success: false, error: error.message };
+        }
     }
 
     if (actionType === "end_sync") {
@@ -142,6 +153,14 @@ export default function RulesManagement() {
     const navigate = useNavigate();
     const submit = useSubmit();
     const { revalidate } = useRevalidator();
+    const [isStartingSync, setIsStartingSync] = useState(false);
+
+    // Turn off local loading state once the server acknowledges we are syncing
+    useEffect(() => {
+        if (isSyncing) {
+            setIsStartingSync(false);
+        }
+    }, [isSyncing]);
 
     // Client-side batch processor loop
     useEffect(() => {
@@ -160,14 +179,19 @@ export default function RulesManagement() {
                 if (isCancelled) return;
 
                 if (data.success) {
-                    // Update loader values natively so Progress Bar moves
+                    // Force the UI to repaint with the new progress
                     revalidate();
 
                     if (data.hasNextPage) {
                         runBatch(data.cursor);
                     } else {
-                        submit({ action: "end_sync" }, { method: "post" });
+                        // All done! Tell the server to clean up.
+                        setIsStartingSync(false);
+                        submit({ action: "end_sync" }, { method: "post", preventScrollReset: true, replace: true });
                     }
+                } else {
+                    console.error("Batch returned unsuccessful, retrying in 2s...");
+                    setTimeout(() => { if (!isCancelled) runBatch(cursor); }, 2000);
                 }
             } catch (err) {
                 console.error("Batch failed, retrying in 2s...", err);
@@ -324,11 +348,14 @@ export default function RulesManagement() {
             primaryAction={{ content: 'Add New Automation', icon: AutomationIcon, onAction: () => navigate('/app/rules/new') }}
             secondaryActions={[
                 {
-                    content: isSyncing ? 'Syncing...' : 'Sync Historical Data',
+                    content: (isSyncing || isStartingSync) ? 'Syncing...' : 'Sync Historical Data',
                     icon: RefreshIcon,
-                    onAction: () => submit({ action: "start_sync" }, { method: "post" }),
-                    loading: isSyncing,
-                    disabled: isSyncing
+                    onAction: () => {
+                        setIsStartingSync(true);
+                        submit({ action: "start_sync" }, { method: "post", preventScrollReset: true, replace: true });
+                    },
+                    loading: isSyncing || isStartingSync,
+                    disabled: isSyncing || isStartingSync
                 },
                 { content: 'Back to Analytics', onAction: () => navigate('/app') }
             ]}
