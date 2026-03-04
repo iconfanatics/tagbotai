@@ -55,7 +55,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-    const { session } = await authenticate.admin(request);
+    const { admin, session } = await authenticate.admin(request);
     const formData = await request.formData();
 
     const actionType = formData.get("action");
@@ -66,25 +66,68 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         return { success: true };
     }
 
-    if (actionType === "sync") {
+    if (actionType === "start_sync") {
         const store = await getCachedStore(session.shop);
         if (store) {
-            // Eagerly set syncing to true so the UI updates instantly
+            const dbCount = await db.customer.count({ where: { storeId: store.id } });
             await db.store.update({
                 where: { id: store.id },
                 data: {
                     isSyncing: true,
-                    syncTarget: 1, // temporary target so progress bar renders
+                    syncTarget: Math.max(1, dbCount),
                     syncCompleted: 0,
-                    syncMessage: "Fetching customer records from Shopify…"
+                    syncMessage: "Evaluating customers against active rules…"
                 }
             });
+        }
+        return { success: true };
+    }
 
-            await enqueueSyncJob({
-                shop: session.shop,
-                storeId: store.id,
-                syncType: "RULES",
-                syncMessage: "Historically evaluating existing customers against rules…"
+    if (actionType === "sync_batch") {
+        const cursor = formData.get("cursor") as string;
+        const store = await getCachedStore(session.shop);
+        if (!store) return { success: false };
+
+        const afterClause = cursor ? `, after: "${cursor}"` : "";
+        const res = await admin.graphql(`
+            #graphql
+            query fetchCustomers {
+                customers(first: 5${afterClause}) {
+                    edges { cursor node { id email firstName lastName amountSpent { amount } numberOfOrders tags } }
+                    pageInfo { hasNextPage }
+                }
+            }
+        `);
+
+        const data = await res.json();
+        const edges = data.data?.customers?.edges || [];
+        const pageInfo = data.data?.customers?.pageInfo;
+
+        const activeRules = await db.rule.findMany({ where: { storeId: store.id, isActive: true } });
+
+        // Dynamically import processOneCustomer to avoid circular dependency
+        const { processOneCustomer } = await import("../services/queue.server");
+
+        await Promise.all(edges.map((edge: any) =>
+            processOneCustomer(admin, store.id, edge, activeRules, { shop: session.shop, storeId: store.id } as any)
+                .catch(err => console.error("[SYNC_BATCH] Error:", err))
+        ));
+
+        await db.store.update({
+            where: { id: store.id },
+            data: { syncCompleted: { increment: edges.length } }
+        });
+
+        const nextCursor = edges.length > 0 ? edges[edges.length - 1].cursor : null;
+        return { success: true, cursor: nextCursor, hasNextPage: pageInfo?.hasNextPage ?? false };
+    }
+
+    if (actionType === "end_sync") {
+        const store = await getCachedStore(session.shop);
+        if (store) {
+            await db.store.update({
+                where: { id: store.id },
+                data: { isSyncing: false, syncCompleted: store.syncTarget, syncMessage: "Sync Complete!" }
             });
         }
         return { success: true };
@@ -100,16 +143,44 @@ export default function RulesManagement() {
     const submit = useSubmit();
     const { revalidate } = useRevalidator();
 
-    // Auto-refresh the page every 3 seconds while syncing to animate progress bar
+    // Client-side batch processor loop
     useEffect(() => {
-        let interval: NodeJS.Timeout;
+        let isCancelled = false;
+
+        const runBatch = async (cursor: string) => {
+            const formData = new FormData();
+            formData.append("action", "sync_batch");
+            formData.append("cursor", cursor);
+
+            try {
+                // Use native fetch to bypass form submission state management
+                const res = await fetch("?index", { method: "POST", body: formData });
+                const data = await res.json();
+
+                if (isCancelled) return;
+
+                if (data.success) {
+                    // Update loader values natively so Progress Bar moves
+                    revalidate();
+
+                    if (data.hasNextPage) {
+                        runBatch(data.cursor);
+                    } else {
+                        submit({ action: "end_sync" }, { method: "post" });
+                    }
+                }
+            } catch (err) {
+                console.error("Batch failed, retrying in 2s...", err);
+                setTimeout(() => { if (!isCancelled) runBatch(cursor); }, 2000);
+            }
+        };
+
         if (isSyncing) {
-            interval = setInterval(() => {
-                revalidate();
-            }, 3000);
+            runBatch("");
         }
-        return () => clearInterval(interval);
-    }, [isSyncing, revalidate]);
+
+        return () => { isCancelled = true; };
+    }, [isSyncing, revalidate, submit]);
 
     const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
 
@@ -255,7 +326,7 @@ export default function RulesManagement() {
                 {
                     content: isSyncing ? 'Syncing...' : 'Sync Historical Data',
                     icon: RefreshIcon,
-                    onAction: () => submit({ action: "sync" }, { method: "post" }),
+                    onAction: () => submit({ action: "start_sync" }, { method: "post" }),
                     loading: isSyncing,
                     disabled: isSyncing
                 },
