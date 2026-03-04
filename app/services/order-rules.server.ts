@@ -21,6 +21,7 @@
  */
 
 import type { Rule } from "@prisma/client";
+import { evaluateCondition as evalCustomerCondition } from "./rule.server";
 
 export type OrderCondition = {
     field: string;
@@ -125,8 +126,6 @@ export function evaluateOrderRules(
     const results: { tag: string; reason: string }[] = [];
     const orderData = extractOrderData(order);
 
-    // Lazy load the customer evaluator to avoid circular dep issues
-    const { evaluateCondition: evalCustomerCondition } = require("./rule.server") as any;
 
     for (const rule of rules) {
         let conditions: any[];

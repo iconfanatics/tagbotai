@@ -1,67 +1,102 @@
 import { evaluateOrderRules } from './app/services/order-rules.server';
 
-// 1. This is the raw data Shopify sends us when an order is paid
-const mockShopifyWebhookPayload = {
-    id: 987654321,
-    subtotal_price: "85.00",
+// ─── Mock: A plain COD order (no Facebook, no social media) ──────────────────
+const codOrder = {
+    id: 111111111,
+    subtotal_price: "120.00",
     total_discounts: "0.00",
-
-    // 👇 THIS IS HOW WE DETECT FACEBOOK TRAFFIC
-    referring_site: "https://l.facebook.com/",
+    referring_site: "",         // No traffic source
     source_name: "web",
-
-    // 👇 THIS IS HOW WE DETECT CASH ON DELIVERY
-    payment_gateway: "Cash on Delivery (COD)",
-
-    shipping_address: {
-        city: "Dhaka",
-        country_code: "BD"
-    },
-    line_items: [
-        { quantity: 1, properties: [] }
-    ]
+    payment_gateway: "",
+    payment_gateway_names: ["Cash on Delivery (COD)"],  // <- Shopify's real field
+    shipping_address: { city: "Dhaka", country_code: "BD" },
+    line_items: [{ quantity: 2, properties: [] }],
+    discount_codes: []
 };
 
-async function runDemo() {
-    console.log("==================================================");
-    console.log("   TAGBOT AI: FACEBOOK & COD DETECTOR DEMO");
-    console.log("==================================================\n");
+// ─── Mock: A Facebook COD order ───────────────────────────────────────────────
+const facebookCodOrder = {
+    id: 222222222,
+    subtotal_price: "250.00",
+    total_discounts: "0.00",
+    referring_site: "https://l.facebook.com/redirect?link=mystore.com",
+    source_name: "web",
+    payment_gateway: "",
+    payment_gateway_names: ["Cash on Delivery (COD)"],
+    shipping_address: { city: "Dhaka", country_code: "BD" },
+    line_items: [{ quantity: 1, properties: [] }],
+    discount_codes: []
+};
 
-    console.log("📦 1. Fake Shopify Order Received:");
-    console.log(JSON.stringify({
-        Traffic_Source: mockShopifyWebhookPayload.referring_site,
-        Payment_Method: mockShopifyWebhookPayload.payment_gateway,
-        Total_Value: "$" + mockShopifyWebhookPayload.subtotal_price
-    }, null, 2));
+// ─── Mock: A Stripe/card payment, Facebook order ──────────────────────────────
+const facebookStripeOrder = {
+    id: 333333333,
+    subtotal_price: "75.00",
+    total_discounts: "0.00",
+    referring_site: "https://l.facebook.com/redirect?link=mystore.com",
+    source_name: "web",
+    payment_gateway: "stripe",
+    payment_gateway_names: ["Stripe"],
+    shipping_address: { city: "New York", country_code: "US" },
+    line_items: [{ quantity: 1, properties: [] }],
+    discount_codes: []
+};
 
-    // 2. This is what the AI generates when you type: "Tag Facebook COD orders"
-    const mySmartRule = {
-        id: "r_demo",
-        name: "Facebook COD Buyers",
-        targetTag: "Social-FB-COD",
+// ─── Rules we are testing against ─────────────────────────────────────────────
+const rules = [
+    {
+        id: "r1", name: "COD Customers", targetTag: "COD-Customer", matchType: "ALL",
+        conditions: JSON.stringify([
+            { ruleCategory: "order", field: "payment_method", operator: "contains", value: "cash_on_delivery" }
+        ])
+    },
+    {
+        id: "r2", name: "Facebook Campaign Orders", targetTag: "Social-FB", matchType: "ALL",
+        conditions: JSON.stringify([
+            { ruleCategory: "order", field: "order_source", operator: "contains", value: "facebook" }
+        ])
+    },
+    {
+        id: "r3", name: "Facebook Cash On Delivery", targetTag: "Social-FB-COD", matchType: "ALL",
         conditions: JSON.stringify([
             { ruleCategory: "order", field: "order_source", operator: "contains", value: "facebook" },
-            { ruleCategory: "order", field: "payment_method", operator: "contains", value: "cash on delivery" }
+            { ruleCategory: "order", field: "payment_method", operator: "contains", value: "cash_on_delivery" }
         ])
-    } as any;
+    },
+    {
+        id: "r4", name: "High Value FB Orders", targetTag: "FB-Whale", matchType: "ALL",
+        conditions: JSON.stringify([
+            { ruleCategory: "order", field: "order_source", operator: "contains", value: "facebook" },
+            { ruleCategory: "order", field: "order_subtotal", operator: "greaterThan", value: "200" }
+        ])
+    },
+] as any[];
 
-    console.log("\n⚙️ 2. Evaluating against AI Smart Rule:");
-    console.log(`   Rule Name: "${mySmartRule.name}"`);
-    console.log(`   Applying Tag: [${mySmartRule.targetTag}]`);
+const mockCustomer = {
+    id: "cust1", storeId: "store1", totalSpent: 500, orderCount: 3,
+    lastOrderDate: new Date(), email: "test@example.com",
+    firstName: "Test", lastName: "User", tags: null,
+    createdAt: new Date(), updatedAt: new Date()
+};
 
-    // 3. Run our matching engine
-    const mockCustomer = { id: "c1", storeId: "s1", totalSpent: 85, orderCount: 1, lastOrderDate: new Date(), email: null, firstName: null, lastName: null, tags: null, createdAt: new Date(), updatedAt: new Date() };
-    const orderEval = evaluateOrderRules(mockShopifyWebhookPayload, mockCustomer, [mySmartRule], []);
-
-    console.log("\n📊 3. Result:");
-    if (orderEval.length > 0) {
-        console.log(`   ✅ MATCH SUCCESSFUL!`);
-        console.log(`   🏷️ Tag To Apply: [${orderEval[0].tag}]`);
-        console.log(`   📝 Engine Reason: ${orderEval[0].reason}`);
+function printResults(label: string, order: any) {
+    const tags = evaluateOrderRules(order, mockCustomer, rules, []);
+    console.log(`\n📦 ${label}`);
+    console.log(`   Payment: ${order.payment_gateway_names?.join(", ") || order.payment_gateway || "none"}`);
+    console.log(`   Traffic: ${order.referring_site || "(direct)"}`);
+    if (tags.length === 0) {
+        console.log("   ❌ No tags matched.");
     } else {
-        console.log("   ❌ No match found.");
+        tags.forEach(t => console.log(`   ✅ Tag: [${t.tag}] — ${t.reason}`));
     }
-    console.log("\n==================================================");
 }
 
-runDemo().catch(console.error);
+console.log("=".repeat(60));
+console.log("  TAGBOT AI — COD Order Rule Evaluation Test");
+console.log("=".repeat(60));
+
+printResults("Scenario 1: Plain COD Order (no social media)", codOrder);
+printResults("Scenario 2: Facebook + COD Order", facebookCodOrder);
+printResults("Scenario 3: Facebook + Stripe (no COD)", facebookStripeOrder);
+
+console.log("\n" + "=".repeat(60));

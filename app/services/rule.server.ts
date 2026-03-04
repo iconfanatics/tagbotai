@@ -7,7 +7,7 @@ export type Condition = {
 };
 
 // Evaluate a single condition against customer data
-function evaluateCondition(customer: Customer, condition: Condition): boolean {
+export function evaluateCondition(customer: Customer, condition: Condition): boolean {
     const { field, operator, value } = condition;
     const customerValue = customer[field];
 
