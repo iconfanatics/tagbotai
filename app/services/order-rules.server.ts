@@ -57,11 +57,23 @@ function extractOrderData(order: any): Record<string, any> {
     // Traffic source: try referring_site first, fall back to source_name
     const referringSite = (order.referring_site || "").toLowerCase();
     const sourceName = (order.source_name || "").toLowerCase();
-    const orderSource = referringSite || sourceName;
+    const orderSource = referringSite ? referringSite : sourceName;
+
+    // Payment method: Shopify often lists these in an array called `payment_gateway_names`
+    let paymentMethodStr = "";
+    if (Array.isArray(order.payment_gateway_names) && order.payment_gateway_names.length > 0) {
+        paymentMethodStr = order.payment_gateway_names.join(", ").toLowerCase();
+    } else {
+        paymentMethodStr = (order.payment_gateway || order.gateway || "").toLowerCase();
+    }
+    // Normalize "cash on delivery (cod)" -> "cash_on_delivery" to patch user templates
+    if (paymentMethodStr.includes("cash on delivery") || paymentMethodStr.includes("cod")) {
+        paymentMethodStr += " cash_on_delivery";
+    }
 
     return {
         order_source: orderSource,
-        payment_method: (order.payment_gateway || "").toLowerCase(),
+        payment_method: paymentMethodStr,
         shipping_city: (order.shipping_address?.city || "").toLowerCase(),
         shipping_country: (order.shipping_address?.country_code || "").toLowerCase(),
         order_item_count: itemCount,
@@ -106,14 +118,17 @@ function evaluateOrderCondition(orderData: Record<string, any>, condition: Order
  */
 export function evaluateOrderRules(
     order: any,
+    customer: any,
     rules: Rule[],
     existingCustomerTags: string[]
 ): { tag: string; reason: string }[] {
     const results: { tag: string; reason: string }[] = [];
     const orderData = extractOrderData(order);
 
+    // Lazy load the customer evaluator to avoid circular dep issues
+    const { evaluateCondition: evalCustomerCondition } = require("./rule.server") as any;
+
     for (const rule of rules) {
-        // Only process rules that have order conditions
         let conditions: any[];
         try {
             conditions = JSON.parse(rule.conditions);
@@ -121,26 +136,39 @@ export function evaluateOrderRules(
             continue;
         }
 
-        // A rule is an "order rule" if ALL its conditions have ruleCategory = "order"
-        const orderConditions: OrderCondition[] = conditions.filter(
-            (c: any) => c.ruleCategory === "order"
-        );
-        if (orderConditions.length === 0) continue;
+        // A rule requires order evaluation if it has AT LEAST ONE order condition
+        const orderConditions = conditions.filter((c: any) => c.ruleCategory === "order");
+        if (orderConditions.length === 0) continue; // Pure metric rules are handled purely by rule.server.ts
+
+        // It might also have metric conditions (mixed rule)
+        const metricConditions = conditions.filter((c: any) => c.ruleCategory === "metric");
 
         // Skip if customer already has this tag
         if (existingCustomerTags.includes(rule.targetTag)) continue;
 
-        // AND logic vs OR logic
+        // Evaluate all conditions across both scopes
+        const evaluateGenericCondition = (c: any) => {
+            if (c.ruleCategory === "order") {
+                return evaluateOrderCondition(orderData, c);
+            } else {
+                return evalCustomerCondition(customer, c);
+            }
+        };
+
         const isMatch = rule.matchType === "ANY"
-            ? orderConditions.some(c => evaluateOrderCondition(orderData, c))
-            : orderConditions.every(c => evaluateOrderCondition(orderData, c));
+            ? conditions.some(c => evaluateGenericCondition(c))
+            : conditions.every(c => evaluateGenericCondition(c));
 
         if (isMatch) {
-            const reasons = orderConditions.map(c => `order.${c.field} ${c.operator} "${c.value}"`);
+            const reasons = conditions.map((c: any) =>
+                c.ruleCategory === "order"
+                    ? `order.${c.field} ${c.operator} "${c.value}"`
+                    : `customer.${c.field} ${c.operator} "${c.value}"`
+            );
             const joinWord = rule.matchType === "ANY" ? " OR " : " AND ";
             results.push({
                 tag: rule.targetTag,
-                reason: `Order rule "${rule.name}" matched (${reasons.join(joinWord)})`
+                reason: `Rule "${rule.name}" matched (${reasons.join(joinWord)})`
             });
         }
     }

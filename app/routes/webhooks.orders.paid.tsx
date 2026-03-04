@@ -169,7 +169,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         // 4. Evaluate Order-Based Rules (source, payment, city, quantity, discounts, pre-order)
         try {
             const existingPlusNewTags = [...existingTags, ...addTagNames];
-            const orderTagResults = evaluateOrderRules(order, activeRules, existingPlusNewTags);
+            const orderTagResults = evaluateOrderRules(order, customer, activeRules, existingPlusNewTags);
             for (const item of orderTagResults) {
                 if (!addTagNames.includes(item.tag)) {
                     addTagNames.push(item.tag);
