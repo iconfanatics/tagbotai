@@ -2,17 +2,41 @@
 
 client_id = "5ddae3e264ced8b991921ff5192adf2c"
 name = "TagBot AI (Staging)"
-application_url = "https://example.com"
+application_url = "https://tagbotai-git-staging-iconfanatics-projects.vercel.app"
 embedded = true
 
+[build]
+automatically_update_urls_on_dev = true
+
 [webhooks]
-api_version = "2026-01"
+api_version = "2026-04"
+
+  [[webhooks.subscriptions]]
+  topics = [ "app/uninstalled" ]
+  uri = "/webhooks/app/uninstalled"
+
+  [[webhooks.subscriptions]]
+  topics = [ "app/scopes_update" ]
+  uri = "/webhooks/app/scopes_update"
+
+  [[webhooks.subscriptions]]
+  topics = [ "orders/paid" ]
+  uri = "/webhooks/orders/paid"
+
+  [[webhooks.subscriptions]]
+  topics = [ "orders/create" ]
+  uri = "/webhooks/orders/create"
+
+  [[webhooks.subscriptions]]
+  topics = [ "customers/create" ]
+  uri = "/webhooks/customers/create"
 
 [access_scopes]
-# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = ""
-optional_scopes = [ ]
-use_legacy_install_flow = false
+scopes = "read_customers,write_customers,read_orders,read_products,write_price_rules,write_discounts"
 
 [auth]
-redirect_urls = [ ]
+redirect_urls = [
+  "https://tagbotai-git-staging-iconfanatics-projects.vercel.app/auth/callback",
+  "https://tagbotai-git-staging-iconfanatics-projects.vercel.app/auth/shopify/callback",
+  "https://tagbotai-git-staging-iconfanatics-projects.vercel.app/api/auth"
+]
