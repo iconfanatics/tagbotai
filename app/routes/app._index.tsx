@@ -118,7 +118,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         Promise.all([
           db.activityLog.count({ where: { storeId: store.id, action: "TAG_ADDED" } }),
           db.customer.count({ where: { storeId: store.id, tags: { contains: "VIP" } } }),
-          db.customer.count({ where: { storeId: store.id, lastOrderDate: { lt: thirtyDaysAgo } } }),
+          db.customer.count({ where: { storeId: store.id, tags: { contains: "At-Risk" } } }),
           db.customer.count({ where: { storeId: store.id, orderCount: { gt: 1 }, NOT: { tags: { contains: "VIP" } } } }),
           db.customer.count({ where: { storeId: store.id, orderCount: { lte: 1 }, NOT: { tags: { contains: "VIP" } } } }),
           db.customer.count({ where: { storeId: store.id } }),
