@@ -107,20 +107,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         return { success: true, message: "Pricing updated! Merchants will see the new prices immediately." };
     }
 
-    if (intent === "generate_test_data") {
-        const storeShop = formData.get("shop") as string;
-        if (!storeShop) return { success: false, message: "No shop provided for test data generation." };
-
-        try {
-            const { generateTestData } = await import("../services/test-data.server");
-            const count = await generateTestData(storeShop);
-            return { success: true, message: `Successfully generated ${count} test customers and orders!` };
-        } catch (e: any) {
-            console.error("Test data generation failed", e);
-            return { success: false, message: "Generation failed: " + e.message };
-        }
-    }
-
     return { success: false };
 };
 
@@ -144,12 +130,6 @@ export default function SuperAdminIndex() {
     const handleSavePricing = () => {
         submit({ intent: "update_pricing", yearlyDiscount, growthMonthly, proMonthly, eliteMonthly }, { method: "post" });
     };
-
-    const MagicIcon = () => (
-        <svg viewBox="0 0 20 20" width="20" height="20" fill="currentColor">
-            <path d="M10.824 1.579a.75.75 0 0 0-1.258 0A12.515 12.515 0 0 1 5.378 5.378a12.515 12.515 0 0 1-3.799 4.188.75.75 0 0 0 0 1.259 12.515 12.515 0 0 1 3.799 4.187 12.515 12.515 0 0 1 4.188 3.799.75.75 0 0 0 1.258 0 12.515 12.515 0 0 1 4.188-3.799 12.515 12.515 0 0 1 3.799-4.187.75.75 0 0 0 0-1.259 12.515 12.515 0 0 1-3.799-4.188 12.515 12.515 0 0 1-4.188-3.799ZM6.335 10c1.071-.852 1.96-1.741 2.812-2.812.852 1.07 1.741 1.96 2.812 2.812-1.07.852-1.96 1.741-2.812 2.812-.852-1.07-1.741-1.96-2.812-2.812Z" />
-        </svg>
-    );
 
     return (
         <Page title="Super Admin Dashboard" subtitle="Manage TagBot AI Installations">
@@ -301,7 +281,6 @@ export default function SuperAdminIndex() {
                                     <Button size="micro" onClick={() => handleUpgrade(store.id, "upgrade_pro")} disabled={store.planName === "Pro Plan" || isUpdating}>Set Pro</Button>
                                     <Button size="micro" tone="critical" onClick={() => handleUpgrade(store.id, "upgrade_elite")} disabled={store.planName === "Elite Plan" || isUpdating}>Set Elite</Button>
                                     <Button size="micro" variant="tertiary" onClick={() => handleUpgrade(store.id, "downgrade_free")} disabled={store.planName === "Free" || isUpdating}>Reset Free</Button>
-                                    <Button size="micro" icon={MagicIcon} onClick={() => submit({ intent: "generate_test_data", shop: store.shop }, { method: "post" })} disabled={isUpdating}>Generate 10 Test Customers</Button>
                                 </InlineStack>
                             ])}
                             hasZebraStripingOnData
