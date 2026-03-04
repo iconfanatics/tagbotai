@@ -189,7 +189,7 @@ const TEMPLATES: Template[] = [
         category: "customer", icon: ClockIcon,
         description: "No purchase in last 90 days",
         longDescription: "When customer's last order was more than 90 days ago, automatically add tag At-Risk to customer.",
-        ruleType: "metric", field: "lastOrderDate", operator: "isBefore", value: "", tag: "At-Risk",
+        ruleType: "metric", field: "lastOrderDate", operator: "isBefore", value: "__90_DAYS_AGO__", tag: "At-Risk",
     },
     // Order — Traffic Source
     {
@@ -263,7 +263,7 @@ const TEMPLATES: Template[] = [
         category: "order", icon: CashDollarIcon,
         description: "Spent over $500 AND came from Facebook",
         longDescription: "When orders are created where traffic source is Facebook and total spent is greater than $500, apply High-Value-FB.",
-        ruleType: "metric", field: "totalSpent", operator: "greaterThan", value: "500", tag: "High-Value-FB",
+        ruleType: "mixed", field: "totalSpent", operator: "greaterThan", value: "500", orderField: "order_source", orderOperator: "contains", orderValue: "facebook", tag: "High-Value-FB",
     },
     {
         key: "tiktok_cod", label: "TikTok COD Buyers",
@@ -386,8 +386,20 @@ export default function NewRule() {
         setTargetTag(t.tag);
         setMatchType("ALL");
 
-        let newConditions = [];
-        if (t.key === "high_volume_social") {
+        // Helper: compute a date string N days in the past
+        const daysAgo = (n: number) => {
+            const d = new Date();
+            d.setDate(d.getDate() - n);
+            return d.toISOString().split("T")[0]; // YYYY-MM-DD
+        };
+
+        let newConditions: any[] = [];
+
+        if (t.key === "at_risk") {
+            // Dynamically calculate 90 days ago so the condition always fires correctly
+            newConditions = [{ ruleCategory: "metric", field: "lastOrderDate", operator: "isBefore", value: daysAgo(90) }];
+        } else if (t.key === "high_volume_social") {
+            // Mixed rule: metric (totalSpent) + order (traffic source)
             newConditions = [
                 { ruleCategory: "metric", field: "totalSpent", operator: "greaterThan", value: "500" },
                 { ruleCategory: "order", field: "order_source", operator: "contains", value: "facebook" }
@@ -398,7 +410,9 @@ export default function NewRule() {
                 { ruleCategory: "order", field: "payment_method", operator: "contains", value: "cash_on_delivery" }
             ];
         } else if (t.ruleType === "metric") {
-            newConditions = [{ ruleCategory: "metric", field: t.field || "totalSpent", operator: t.operator || "greaterThan", value: t.value || "" }];
+            // Check if value is a sentinel placeholder
+            const val = t.value === "__90_DAYS_AGO__" ? daysAgo(90) : (t.value || "");
+            newConditions = [{ ruleCategory: "metric", field: t.field || "totalSpent", operator: t.operator || "greaterThan", value: val }];
         } else {
             newConditions = [{ ruleCategory: "order", field: t.orderField || "order_source", operator: t.orderOperator || "contains", value: t.orderValue || "" }];
         }

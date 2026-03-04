@@ -2,12 +2,11 @@
 
 client_id = "daf8769e4809a92375676ac29c2d54d6"
 name = "TagBot AI: Smart Segmentation"
-application_url = "https://example.com"
+application_url = "https://tagbotai.vercel.app"
 embedded = true
 
 [build]
 automatically_update_urls_on_dev = true
-include_config_on_deploy = true
 
 [webhooks]
 api_version = "2026-04"
@@ -34,9 +33,9 @@ api_version = "2026-04"
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "read_customers,write_customers,read_orders"
+scopes = "read_customers,write_customers,read_orders,read_products,write_price_rules,write_discounts"
 
 [auth]
-redirect_urls = [ "https://example.com/api/auth" ]
+redirect_urls = [ "https://tagbotai.vercel.app/auth/callback", "https://tagbotai.vercel.app/auth/shopify/callback", "https://tagbotai.vercel.app/api/auth" ]
 
 

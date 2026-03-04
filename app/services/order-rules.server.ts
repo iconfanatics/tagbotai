@@ -55,20 +55,35 @@ function extractOrderData(order: any): Record<string, any> {
     const discountCodeUsed = discountCodes.length > 0;
     const discountCodeValue = discountCodes.map(d => d.code).join(",").toLowerCase();
 
-    // Traffic source: try referring_site first, fall back to source_name
+    // Traffic source: build a combined string so merchants can match by any signal.
+    //   1. referring_site  = full URL the customer came from (e.g. "https://www.facebook.com/...")
+    //   2. landing_site    = URL of the first page visited — often contains UTM params
+    //                        (e.g. "?utm_source=facebook&utm_medium=cpc")
+    //   3. source_name     = Shopify's own channel label ("web", "pos", "shopify_draft_order", etc.)
+    // We join all three so a "contains facebook" check will fire if ANY of them mentions facebook.
     const referringSite = (order.referring_site || "").toLowerCase();
+    const landingSite = (order.landing_site || "").toLowerCase();
     const sourceName = (order.source_name || "").toLowerCase();
-    const orderSource = referringSite ? referringSite : sourceName;
+    // Combine into one searchable string separated by spaces
+    const orderSource = [referringSite, landingSite, sourceName].filter(Boolean).join(" ");
 
-    // Payment method: Shopify often lists these in an array called `payment_gateway_names`
+    // Payment method: Shopify may expose the gateway in multiple places.
+    // `payment_gateway_names` is the most reliable; fall back to `payment_gateway` or `gateway`.
     let paymentMethodStr = "";
     if (Array.isArray(order.payment_gateway_names) && order.payment_gateway_names.length > 0) {
         paymentMethodStr = order.payment_gateway_names.join(", ").toLowerCase();
     } else {
         paymentMethodStr = (order.payment_gateway || order.gateway || "").toLowerCase();
     }
-    // Normalize "cash on delivery (cod)" -> "cash_on_delivery" to patch user templates
-    if (paymentMethodStr.includes("cash on delivery") || paymentMethodStr.includes("cod")) {
+    // Normalize all COD variants → always include "cash_on_delivery" so template matching works.
+    // Real Shopify gateways: "Cash on Delivery (COD)", "cash on delivery", "cod", "cash-on-delivery"
+    if (
+        paymentMethodStr.includes("cash on delivery") ||
+        paymentMethodStr.includes("cash_on_delivery") ||
+        paymentMethodStr.includes("cash-on-delivery") ||
+        paymentMethodStr === "cod" ||
+        paymentMethodStr.includes("(cod)")
+    ) {
         paymentMethodStr += " cash_on_delivery";
     }
 
