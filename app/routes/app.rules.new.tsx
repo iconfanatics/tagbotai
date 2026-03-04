@@ -416,12 +416,8 @@ export default function NewRule() {
         { label: "Number of Orders", value: "orderCount" },
         { label: "Last Order Date", value: "lastOrderDate" },
     ];
-    const metricOperatorOptions = field === "lastOrderDate"
-        ? [{ label: "Before", value: "isBefore" }, { label: "After", value: "isAfter" }]
-        : [{ label: "Greater than (>)", value: "greaterThan" }, { label: "Less than (<)", value: "lessThan" }, { label: "Equals (=)", value: "equals" }];
 
     const orderFieldOptions = ORDER_FIELDS.map(f => ({ label: f.label, value: f.value }));
-    const orderOperatorOptions = getOps(orderField);
 
     return (
         <>
@@ -466,7 +462,7 @@ export default function NewRule() {
                                     <div key={index} style={{ padding: "12px", background: "var(--p-color-bg-surface-secondary)", borderRadius: "8px", position: "relative" }}>
                                         {conditions.length > 1 && (
                                             <div style={{ position: "absolute", top: "12px", right: "12px", zIndex: 2 }}>
-                                                <Button size="icon" variant="tertiary" tone="critical" onClick={() => removeCondition(index)} icon={DeleteIcon} />
+                                                <Button size="micro" variant="tertiary" tone="critical" onClick={() => removeCondition(index)} icon={DeleteIcon} />
                                             </div>
                                         )}
                                         <FormLayout>
