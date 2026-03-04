@@ -1,14 +1,12 @@
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
-import { useLoaderData, useNavigate, useSubmit } from "react-router";
+import { useLoaderData, useNavigate, useSubmit, useActionData, useNavigation } from "react-router";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { getCachedStore } from "../services/cache.server";
-import { Page, Layout, Card, Text, BlockStack, IndexTable, Badge, Button, EmptyState, InlineStack, Icon, Box, Tooltip, Modal, ProgressBar } from "@shopify/polaris";
+import { Page, Layout, Card, Text, BlockStack, IndexTable, Badge, Button, EmptyState, InlineStack, Tooltip, Modal, Box } from "@shopify/polaris";
 import { DeleteIcon, AutomationIcon, ExportIcon, RefreshIcon } from "@shopify/polaris-icons";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { useState, useEffect } from "react";
-import { useRevalidator } from "react-router";
-import { fetchAllCustomers } from "../services/shopify-helpers.server";
 import { enqueueSyncJob } from "../services/queue.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -46,11 +44,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
     return {
         rules: rulesWithMetrics,
-        currentPlanName: store.planName,
-        isSyncing: store.isSyncing,
-        syncCompleted: store.syncCompleted,
-        syncTarget: store.syncTarget,
-        syncMessage: store.syncMessage
+        currentPlanName: store.planName
     };
 };
 
@@ -66,82 +60,21 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         return { success: true };
     }
 
-    if (actionType === "start_sync") {
+    if (actionType === "sync") {
         const store = await getCachedStore(session.shop);
         if (store) {
-            const dbCount = await db.customer.count({ where: { storeId: store.id } });
+            await enqueueSyncJob({
+                shop: session.shop,
+                storeId: store.id,
+                syncType: "RULES",
+            });
+            // Also reset DB syncing flags locally so they don't block old UI
             await db.store.update({
                 where: { id: store.id },
-                data: {
-                    isSyncing: true,
-                    syncTarget: Math.max(1, dbCount),
-                    syncCompleted: 0,
-                    syncMessage: "Evaluating customers against active rules…"
-                }
+                data: { isSyncing: false, syncMessage: null }
             });
         }
-        return { success: true };
-    }
-
-    if (actionType === "sync_batch") {
-        try {
-            const cursor = formData.get("cursor") as string;
-            const store = await getCachedStore(session.shop);
-            if (!store) return { success: false, error: "Store not found" };
-
-            const afterClause = cursor ? `, after: "${cursor}"` : "";
-            const res = await admin.graphql(`
-                #graphql
-                query fetchCustomers {
-                    customers(first: 5${afterClause}) {
-                        edges { cursor node { id email firstName lastName amountSpent { amount } numberOfOrders tags } }
-                        pageInfo { hasNextPage }
-                    }
-                }
-            `);
-
-            const data = await res.json();
-
-            if ((data as any).errors) {
-                console.error("[SYNC_BATCH] GraphQL Error:", (data as any).errors);
-                return { success: false, error: "GraphQL Error" };
-            }
-
-            const edges = data.data?.customers?.edges || [];
-            const pageInfo = data.data?.customers?.pageInfo;
-
-            const activeRules = await db.rule.findMany({ where: { storeId: store.id, isActive: true } });
-
-            // Dynamically import processOneCustomer to avoid circular dependency
-            const { processOneCustomer } = await import("../services/queue.server");
-
-            await Promise.all(edges.map((edge: any) =>
-                processOneCustomer(admin, store.id, edge, activeRules, { shop: session.shop, storeId: store.id } as any)
-                    .catch(err => console.error("[SYNC_BATCH] Error processing customer:", err))
-            ));
-
-            await db.store.update({
-                where: { id: store.id },
-                data: { syncCompleted: { increment: edges.length } }
-            });
-
-            const nextCursor = edges.length > 0 ? edges[edges.length - 1].cursor : null;
-            return { success: true, cursor: nextCursor, hasNextPage: pageInfo?.hasNextPage ?? false };
-        } catch (error: any) {
-            console.error("[SYNC_BATCH] Critical Error:", error);
-            return { success: false, error: error.message };
-        }
-    }
-
-    if (actionType === "end_sync") {
-        const store = await getCachedStore(session.shop);
-        if (store) {
-            await db.store.update({
-                where: { id: store.id },
-                data: { isSyncing: false, syncCompleted: store.syncTarget, syncMessage: "Sync Complete!" }
-            });
-        }
-        return { success: true };
+        return { success: true, message: "Started evaluating historical data. This runs in the background and may take a few minutes." };
     }
 
     return null;
@@ -149,62 +82,19 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
 export default function RulesManagement() {
     const shopify = useAppBridge();
-    const { rules, currentPlanName, isSyncing, syncCompleted, syncTarget, syncMessage } = useLoaderData<typeof loader>();
+    const { rules, currentPlanName } = useLoaderData<typeof loader>();
+    const actionData = useActionData<typeof action>();
     const navigate = useNavigate();
     const submit = useSubmit();
-    const { revalidate } = useRevalidator();
-    const [isStartingSync, setIsStartingSync] = useState(false);
+    const navigation = useNavigation();
 
-    // Turn off local loading state once the server acknowledges we are syncing
+    const isSubmitting = navigation.state === "submitting" && navigation.formData?.get("action") === "sync";
+
     useEffect(() => {
-        if (isSyncing) {
-            setIsStartingSync(false);
+        if (actionData?.message) {
+            shopify.toast.show(actionData.message, { duration: 5000 });
         }
-    }, [isSyncing]);
-
-    // Client-side batch processor loop
-    useEffect(() => {
-        let isCancelled = false;
-
-        const runBatch = async (cursor: string) => {
-            const formData = new FormData();
-            formData.append("action", "sync_batch");
-            formData.append("cursor", cursor);
-
-            try {
-                // Use native fetch to bypass form submission state management
-                const res = await fetch("?index", { method: "POST", body: formData });
-                const data = await res.json();
-
-                if (isCancelled) return;
-
-                if (data.success) {
-                    // Force the UI to repaint with the new progress
-                    revalidate();
-
-                    if (data.hasNextPage) {
-                        runBatch(data.cursor);
-                    } else {
-                        // All done! Tell the server to clean up.
-                        setIsStartingSync(false);
-                        submit({ action: "end_sync" }, { method: "post", preventScrollReset: true, replace: true });
-                    }
-                } else {
-                    console.error("Batch returned unsuccessful, retrying in 2s...");
-                    setTimeout(() => { if (!isCancelled) runBatch(cursor); }, 2000);
-                }
-            } catch (err) {
-                console.error("Batch failed, retrying in 2s...", err);
-                setTimeout(() => { if (!isCancelled) runBatch(cursor); }, 2000);
-            }
-        };
-
-        if (isSyncing) {
-            runBatch("");
-        }
-
-        return () => { isCancelled = true; };
-    }, [isSyncing, revalidate, submit]);
+    }, [actionData, shopify]);
 
     const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
 
@@ -348,14 +238,11 @@ export default function RulesManagement() {
             primaryAction={{ content: 'Add New Automation', icon: AutomationIcon, onAction: () => navigate('/app/rules/new') }}
             secondaryActions={[
                 {
-                    content: (isSyncing || isStartingSync) ? 'Syncing...' : 'Sync Historical Data',
+                    content: 'Sync Historical Data',
                     icon: RefreshIcon,
-                    onAction: () => {
-                        setIsStartingSync(true);
-                        submit({ action: "start_sync" }, { method: "post", preventScrollReset: true, replace: true });
-                    },
-                    loading: isSyncing || isStartingSync,
-                    disabled: isSyncing || isStartingSync
+                    onAction: () => submit({ action: "sync" }, { method: "post" }),
+                    loading: isSubmitting,
+                    disabled: isSubmitting
                 },
                 { content: 'Back to Analytics', onAction: () => navigate('/app') }
             ]}
@@ -388,27 +275,6 @@ export default function RulesManagement() {
                 </Modal>
 
                 <Layout.Section>
-                    {isSyncing && (
-                        <Box paddingBlockEnd="400">
-                            <Card padding="400">
-                                <BlockStack gap="200">
-                                    <InlineStack align="space-between">
-                                        <Text variant="headingSm" as="h3">
-                                            {syncMessage || "Syncing historical data..."}
-                                        </Text>
-                                        <Text variant="bodySm" as="span" tone="subdued">
-                                            {syncCompleted} of {syncTarget} completed
-                                        </Text>
-                                    </InlineStack>
-                                    <ProgressBar
-                                        progress={(syncCompleted / Math.max(1, syncTarget)) * 100}
-                                        size="small"
-                                        tone="primary"
-                                    />
-                                </BlockStack>
-                            </Card>
-                        </Box>
-                    )}
                     <Card padding="0">
                         <Box padding="400">
                             <BlockStack gap="200">
