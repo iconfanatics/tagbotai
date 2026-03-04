@@ -3,10 +3,13 @@ import { useLoaderData, useNavigate, useSubmit } from "react-router";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { getCachedStore } from "../services/cache.server";
-import { Page, Layout, Card, Text, BlockStack, IndexTable, Badge, Button, EmptyState, InlineStack, Icon, Box, Tooltip, Modal } from "@shopify/polaris";
-import { DeleteIcon, AutomationIcon, ExportIcon } from "@shopify/polaris-icons";
+import { Page, Layout, Card, Text, BlockStack, IndexTable, Badge, Button, EmptyState, InlineStack, Icon, Box, Tooltip, Modal, ProgressBar } from "@shopify/polaris";
+import { DeleteIcon, AutomationIcon, ExportIcon, RefreshIcon } from "@shopify/polaris-icons";
 import { useAppBridge } from "@shopify/app-bridge-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRevalidator } from "react-router";
+import { fetchAllCustomers } from "../services/shopify-helpers.server";
+import { enqueueSyncJob } from "../services/queue.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
     const { session } = await authenticate.admin(request);
@@ -41,7 +44,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         })
     );
 
-    return { rules: rulesWithMetrics, currentPlanName: store.planName };
+    return {
+        rules: rulesWithMetrics,
+        currentPlanName: store.planName,
+        isSyncing: store.isSyncing,
+        syncCompleted: store.syncCompleted,
+        syncTarget: store.syncTarget,
+        syncMessage: store.syncMessage
+    };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -56,14 +66,44 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         return { success: true };
     }
 
+    if (actionType === "sync") {
+        const store = await getCachedStore(session.shop);
+        if (store) {
+            const isFree = store.planName === "Free" || store.planName === "";
+            const { admin } = await authenticate.admin(request);
+            const allEdges = await fetchAllCustomers(admin, isFree);
+
+            await enqueueSyncJob({
+                shop: session.shop,
+                storeId: store.id,
+                customersToSync: allEdges,
+                syncType: "RULES",
+                syncMessage: "Historically evaluating existing customers against rules…"
+            });
+        }
+        return { success: true };
+    }
+
     return null;
 }
 
 export default function RulesManagement() {
     const shopify = useAppBridge();
-    const { rules, currentPlanName } = useLoaderData<typeof loader>();
+    const { rules, currentPlanName, isSyncing, syncCompleted, syncTarget, syncMessage } = useLoaderData<typeof loader>();
     const navigate = useNavigate();
     const submit = useSubmit();
+    const { revalidate } = useRevalidator();
+
+    // Auto-refresh the page every 3 seconds while syncing to animate progress bar
+    useEffect(() => {
+        let interval: NodeJS.Timeout;
+        if (isSyncing) {
+            interval = setInterval(() => {
+                revalidate();
+            }, 3000);
+        }
+        return () => clearInterval(interval);
+    }, [isSyncing, revalidate]);
 
     const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
 
@@ -205,7 +245,16 @@ export default function RulesManagement() {
         <Page
             title="Segmentation Rules"
             primaryAction={{ content: 'Add New Automation', icon: AutomationIcon, onAction: () => navigate('/app/rules/new') }}
-            secondaryActions={[{ content: 'Back to Analytics', onAction: () => navigate('/app') }]}
+            secondaryActions={[
+                {
+                    content: isSyncing ? 'Syncing...' : 'Sync Historical Data',
+                    icon: RefreshIcon,
+                    onAction: () => submit({ action: "sync" }, { method: "post" }),
+                    loading: isSyncing,
+                    disabled: isSyncing
+                },
+                { content: 'Back to Analytics', onAction: () => navigate('/app') }
+            ]}
         >
             <Layout>
                 {/* Upgrade Modal */}
@@ -235,6 +284,27 @@ export default function RulesManagement() {
                 </Modal>
 
                 <Layout.Section>
+                    {isSyncing && (
+                        <Box paddingBlockEnd="400">
+                            <Card padding="400">
+                                <BlockStack gap="200">
+                                    <InlineStack align="space-between">
+                                        <Text variant="headingSm" as="h3">
+                                            {syncMessage || "Syncing historical data..."}
+                                        </Text>
+                                        <Text variant="bodySm" as="span" tone="subdued">
+                                            {syncCompleted} of {syncTarget} completed
+                                        </Text>
+                                    </InlineStack>
+                                    <ProgressBar
+                                        progress={(syncCompleted / Math.max(1, syncTarget)) * 100}
+                                        size="small"
+                                        tone="primary"
+                                    />
+                                </BlockStack>
+                            </Card>
+                        </Box>
+                    )}
                     <Card padding="0">
                         <Box padding="400">
                             <BlockStack gap="200">

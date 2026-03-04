@@ -13,6 +13,8 @@ interface SyncJobPayload {
     tagsToRemove?: string[];
 }
 
+import { evaluateOrderRules } from "./order-rules.server";
+
 const BATCH_SIZE = 5;  // Process 5 customers in parallel at a time
 
 /**
@@ -72,28 +74,103 @@ async function processOneCustomer(
             }
         }
     } else if (activeRules.length > 0) {
+        // 1. Evaluate standard metric rules
         const { tagsToAdd, tagsToRemove } = await calculateCustomerTags(upsertedCustomer, activeRules);
-        const addTagNames = tagsToAdd.map(t => t.tag);
-        const removeTagNames = tagsToRemove.map(t => t.tag);
+        let addTagNames = tagsToAdd.map(t => t.tag);
+        let removeTagNames = tagsToRemove.map(t => t.tag);
+        const tagsToAddLog = [...tagsToAdd];
+        const tagsToRemoveLog = [...tagsToRemove];
 
+        // 2. Evaluate order-based rules (if any exist)
+        const hasOrderRules = activeRules.some(r => {
+            try { return JSON.parse(r.conditions).some((c: any) => c.ruleCategory === "order"); }
+            catch { return false; }
+        });
+
+        if (hasOrderRules) {
+            // Fetch last 50 orders for this customer to check historical rule matches
+            const orderRes = await admin.graphql(`#graphql
+                query getCustomerOrders($id: ID!) {
+                    customer(id: $id) {
+                        orders(first: 50, sortKey: CREATED_AT, reverse: true) {
+                            edges {
+                                node {
+                                    createdAt
+                                    subtotalPrice
+                                    totalDiscounts
+                                    discountCodes
+                                    paymentGatewayNames
+                                    sourceIdentifier
+                                    channel { name }
+                                    shippingAddress { city countryCode }
+                                    lineItems(first: 50) {
+                                        edges {
+                                            node {
+                                                quantity
+                                                customAttributes { key value }
+                                                product { tags }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            `, { variables: { id: `gid://shopify/Customer/${customerId}` } });
+
+            const orderData = await orderRes.json();
+            const orderEdges = orderData.data?.customer?.orders?.edges || [];
+            const existingTags = tagsToAdd.map(t => t.tag).concat(upsertedCustomer.tags ? upsertedCustomer.tags.split(",").map(t => t.trim()) : []);
+
+            for (const orderEdge of orderEdges) {
+                // Map the graphql order payload to match the REST webhook shape that evaluateOrderRules expects
+                const o = orderEdge.node;
+                const mappedOrder = {
+                    subtotal_price: o.subtotalPrice,
+                    total_discounts: o.totalDiscounts,
+                    discount_codes: o.discountCodes ? o.discountCodes.map((c: string) => ({ code: c })) : [],
+                    payment_gateway_names: o.paymentGatewayNames,
+                    source_name: o.channel?.name || o.sourceIdentifier,
+                    referring_site: "", // GraphQL limits this
+                    landing_site: "",
+                    shipping_address: { city: o.shippingAddress?.city, country_code: o.shippingAddress?.countryCode },
+                    line_items: o.lineItems.edges.map((le: any) => ({
+                        quantity: le.node.quantity,
+                        properties: le.node.customAttributes ? le.node.customAttributes.map((ca: any) => ({ name: ca.key, value: ca.value })) : []
+                    }))
+                };
+
+                const orderTagResults = evaluateOrderRules(mappedOrder, upsertedCustomer, activeRules, existingTags);
+                for (const item of orderTagResults) {
+                    if (!addTagNames.includes(item.tag)) {
+                        addTagNames.push(item.tag);
+                        tagsToAddLog.push(item);
+                        existingTags.push(item.tag);
+                    }
+                }
+            }
+        }
+
+        // 3. Apply the combined results
         if (addTagNames.length > 0 || removeTagNames.length > 0) {
             await manageCustomerTags(admin, storeId, customerId, addTagNames, removeTagNames);
 
-            for (const item of tagsToAdd) {
+            for (const item of tagsToAddLog) {
                 const normalizedTag = item.tag.toLowerCase();
                 if (normalizedTag.includes("vip") || normalizedTag.includes("high spender")) {
                     await sendVipDiscount(admin, storeId, customerId, upsertedCustomer.email || "");
                 }
             }
 
-            for (const item of tagsToAdd) {
+            for (const item of tagsToAddLog) {
                 await db.activityLog.create({
-                    data: { storeId, customerId, action: "TAG_ADDED", tagContext: item.tag, reason: item.reason }
+                    data: { storeId, customerId, action: "TAG_ADDED", tagContext: item.tag, reason: `[Historical Sync] ${item.reason}` }
                 });
             }
-            for (const item of tagsToRemove) {
+            for (const item of tagsToRemoveLog) {
                 await db.activityLog.create({
-                    data: { storeId, customerId, action: "TAG_REMOVED", tagContext: item.tag, reason: item.reason }
+                    data: { storeId, customerId, action: "TAG_REMOVED", tagContext: item.tag, reason: `[Historical Sync] ${item.reason}` }
                 });
             }
         }
