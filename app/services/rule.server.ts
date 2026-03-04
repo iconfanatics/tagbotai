@@ -81,6 +81,18 @@ export async function calculateCustomerTags(
     const tagsToRemove: { tag: string; reason: string }[] = [];
 
     for (const rule of activeRules) {
+        // Skip rules that have order-based conditions,
+        // because we don't evaluate them here, and importantly,
+        // we SHOULD NOT remove their tags if they don't match.
+        try {
+            const conditions = JSON.parse(rule.conditions);
+            if (conditions.some((c: any) => c.ruleCategory === "order")) {
+                continue;
+            }
+        } catch {
+            continue;
+        }
+
         const { isMatch, reason } = evaluateRule(customer, rule);
 
         if (isMatch) {
