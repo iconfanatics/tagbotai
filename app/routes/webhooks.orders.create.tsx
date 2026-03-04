@@ -96,6 +96,22 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                     }
                 });
             }
+
+            // IMPORTANT: Update the local Prisma cache so the Dashboard "Matching Customers" count
+            // immediately reflects these newly added tags for order-based rules.
+            const dbCustomer = await db.customer.findUnique({
+                where: { id_storeId: { id: customerId, storeId: store.id } }
+            });
+            if (dbCustomer) {
+                let currentTags = dbCustomer.tags ? dbCustomer.tags.split(",").map(t => t.trim()).filter(Boolean) : [];
+                currentTags = [...currentTags, ...addTagNames];
+
+                await db.customer.update({
+                    where: { id_storeId: { id: customerId, storeId: store.id } },
+                    data: { tags: Array.from(new Set(currentTags)).join(", ") }
+                });
+            }
+
             console.log(`[ORDER_RULES] Tagged customer ${customerId} with: ${addTagNames.join(", ")}`);
         } catch (err) {
             console.error("[ORDER_RULES] Failed to apply order-create tags:", err);
