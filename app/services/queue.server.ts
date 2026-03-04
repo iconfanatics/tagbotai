@@ -28,7 +28,7 @@ export async function enqueueSyncJob(payload: SyncJobPayload) {
     });
 }
 
-async function processOneCustomer(
+export async function processOneCustomer(
     admin: any,
     storeId: string,
     edge: any,

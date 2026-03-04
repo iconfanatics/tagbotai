@@ -24,23 +24,37 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         orderBy: { createdAt: "desc" }
     });
 
-    const rulesWithMetrics = await Promise.all(
-        rules.map(async (rule) => {
-            const matchingCustomers = await db.customer.count({
-                where: { storeId: store.id, tags: { contains: rule.targetTag } }
-            });
+    // 1. Get all Activity Logs for these tags grouped by tagContext (O(1) query)
+    const activeTags = rules.map(r => r.targetTag);
+    const logsGroups = await db.activityLog.groupBy({
+        by: ['tagContext'],
+        where: { storeId: store.id, action: "TAG_ADDED", tagContext: { in: activeTags } },
+        _count: { id: true }
+    });
 
-            const timesFired = await db.activityLog.count({
-                where: { storeId: store.id, tagContext: rule.targetTag, action: "TAG_ADDED" }
-            });
+    const logsMap = new Map(logsGroups.filter(g => g.tagContext).map(g => [g.tagContext!, g._count.id]));
 
-            return {
-                ...rule,
-                matchingCustomers,
-                timesFired
-            };
-        })
-    );
+    // 2. Customers are a bit tricky because they are comma-separated string `contains` checks, 
+    //    so we just fetch all tagged customers once and tally them in JS (O(1) query)
+    const allTaggedCustomers = await db.customer.findMany({
+        where: { storeId: store.id, tags: { not: null } },
+        select: { tags: true }
+    });
+
+    const rulesWithMetrics = rules.map(rule => {
+        let matchingCustomerCount = 0;
+        for (const customer of allTaggedCustomers) {
+            if (customer.tags?.includes(rule.targetTag)) {
+                matchingCustomerCount++;
+            }
+        }
+
+        return {
+            ...rule,
+            matchingCustomers: matchingCustomerCount,
+            timesFired: logsMap.get(rule.targetTag) || 0
+        };
+    });
 
     return {
         rules: rulesWithMetrics,

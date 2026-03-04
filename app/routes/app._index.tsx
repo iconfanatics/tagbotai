@@ -1,6 +1,6 @@
-import React, { useState } from "react";
+import React, { useState, Suspense } from "react";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
-import { useLoaderData, useNavigate, useSubmit, useNavigation, useActionData, redirect } from "react-router";
+import { useLoaderData, useNavigate, useSubmit, useNavigation, useActionData, Await } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
@@ -94,68 +94,74 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   const isProOrElite = store.planName === "Pro Plan" || store.planName === "Elite Plan";
 
-  // Resolve all data eagerly + in parallel — no deferred promises.
-  // A deferred promise with no errorElement causes a silent blank page on error.
-  const EMPTY: {
-    metrics: any[];
-    churningCustomers: { id: string; firstName: string | null; lastName: string | null; email: string | null; lastOrderDate: Date | null; orderCount: number; totalSpent: number; tags: string | null; storeId: string; createdAt: Date; updatedAt: Date }[];
-    orderRuleCount: number;
-    orderTagsFired: number;
-    topOrderTags: { tag: string; count: number }[];
-  } = { metrics: [0, 0, 0, 0, 0, 0, []] as any, churningCustomers: [], orderRuleCount: 0, orderTagsFired: 0, topOrderTags: [] };
+  // Wrap heavy DB operations in a promise function (do NOT await it in loader)
+  const getDashboardData = async () => {
+    const EMPTY: {
+      metrics: any[];
+      churningCustomers: any[];
+      orderRuleCount: number;
+      orderTagsFired: number;
+      topOrderTags: { tag: string; count: number }[];
+    } = { metrics: [0, 0, 0, 0, 0, 0, []] as any, churningCustomers: [], orderRuleCount: 0, orderTagsFired: 0, topOrderTags: [] };
 
-  let dashboardData = EMPTY;
-  try {
-    const [
-      [tagsApplied, vips, atRisk, returning, newCust, total, recentLogs],
-      churningCustomers,
-      allRules,
-    ] = await Promise.all([
-      Promise.all([
-        db.activityLog.count({ where: { storeId: store.id, action: "TAG_ADDED" } }),
-        db.customer.count({ where: { storeId: store.id, tags: { contains: "VIP" } } }),
-        db.customer.count({ where: { storeId: store.id, lastOrderDate: { lt: thirtyDaysAgo } } }),
-        db.customer.count({ where: { storeId: store.id, orderCount: { gt: 1 }, NOT: { tags: { contains: "VIP" } } } }),
-        db.customer.count({ where: { storeId: store.id, orderCount: { lte: 1 }, NOT: { tags: { contains: "VIP" } } } }),
-        db.customer.count({ where: { storeId: store.id } }),
-        db.activityLog.findMany({ where: { storeId: store.id }, orderBy: { createdAt: "desc" }, take: 10, include: { customer: true, rule: true } }),
-      ]),
-      isProOrElite
-        ? db.customer.findMany({ where: { storeId: store.id, orderCount: { gt: 3 }, lastOrderDate: { lt: sixtyDaysAgo } }, take: 5, orderBy: { lastOrderDate: "asc" } })
-        : Promise.resolve([]),
-      db.rule.findMany({ where: { storeId: store.id } }),
-    ]);
+    try {
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      const sixtyDaysAgo = new Date();
+      sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
 
-    const orderRules = allRules.filter(r => {
-      try { return JSON.parse(r.conditions).some((c: any) => c.ruleCategory === "order"); }
-      catch { return false; }
-    });
-    const orderTagNames = orderRules.map(r => r.targetTag);
-    let orderTagsFired = 0;
-    const topOrderTagMap: Record<string, number> = {};
-    if (orderTagNames.length > 0) {
-      const logs = await db.activityLog.findMany({ where: { storeId: store.id, action: "TAG_ADDED", tagContext: { in: orderTagNames } }, select: { tagContext: true } });
-      orderTagsFired = logs.length;
-      for (const log of logs) { if (log.tagContext) topOrderTagMap[log.tagContext] = (topOrderTagMap[log.tagContext] || 0) + 1; }
+      const [
+        [tagsApplied, vips, atRisk, returning, newCust, total, recentLogs],
+        churningCustomers,
+        allRules,
+      ] = await Promise.all([
+        Promise.all([
+          db.activityLog.count({ where: { storeId: store.id, action: "TAG_ADDED" } }),
+          db.customer.count({ where: { storeId: store.id, tags: { contains: "VIP" } } }),
+          db.customer.count({ where: { storeId: store.id, lastOrderDate: { lt: thirtyDaysAgo } } }),
+          db.customer.count({ where: { storeId: store.id, orderCount: { gt: 1 }, NOT: { tags: { contains: "VIP" } } } }),
+          db.customer.count({ where: { storeId: store.id, orderCount: { lte: 1 }, NOT: { tags: { contains: "VIP" } } } }),
+          db.customer.count({ where: { storeId: store.id } }),
+          db.activityLog.findMany({ where: { storeId: store.id }, orderBy: { createdAt: "desc" }, take: 10, include: { customer: true, rule: true } }),
+        ]),
+        isProOrElite
+          ? db.customer.findMany({ where: { storeId: store.id, orderCount: { gt: 3 }, lastOrderDate: { lt: sixtyDaysAgo } }, take: 5, orderBy: { lastOrderDate: "asc" } })
+          : Promise.resolve([]),
+        db.rule.findMany({ where: { storeId: store.id } }),
+      ]);
+
+      const orderRules = allRules.filter(r => {
+        try { return JSON.parse(r.conditions).some((c: any) => c.ruleCategory === "order"); }
+        catch { return false; }
+      });
+      const orderTagNames = orderRules.map(r => r.targetTag);
+      let orderTagsFired = 0;
+      const topOrderTagMap: Record<string, number> = {};
+      if (orderTagNames.length > 0) {
+        const logs = await db.activityLog.findMany({ where: { storeId: store.id, action: "TAG_ADDED", tagContext: { in: orderTagNames } }, select: { tagContext: true } });
+        orderTagsFired = logs.length;
+        for (const log of logs) { if (log.tagContext) topOrderTagMap[log.tagContext] = (topOrderTagMap[log.tagContext] || 0) + 1; }
+      }
+      const topOrderTags = Object.entries(topOrderTagMap).map(([tag, count]) => ({ tag, count })).sort((a, b) => b.count - a.count).slice(0, 6);
+
+      return {
+        metrics: [tagsApplied, vips, atRisk, returning, newCust, total, recentLogs],
+        churningCustomers,
+        orderRuleCount: orderRules.length,
+        orderTagsFired,
+        topOrderTags,
+      };
+    } catch (err) {
+      console.error("[DASHBOARD] Failed to load dashboard data:", err);
+      return EMPTY;
     }
-    const topOrderTags = Object.entries(topOrderTagMap).map(([tag, count]) => ({ tag, count })).sort((a, b) => b.count - a.count).slice(0, 6);
+  };
 
-    dashboardData = {
-      metrics: [tagsApplied, vips, atRisk, returning, newCust, total, recentLogs],
-      churningCustomers,
-      orderRuleCount: orderRules.length,
-      orderTagsFired,
-      topOrderTags,
-    };
-  } catch (err) {
-    console.error("[DASHBOARD] Failed to load dashboard data:", err);
-    // Return zeros — the page still renders, never blank
-  }
-
+  // Defer streams the promise so the HTML structure renders instantly
   return {
     currentPlanName: store.planName,
     monthlyTagCount: store.monthlyTagCount,
-    dashboardData,
+    dashboardDataPromise: getDashboardData()
   };
 };
 
@@ -257,7 +263,7 @@ function KpiCard({ label, value, icon, tone, bg }: {
 
 export default function Index() {
   const shopify = useAppBridge();
-  const { currentPlanName, monthlyTagCount, dashboardData } = useLoaderData<typeof loader>();
+  const { currentPlanName, monthlyTagCount, dashboardDataPromise } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigate = useNavigate();
   const submit = useSubmit();
@@ -369,249 +375,253 @@ export default function Index() {
 
         {limitBanner}
 
-        {/* ── Data section — always renders, never async ── */}
-        {(() => {
-          const { metrics, churningCustomers, orderRuleCount, orderTagsFired, topOrderTags } = dashboardData as any;
-          const [tagsAppliedCount, activeVipsCount, atRiskCount, returningCount, newCount, totalCustomers, recentLogs] = metrics;
+        {/* ── Data section — Streamed asynchronously ── */}
+        <Suspense fallback={<DashboardSkeleton />}>
+          <Await resolve={dashboardDataPromise} errorElement={<DashboardSkeleton />}>
+            {(resolvedData) => {
+              const { metrics, churningCustomers, orderRuleCount, orderTagsFired, topOrderTags } = resolvedData as any;
+              const [tagsAppliedCount, activeVipsCount, atRiskCount, returningCount, newCount, totalCustomers, recentLogs] = metrics;
 
-          // ── Chart data ────────────────────────────────────
-          const segmentChartData = [
-            { name: "New", value: newCount, fill: "#818cf8" },
-            { name: "Returning", value: returningCount, fill: "#fbbf24" },
-            { name: "VIP", value: activeVipsCount, fill: "#34d399" },
-            { name: "At-Risk", value: atRiskCount, fill: "#f87171" },
-          ].filter(d => d.value > 0);
+              // ── Chart data ────────────────────────────────────
+              const segmentChartData = [
+                { name: "New", value: newCount, fill: "#818cf8" },
+                { name: "Returning", value: returningCount, fill: "#fbbf24" },
+                { name: "VIP", value: activeVipsCount, fill: "#34d399" },
+                { name: "At-Risk", value: atRiskCount, fill: "#f87171" },
+              ].filter(d => d.value > 0);
 
-          const orderTagChartData = topOrderTags.map((t: any, i: number) => ({
-            name: t.tag,
-            value: t.count,
-            fill: ["#818cf8", "#34d399", "#fbbf24", "#f87171", "#a78bfa", "#38bdf8"][i % 6]
-          }));
+              const orderTagChartData = topOrderTags.map((t: any, i: number) => ({
+                name: t.tag,
+                value: t.count,
+                fill: ["#818cf8", "#34d399", "#fbbf24", "#f87171", "#a78bfa", "#38bdf8"][i % 6]
+              }));
 
-          // ── AI Insight ────────────────────────────────────
-          const atRiskPct = totalCustomers > 0 ? Math.round((atRiskCount / totalCustomers) * 100) : 0;
-          let aiInsight = "Start syncing customers to generate insights.";
-          if (atRiskPct > 30) aiInsight = `⚠️ ${atRiskPct}% of your customers are at-risk — consider a re-engagement campaign.`;
-          else if (activeVipsCount > 0 && atRiskCount > 0) aiInsight = `${activeVipsCount} VIPs are active. ${atRiskCount} customers haven't ordered in 30 days — target them with a win-back offer.`;
-          else if (totalCustomers > 0) aiInsight = "Your customer base looks healthy! Keep the momentum going.";
-          if (orderRuleCount > 0 && orderTagsFired > 0) aiInsight += ` Your ${orderRuleCount} order rules have fired ${orderTagsFired} times.`;
+              // ── AI Insight ────────────────────────────────────
+              const atRiskPct = totalCustomers > 0 ? Math.round((atRiskCount / totalCustomers) * 100) : 0;
+              let aiInsight = "Start syncing customers to generate insights.";
+              if (atRiskPct > 30) aiInsight = `⚠️ ${atRiskPct}% of your customers are at-risk — consider a re-engagement campaign.`;
+              else if (activeVipsCount > 0 && atRiskCount > 0) aiInsight = `${activeVipsCount} VIPs are active. ${atRiskCount} customers haven't ordered in 30 days — target them with a win-back offer.`;
+              else if (totalCustomers > 0) aiInsight = "Your customer base looks healthy! Keep the momentum going.";
+              if (orderRuleCount > 0 && orderTagsFired > 0) aiInsight += ` Your ${orderRuleCount} order rules have fired ${orderTagsFired} times.`;
 
-          // ── Log rows ──────────────────────────────────────
-          const logRows = recentLogs.map((log: any) => [
-            log.customer?.firstName ? `${log.customer.firstName} ${log.customer.lastName || ""}` : "Guest",
-            log.customer?.email || `ID: ${log.customerId}`,
-            log.action === "TAG_ADDED"
-              ? <Badge tone="success">{log.tagContext}</Badge>
-              : <Badge tone="critical">{`${log.tagContext} ✕`}</Badge>,
-            <Text as="span" variant="bodySm">{log.reason || (log.rule?.name || "Manual / Deleted Rule")}</Text>,
-            new Date(log.createdAt).toLocaleString()
-          ]);
+              // ── Log rows ──────────────────────────────────────
+              const logRows = recentLogs.map((log: any) => [
+                log.customer?.firstName ? `${log.customer.firstName} ${log.customer.lastName || ""}` : "Guest",
+                log.customer?.email || `ID: ${log.customerId}`,
+                log.action === "TAG_ADDED"
+                  ? <Badge tone="success">{log.tagContext}</Badge>
+                  : <Badge tone="critical">{`${log.tagContext} ✕`}</Badge>,
+                <Text as="span" variant="bodySm">{log.reason || (log.rule?.name || "Manual / Deleted Rule")}</Text>,
+                new Date(log.createdAt).toLocaleString()
+              ]);
 
-          const churningRows = churningCustomers.map((c: any) => [
-            c.firstName ? `${c.firstName} ${c.lastName || ""}` : c.email || c.id,
-            c.lastOrderDate ? new Date(c.lastOrderDate).toLocaleDateString() : "N/A",
-            c.orderCount.toString(),
-            <Button size="micro" onClick={() => submit({ action: "send_winback_offer", customerId: c.id }, { method: "post" })}>
-              Send Win-back
-            </Button>
-          ]);
+              const churningRows = churningCustomers.map((c: any) => [
+                c.firstName ? `${c.firstName} ${c.lastName || ""}` : c.email || c.id,
+                c.lastOrderDate ? new Date(c.lastOrderDate).toLocaleDateString() : "N/A",
+                c.orderCount.toString(),
+                <Button size="micro" onClick={() => submit({ action: "send_winback_offer", customerId: c.id }, { method: "post" })}>
+                  Send Win-back
+                </Button>
+              ]);
 
-          return (
-            <>
-              {/* ── Row 1: Customer KPIs ──────────────────── */}
-              <Layout.Section>
-                <Box paddingBlockEnd="100">
-                  <InlineStack gap="200" blockAlign="center">
-                    <Icon source={PersonIcon} tone="subdued" />
-                    <Text variant="headingSm" as="h3" tone="subdued">Customer Overview</Text>
-                  </InlineStack>
-                </Box>
-                <Grid>
-                  <Grid.Cell columnSpan={{ xs: 6, sm: 3, md: 3, lg: 3, xl: 3 }}>
-                    <KpiCard label="Total Customers" value={totalCustomers} icon={PersonIcon} />
-                  </Grid.Cell>
-                  <Grid.Cell columnSpan={{ xs: 6, sm: 3, md: 3, lg: 3, xl: 3 }}>
-                    <KpiCard label="Tags Applied" value={tagsAppliedCount} icon={HashtagIcon} />
-                  </Grid.Cell>
-                  <Grid.Cell columnSpan={{ xs: 6, sm: 3, md: 3, lg: 3, xl: 3 }}>
-                    <KpiCard label="Active VIPs" value={activeVipsCount} icon={PersonIcon} tone="magic" bg="bg-surface-magic" />
-                  </Grid.Cell>
-                  <Grid.Cell columnSpan={{ xs: 6, sm: 3, md: 3, lg: 3, xl: 3 }}>
-                    <KpiCard label="At-Risk" value={atRiskCount} icon={AlertCircleIcon} tone="critical" bg="bg-surface-critical-active" />
-                  </Grid.Cell>
-                </Grid>
-              </Layout.Section>
-
-              {/* ── Row 2: Order Tag KPIs ─────────────────── */}
-              <Layout.Section>
-                <Box paddingBlockEnd="100">
-                  <InlineStack gap="200" blockAlign="center">
-                    <Icon source={OrderIcon} tone="magic" />
-                    <Text variant="headingSm" as="h3" tone="subdued">Order-Based Tags</Text>
-                    <Badge tone="magic">New</Badge>
-                  </InlineStack>
-                </Box>
-                <Grid>
-                  <Grid.Cell columnSpan={{ xs: 6, sm: 3, md: 3, lg: 3, xl: 3 }}>
-                    <KpiCard label="Order Rules Active" value={orderRuleCount} icon={OrderIcon} tone="magic" />
-                  </Grid.Cell>
-                  <Grid.Cell columnSpan={{ xs: 6, sm: 3, md: 3, lg: 3, xl: 3 }}>
-                    <KpiCard label="Order Tags Fired" value={orderTagsFired} icon={HashtagIcon} tone="success" />
-                  </Grid.Cell>
-                  <Grid.Cell columnSpan={{ xs: 6, sm: 3, md: 3, lg: 3, xl: 3 }}>
-                    <KpiCard label="Top Order Tag" value={topOrderTags[0]?.tag || "—"} icon={DiscountIcon} />
-                  </Grid.Cell>
-                  <Grid.Cell columnSpan={{ xs: 6, sm: 3, md: 3, lg: 3, xl: 3 }}>
-                    <Card roundedAbove="sm">
-                      <Box padding="400">
-                        <BlockStack gap="200">
-                          <Text variant="bodySm" as="span" tone="subdued" fontWeight="medium">Quick Actions</Text>
-                          <InlineStack gap="200" wrap>
-                            <Button size="micro" icon={PlusIcon} onClick={() => navigate("/app/rules/new")}>New Order Rule</Button>
-                            <Button size="micro" icon={ViewIcon} onClick={() => navigate("/app/rules")} variant="plain">View All</Button>
-                          </InlineStack>
-                        </BlockStack>
-                      </Box>
-                    </Card>
-                  </Grid.Cell>
-                </Grid>
-              </Layout.Section>
-
-              {/* ── Row 3: Charts side by side ────────────── */}
-              <Layout.Section>
-                <Grid>
-                  <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 6, lg: 6, xl: 6 }}>
-                    <Card roundedAbove="sm">
-                      <BlockStack gap="300">
-                        <InlineStack align="space-between" blockAlign="center">
-                          <Text variant="headingMd" as="h3">Customer Segments</Text>
-                          <Badge tone="info">{`${totalCustomers} total`}</Badge>
-                        </InlineStack>
-                        <Divider />
-                        <div style={{ height: 260 }}>
-                          <React.Suspense fallback={<div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%" }}><Spinner size="large" /></div>}>
-                            <DashboardChart chartData={segmentChartData} type="donut" height={260} />
-                          </React.Suspense>
-                        </div>
-                      </BlockStack>
-                    </Card>
-                  </Grid.Cell>
-
-                  <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 6, lg: 6, xl: 6 }}>
-                    <Card roundedAbove="sm">
-                      <BlockStack gap="300">
-                        <InlineStack align="space-between" blockAlign="center">
-                          <InlineStack gap="200" blockAlign="center">
-                            <Text variant="headingMd" as="h3">Order Tags Breakdown</Text>
-                            <Badge tone="magic">New</Badge>
-                          </InlineStack>
-                          <Badge>{`${orderTagsFired} fired`}</Badge>
-                        </InlineStack>
-                        <Divider />
-                        <div style={{ height: 260 }}>
-                          <React.Suspense fallback={<div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%" }}><Spinner size="large" /></div>}>
-                            <DashboardChart chartData={orderTagChartData} type="bar" height={260} />
-                          </React.Suspense>
-                        </div>
-                      </BlockStack>
-                    </Card>
-                  </Grid.Cell>
-                </Grid>
-              </Layout.Section>
-
-              {/* ── Row 4: AI Insights ────────────────────── */}
-              <Layout.Section>
-                <Card roundedAbove="sm" background="bg-surface-magic">
-                  <BlockStack gap="300">
-                    <InlineStack gap="200" blockAlign="center">
-                      <Icon source={MagicIcon} tone="magic" />
-                      <Text variant="headingMd" as="h3">AI Insights</Text>
-                      <Badge tone="magic" icon={MagicIcon}>Auto-generated</Badge>
-                    </InlineStack>
-                    <Text as="p" variant="bodyMd">{aiInsight}</Text>
-                    <InlineStack gap="200">
-                      <Button size="micro" onClick={() => navigate("/app/rules/new")}>Create Rule</Button>
-                      <Button size="micro" variant="plain" onClick={() => navigate("/app/predict")}>Run Segmentation</Button>
-                    </InlineStack>
-                  </BlockStack>
-                </Card>
-              </Layout.Section>
-
-              {/* ── Row 5: Retention Alerts ───────────────── */}
-              {currentPlanName !== "Pro Plan" && currentPlanName !== "Elite Plan" ? (
-                <Layout.Section>
-                  <Card>
-                    <BlockStack gap="300">
+              return (
+                <>
+                  {/* ── Row 1: Customer KPIs ──────────────────── */}
+                  <Layout.Section>
+                    <Box paddingBlockEnd="100">
                       <InlineStack gap="200" blockAlign="center">
-                        <Icon source={AlertCircleIcon} tone="critical" />
-                        <Text variant="headingMd" as="h3" tone="critical">Retention Alerts</Text>
-                        <Badge tone="warning">Pro</Badge>
-                      </InlineStack>
-                      <Text as="p" tone="subdued">Identify VIP customers who haven't purchased in 60+ days. Upgrade to unlock.</Text>
-                      <Button onClick={() => navigate("/app/pricing")}>Unlock Retention Alerts</Button>
-                    </BlockStack>
-                  </Card>
-                </Layout.Section>
-              ) : churningCustomers.length > 0 && (
-                <Layout.Section>
-                  <Card padding="0">
-                    <Box padding="400">
-                      <InlineStack align="space-between" blockAlign="center">
-                        <InlineStack gap="200" blockAlign="center">
-                          <Icon source={AlertCircleIcon} tone="critical" />
-                          <Text variant="headingMd" as="h3" tone="critical">Retention Alerts</Text>
-                        </InlineStack>
-                        <Button
-                          variant="primary" tone="critical" size="micro"
-                          loading={navigation.state === "submitting"}
-                          onClick={() => submit({ action: "auto_tag_churn" }, { method: "post" })}
-                        >
-                          Auto-Tag "At-Risk"
-                        </Button>
+                        <Icon source={PersonIcon} tone="subdued" />
+                        <Text variant="headingSm" as="h3" tone="subdued">Customer Overview</Text>
                       </InlineStack>
                     </Box>
-                    <MemoizedDataTable
-                      columnContentTypes={["text", "text", "numeric", "text"]}
-                      headings={["Customer", "Last Order", "Orders", "Action"]}
-                      rows={churningRows}
-                      hasZebraStripingOnData
-                    />
-                  </Card>
-                </Layout.Section>
-              )}
+                    <Grid>
+                      <Grid.Cell columnSpan={{ xs: 6, sm: 3, md: 3, lg: 3, xl: 3 }}>
+                        <KpiCard label="Total Customers" value={totalCustomers} icon={PersonIcon} />
+                      </Grid.Cell>
+                      <Grid.Cell columnSpan={{ xs: 6, sm: 3, md: 3, lg: 3, xl: 3 }}>
+                        <KpiCard label="Tags Applied" value={tagsAppliedCount} icon={HashtagIcon} />
+                      </Grid.Cell>
+                      <Grid.Cell columnSpan={{ xs: 6, sm: 3, md: 3, lg: 3, xl: 3 }}>
+                        <KpiCard label="Active VIPs" value={activeVipsCount} icon={PersonIcon} tone="magic" bg="bg-surface-magic" />
+                      </Grid.Cell>
+                      <Grid.Cell columnSpan={{ xs: 6, sm: 3, md: 3, lg: 3, xl: 3 }}>
+                        <KpiCard label="At-Risk" value={atRiskCount} icon={AlertCircleIcon} tone="critical" bg="bg-surface-critical-active" />
+                      </Grid.Cell>
+                    </Grid>
+                  </Layout.Section>
 
-              {/* ── Row 6: Recent Activity ────────────────── */}
-              <Layout.Section>
-                <Card padding="0">
-                  <Box padding="400">
-                    <InlineStack align="space-between" blockAlign="center">
-                      <Text variant="headingMd" as="h3">Recent Activity</Text>
-                      <Button size="micro" onClick={() => navigate("/app/rules")}>Manage Rules</Button>
-                    </InlineStack>
-                  </Box>
-                  <Divider />
-                  {recentLogs.length > 0 ? (
-                    <MemoizedDataTable
-                      columnContentTypes={["text", "text", "text", "text", "text"]}
-                      headings={["Customer", "Email", "Tag", "Source", "Time"]}
-                      rows={logRows}
-                      hasZebraStripingOnData
-                    />
-                  ) : (
-                    <Box padding="500">
-                      <BlockStack gap="200" inlineAlign="center">
-                        <Text as="p" tone="subdued" alignment="center">No tagging activity yet. Create a rule and sync customers to get started.</Text>
-                        <InlineStack align="center" gap="200">
-                          <Button onClick={() => navigate("/app/rules/new")}>Create First Rule</Button>
+                  {/* ── Row 2: Order Tag KPIs ─────────────────── */}
+                  <Layout.Section>
+                    <Box paddingBlockEnd="100">
+                      <InlineStack gap="200" blockAlign="center">
+                        <Icon source={OrderIcon} tone="magic" />
+                        <Text variant="headingSm" as="h3" tone="subdued">Order-Based Tags</Text>
+                        <Badge tone="magic">New</Badge>
+                      </InlineStack>
+                    </Box>
+                    <Grid>
+                      <Grid.Cell columnSpan={{ xs: 6, sm: 3, md: 3, lg: 3, xl: 3 }}>
+                        <KpiCard label="Order Rules Active" value={orderRuleCount} icon={OrderIcon} tone="magic" />
+                      </Grid.Cell>
+                      <Grid.Cell columnSpan={{ xs: 6, sm: 3, md: 3, lg: 3, xl: 3 }}>
+                        <KpiCard label="Order Tags Fired" value={orderTagsFired} icon={HashtagIcon} tone="success" />
+                      </Grid.Cell>
+                      <Grid.Cell columnSpan={{ xs: 6, sm: 3, md: 3, lg: 3, xl: 3 }}>
+                        <KpiCard label="Top Order Tag" value={topOrderTags[0]?.tag || "—"} icon={DiscountIcon} />
+                      </Grid.Cell>
+                      <Grid.Cell columnSpan={{ xs: 6, sm: 3, md: 3, lg: 3, xl: 3 }}>
+                        <Card roundedAbove="sm">
+                          <Box padding="400">
+                            <BlockStack gap="200">
+                              <Text variant="bodySm" as="span" tone="subdued" fontWeight="medium">Quick Actions</Text>
+                              <InlineStack gap="200" wrap>
+                                <Button size="micro" icon={PlusIcon} onClick={() => navigate("/app/rules/new")}>New Order Rule</Button>
+                                <Button size="micro" icon={ViewIcon} onClick={() => navigate("/app/rules")} variant="plain">View All</Button>
+                              </InlineStack>
+                            </BlockStack>
+                          </Box>
+                        </Card>
+                      </Grid.Cell>
+                    </Grid>
+                  </Layout.Section>
+
+                  {/* ── Row 3: Charts side by side ────────────── */}
+                  <Layout.Section>
+                    <Grid>
+                      <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 6, lg: 6, xl: 6 }}>
+                        <Card roundedAbove="sm">
+                          <BlockStack gap="300">
+                            <InlineStack align="space-between" blockAlign="center">
+                              <Text variant="headingMd" as="h3">Customer Segments</Text>
+                              <Badge tone="info">{`${totalCustomers} total`}</Badge>
+                            </InlineStack>
+                            <Divider />
+                            <div style={{ height: 260 }}>
+                              <React.Suspense fallback={<div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%" }}><Spinner size="large" /></div>}>
+                                <DashboardChart chartData={segmentChartData} type="donut" height={260} />
+                              </React.Suspense>
+                            </div>
+                          </BlockStack>
+                        </Card>
+                      </Grid.Cell>
+
+                      <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 6, lg: 6, xl: 6 }}>
+                        <Card roundedAbove="sm">
+                          <BlockStack gap="300">
+                            <InlineStack align="space-between" blockAlign="center">
+                              <InlineStack gap="200" blockAlign="center">
+                                <Text variant="headingMd" as="h3">Order Tags Breakdown</Text>
+                                <Badge tone="magic">New</Badge>
+                              </InlineStack>
+                              <Badge>{`${orderTagsFired} fired`}</Badge>
+                            </InlineStack>
+                            <Divider />
+                            <div style={{ height: 260 }}>
+                              <React.Suspense fallback={<div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%" }}><Spinner size="large" /></div>}>
+                                <DashboardChart chartData={orderTagChartData} type="bar" height={260} />
+                              </React.Suspense>
+                            </div>
+                          </BlockStack>
+                        </Card>
+                      </Grid.Cell>
+                    </Grid>
+                  </Layout.Section>
+
+                  {/* ── Row 4: AI Insights ────────────────────── */}
+                  <Layout.Section>
+                    <Card roundedAbove="sm" background="bg-surface-magic">
+                      <BlockStack gap="300">
+                        <InlineStack gap="200" blockAlign="center">
+                          <Icon source={MagicIcon} tone="magic" />
+                          <Text variant="headingMd" as="h3">AI Insights</Text>
+                          <Badge tone="magic" icon={MagicIcon}>Auto-generated</Badge>
+                        </InlineStack>
+                        <Text as="p" variant="bodyMd">{aiInsight}</Text>
+                        <InlineStack gap="200">
+                          <Button size="micro" onClick={() => navigate("/app/rules/new")}>Create Rule</Button>
+                          <Button size="micro" variant="plain" onClick={() => navigate("/app/predict")}>Run Segmentation</Button>
                         </InlineStack>
                       </BlockStack>
-                    </Box>
+                    </Card>
+                  </Layout.Section>
+
+                  {/* ── Row 5: Retention Alerts ───────────────── */}
+                  {currentPlanName !== "Pro Plan" && currentPlanName !== "Elite Plan" ? (
+                    <Layout.Section>
+                      <Card>
+                        <BlockStack gap="300">
+                          <InlineStack gap="200" blockAlign="center">
+                            <Icon source={AlertCircleIcon} tone="critical" />
+                            <Text variant="headingMd" as="h3" tone="critical">Retention Alerts</Text>
+                            <Badge tone="warning">Pro</Badge>
+                          </InlineStack>
+                          <Text as="p" tone="subdued">Identify VIP customers who haven't purchased in 60+ days. Upgrade to unlock.</Text>
+                          <Button onClick={() => navigate("/app/pricing")}>Unlock Retention Alerts</Button>
+                        </BlockStack>
+                      </Card>
+                    </Layout.Section>
+                  ) : churningCustomers.length > 0 && (
+                    <Layout.Section>
+                      <Card padding="0">
+                        <Box padding="400">
+                          <InlineStack align="space-between" blockAlign="center">
+                            <InlineStack gap="200" blockAlign="center">
+                              <Icon source={AlertCircleIcon} tone="critical" />
+                              <Text variant="headingMd" as="h3" tone="critical">Retention Alerts</Text>
+                            </InlineStack>
+                            <Button
+                              variant="primary" tone="critical" size="micro"
+                              loading={navigation.state === "submitting"}
+                              onClick={() => submit({ action: "auto_tag_churn" }, { method: "post" })}
+                            >
+                              Auto-Tag "At-Risk"
+                            </Button>
+                          </InlineStack>
+                        </Box>
+                        <MemoizedDataTable
+                          columnContentTypes={["text", "text", "numeric", "text"]}
+                          headings={["Customer", "Last Order", "Orders", "Action"]}
+                          rows={churningRows}
+                          hasZebraStripingOnData
+                        />
+                      </Card>
+                    </Layout.Section>
                   )}
-                </Card>
-              </Layout.Section>
-            </>
-          );
-        })()}
+
+                  {/* ── Row 6: Recent Activity ────────────────── */}
+                  <Layout.Section>
+                    <Card padding="0">
+                      <Box padding="400">
+                        <InlineStack align="space-between" blockAlign="center">
+                          <Text variant="headingMd" as="h3">Recent Activity</Text>
+                          <Button size="micro" onClick={() => navigate("/app/rules")}>Manage Rules</Button>
+                        </InlineStack>
+                      </Box>
+                      <Divider />
+                      {recentLogs.length > 0 ? (
+                        <MemoizedDataTable
+                          columnContentTypes={["text", "text", "text", "text", "text"]}
+                          headings={["Customer", "Email", "Tag", "Source", "Time"]}
+                          rows={logRows}
+                          hasZebraStripingOnData
+                        />
+                      ) : (
+                        <Box padding="500">
+                          <BlockStack gap="200" inlineAlign="center">
+                            <Text as="p" tone="subdued" alignment="center">No tagging activity yet. Create a rule and sync customers to get started.</Text>
+                            <InlineStack align="center" gap="200">
+                              <Button onClick={() => navigate("/app/rules/new")}>Create First Rule</Button>
+                            </InlineStack>
+                          </BlockStack>
+                        </Box>
+                      )}
+                    </Card>
+                  </Layout.Section>
+                </>
+              );
+            }}
+          </Await>
+        </Suspense>
       </Layout>
     </Page>
   );

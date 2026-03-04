@@ -29,6 +29,9 @@ type Pages = {
   "/webhooks/app/uninstalled": {
     params: {};
   };
+  "/webhooks/orders/create": {
+    params: {};
+  };
   "/webhooks/orders/paid": {
     params: {};
   };
@@ -64,7 +67,19 @@ type Pages = {
   "/app/rules/new": {
     params: {};
   };
+  "/app/workflows": {
+    params: {};
+  };
   "/app/settings": {
+    params: {};
+  };
+  "/app/ai/rule": {
+    params: {};
+  };
+  "/app/cleanup": {
+    params: {};
+  };
+  "/app/predict": {
     params: {};
   };
   "/app/pricing": {
@@ -76,12 +91,15 @@ type Pages = {
   "/app/guide": {
     params: {};
   };
+  "/app/roi": {
+    params: {};
+  };
 };
 
 type RouteFiles = {
   "root.tsx": {
     id: "root";
-    page: "/" | "/webhooks/customers/data_request" | "/webhooks/app/scopes_update" | "/webhooks/customers/create" | "/webhooks/customers/redact" | "/webhooks/app/uninstalled" | "/webhooks/orders/paid" | "/webhooks/shop/redact" | "/super-admin" | "/super-admin/login" | "/auth/login" | "/auth/*" | "/app" | "/app/integrations" | "/app/rules" | "/app/additional" | "/app/rules/new" | "/app/settings" | "/app/pricing" | "/app/export" | "/app/guide";
+    page: "/" | "/webhooks/customers/data_request" | "/webhooks/app/scopes_update" | "/webhooks/customers/create" | "/webhooks/customers/redact" | "/webhooks/app/uninstalled" | "/webhooks/orders/create" | "/webhooks/orders/paid" | "/webhooks/shop/redact" | "/super-admin" | "/super-admin/login" | "/auth/login" | "/auth/*" | "/app" | "/app/integrations" | "/app/rules" | "/app/additional" | "/app/rules/new" | "/app/workflows" | "/app/settings" | "/app/ai/rule" | "/app/cleanup" | "/app/predict" | "/app/pricing" | "/app/export" | "/app/guide" | "/app/roi";
   };
   "routes/webhooks.customers.data_request.tsx": {
     id: "routes/webhooks.customers.data_request";
@@ -102,6 +120,10 @@ type RouteFiles = {
   "routes/webhooks.app.uninstalled.tsx": {
     id: "routes/webhooks.app.uninstalled";
     page: "/webhooks/app/uninstalled";
+  };
+  "routes/webhooks.orders.create.tsx": {
+    id: "routes/webhooks.orders.create";
+    page: "/webhooks/orders/create";
   };
   "routes/webhooks.orders.paid.tsx": {
     id: "routes/webhooks.orders.paid";
@@ -137,7 +159,7 @@ type RouteFiles = {
   };
   "routes/app.tsx": {
     id: "routes/app";
-    page: "/app" | "/app/integrations" | "/app/rules" | "/app/additional" | "/app/rules/new" | "/app/settings" | "/app/pricing" | "/app/export" | "/app/guide";
+    page: "/app" | "/app/integrations" | "/app/rules" | "/app/additional" | "/app/rules/new" | "/app/workflows" | "/app/settings" | "/app/ai/rule" | "/app/cleanup" | "/app/predict" | "/app/pricing" | "/app/export" | "/app/guide" | "/app/roi";
   };
   "routes/app.integrations.tsx": {
     id: "routes/app.integrations";
@@ -155,9 +177,25 @@ type RouteFiles = {
     id: "routes/app.rules.new";
     page: "/app/rules/new";
   };
+  "routes/app.workflows.tsx": {
+    id: "routes/app.workflows";
+    page: "/app/workflows";
+  };
   "routes/app.settings.tsx": {
     id: "routes/app.settings";
     page: "/app/settings";
+  };
+  "routes/app.ai.rule.tsx": {
+    id: "routes/app.ai.rule";
+    page: "/app/ai/rule";
+  };
+  "routes/app.cleanup.tsx": {
+    id: "routes/app.cleanup";
+    page: "/app/cleanup";
+  };
+  "routes/app.predict.tsx": {
+    id: "routes/app.predict";
+    page: "/app/predict";
   };
   "routes/app.pricing.tsx": {
     id: "routes/app.pricing";
@@ -175,6 +213,10 @@ type RouteFiles = {
     id: "routes/app.guide";
     page: "/app/guide";
   };
+  "routes/app.roi.tsx": {
+    id: "routes/app.roi";
+    page: "/app/roi";
+  };
 };
 
 type RouteModules = {
@@ -184,6 +226,7 @@ type RouteModules = {
   "routes/webhooks.customers.create": typeof import("./app/routes/webhooks.customers.create.tsx");
   "routes/webhooks.customers.redact": typeof import("./app/routes/webhooks.customers.redact.tsx");
   "routes/webhooks.app.uninstalled": typeof import("./app/routes/webhooks.app.uninstalled.tsx");
+  "routes/webhooks.orders.create": typeof import("./app/routes/webhooks.orders.create.tsx");
   "routes/webhooks.orders.paid": typeof import("./app/routes/webhooks.orders.paid.tsx");
   "routes/webhooks.shop.redact": typeof import("./app/routes/webhooks.shop.redact.tsx");
   "routes/super-admin": typeof import("./app/routes/super-admin.tsx");
@@ -197,9 +240,14 @@ type RouteModules = {
   "routes/app.rules._index": typeof import("./app/routes/app.rules._index.tsx");
   "routes/app.additional": typeof import("./app/routes/app.additional.tsx");
   "routes/app.rules.new": typeof import("./app/routes/app.rules.new.tsx");
+  "routes/app.workflows": typeof import("./app/routes/app.workflows.tsx");
   "routes/app.settings": typeof import("./app/routes/app.settings.tsx");
+  "routes/app.ai.rule": typeof import("./app/routes/app.ai.rule.tsx");
+  "routes/app.cleanup": typeof import("./app/routes/app.cleanup.tsx");
+  "routes/app.predict": typeof import("./app/routes/app.predict.tsx");
   "routes/app.pricing": typeof import("./app/routes/app.pricing.tsx");
   "routes/app._index": typeof import("./app/routes/app._index.tsx");
   "routes/app.export": typeof import("./app/routes/app.export.tsx");
   "routes/app.guide": typeof import("./app/routes/app.guide.tsx");
+  "routes/app.roi": typeof import("./app/routes/app.roi.tsx");
 };
