@@ -6,7 +6,7 @@ import { manageCustomerTags, sendVipDiscount } from "./tags.server";
 interface SyncJobPayload {
     shop: string;
     storeId: string;
-    customersToSync: any[];
+    customersToSync?: any[];
     syncType?: "RULES" | "CLEANUP";
     syncMessage?: string;
     tagsToAdd?: string[];
@@ -14,6 +14,7 @@ interface SyncJobPayload {
 }
 
 import { evaluateOrderRules } from "./order-rules.server";
+import { fetchAllCustomers } from "./shopify-helpers.server";
 
 const BATCH_SIZE = 5;  // Process 5 customers in parallel at a time
 
@@ -178,11 +179,20 @@ async function processOneCustomer(
 }
 
 async function processSyncJob(payload: SyncJobPayload) {
-    const { shop, storeId, customersToSync } = payload;
-    console.log(`[QUEUE_WORKER] Started processing ${customersToSync.length} customers for shop: ${shop}`);
+    const { shop, storeId } = payload;
+    console.log(`[QUEUE_WORKER] Started sync job for shop: ${shop}`);
 
     try {
         const { admin } = await unauthenticated.admin(shop);
+
+        // Fetch customers in the background to unblock UI
+        const store = await db.store.findUnique({ where: { id: storeId } });
+        const isFree = store?.planName === "Free" || store?.planName === "";
+
+        let customersToSync = payload.customersToSync;
+        if (!customersToSync) {
+            customersToSync = await fetchAllCustomers(admin, isFree);
+        }
 
         const activeRules = await db.rule.findMany({
             where: { storeId, isActive: true }

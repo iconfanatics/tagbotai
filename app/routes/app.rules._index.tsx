@@ -69,14 +69,20 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     if (actionType === "sync") {
         const store = await getCachedStore(session.shop);
         if (store) {
-            const isFree = store.planName === "Free" || store.planName === "";
-            const { admin } = await authenticate.admin(request);
-            const allEdges = await fetchAllCustomers(admin, isFree);
+            // Eagerly set syncing to true so the UI updates instantly
+            await db.store.update({
+                where: { id: store.id },
+                data: {
+                    isSyncing: true,
+                    syncTarget: 1, // temporary target so progress bar renders
+                    syncCompleted: 0,
+                    syncMessage: "Fetching customer records from Shopify…"
+                }
+            });
 
             await enqueueSyncJob({
                 shop: session.shop,
                 storeId: store.id,
-                customersToSync: allEdges,
                 syncType: "RULES",
                 syncMessage: "Historically evaluating existing customers against rules…"
             });
