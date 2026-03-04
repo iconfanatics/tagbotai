@@ -184,6 +184,22 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             try {
                 await manageCustomerTags(admin, store.id, customerId, addTagNames, removeTagNames);
 
+                // IMPORTANT: Manually update the local Prisma customer cache with the order-based tags
+                // so the Rules Dashboard "Matching Customers" count updates instantly.
+                const dbCustomer = await db.customer.findUnique({
+                    where: { id_storeId: { id: customerId, storeId: store.id } }
+                });
+                if (dbCustomer) {
+                    let currentTags = dbCustomer.tags ? dbCustomer.tags.split(",").map(t => t.trim()).filter(Boolean) : [];
+                    if (addTagNames.length > 0) currentTags = [...currentTags, ...addTagNames];
+                    if (removeTagNames.length > 0) currentTags = currentTags.filter((t: string) => !removeTagNames.includes(t));
+
+                    await db.customer.update({
+                        where: { id_storeId: { id: customerId, storeId: store.id } },
+                        data: { tags: Array.from(new Set(currentTags)).join(", ") }
+                    });
+                }
+
                 // Check for VIP Discount triggers
                 for (const item of tagsToAddLog) {
                     const normalizedTag = item.tag.toLowerCase();
