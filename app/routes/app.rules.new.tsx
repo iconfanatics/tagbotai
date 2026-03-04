@@ -11,7 +11,7 @@ import {
 } from "@shopify/polaris";
 import {
     CashDollarIcon, PersonIcon, ClockIcon, SearchIcon, MagicIcon,
-    OrderIcon, PaymentIcon, DiscountIcon, EditIcon, PlusIcon, LocationIcon
+    OrderIcon, PaymentIcon, DiscountIcon, EditIcon, PlusIcon, LocationIcon, DeleteIcon
 } from "@shopify/polaris-icons";
 
 // ─── Loader ───────────────────────────────────────────────────────────────────
@@ -48,48 +48,38 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     // ── Save Rule ────────────────────────────────────────────────
     const name = fd.get("name") as string;
-    const ruleType = fd.get("ruleType") as string;
     const targetTag = fd.get("targetTag") as string;
+    const conditionsJson = fd.get("conditionsJson") as string;
 
     if (!name?.trim() || !targetTag?.trim()) return { error: "Rule name and tag are required." };
 
     let conditions: any[] = [];
-    let description = "";
-    let collectionId: string | null = null;
-    let collectionName: string | null = null;
+    try {
+        if (conditionsJson) {
+            conditions = JSON.parse(conditionsJson);
+            // Ensure numbers are converted if needed for metrics
+            conditions = conditions.map((c: any) => {
+                if (c.ruleCategory === "metric" && c.field !== "lastOrderDate") {
+                    return { ...c, value: Number(c.value) };
+                }
+                return c;
+            });
+        }
+    } catch (e) { return { error: "Invalid conditions structure" }; }
 
-    if (ruleType === "metric") {
-        const field = fd.get("field") as string;
-        const operator = fd.get("operator") as string;
-        const value = fd.get("value") as string;
-        if (!field || !operator || !value) return { error: "All condition fields are required." };
-        const cv = field !== "lastOrderDate" ? Number(value) : value;
-        conditions = [{ field, operator, value: cv }];
-        description = `Customer ${field} ${operator} ${cv}`;
-    } else if (ruleType === "collection") {
-        collectionId = fd.get("collectionId") as string;
-        collectionName = fd.get("collectionName") as string;
-        if (!collectionId || !collectionName) return { error: "Collection ID and Name are required." };
-        description = `Purchases from: ${collectionName}`;
-    } else if (ruleType === "order") {
-        const orderField = fd.get("orderField") as string;
-        const orderOperator = fd.get("orderOperator") as string;
-        const orderValue = fd.get("orderValue") as string;
-        if (!orderField || !orderOperator || !orderValue) return { error: "All order condition fields are required." };
-        conditions = [{ field: orderField, operator: orderOperator, value: orderValue, ruleCategory: "order" }];
-        description = `Order: ${orderField} ${orderOperator} "${orderValue}"`;
-    }
+    const description = `${conditions.length} condition(s) specified.`;
 
     await db.rule.create({
         data: {
             storeId: store.id, name, description,
             conditions: JSON.stringify(conditions), targetTag,
-            collectionId, collectionName, isActive: true
+            isActive: true
         }
     });
 
     // Fire-and-forget: do NOT await this — redirect immediately
-    if (ruleType === "metric") {
+    const hasMetric = conditions.some((c: any) => c.ruleCategory === "metric");
+    if (hasMetric) {
         Promise.resolve().then(async () => {
             try {
                 const isFree = store.planName === "Free" || store.planName === "";
@@ -331,14 +321,8 @@ export default function NewRule() {
 
     // Form state
     const [name, setName] = useState("");
-    const [ruleType, setRuleType] = useState("metric");
-    const [field, setField] = useState("totalSpent");
-    const [operator, setOperator] = useState("greaterThan");
-    const [value, setValue] = useState("");
-    const [orderField, setOrderField] = useState("order_source");
-    const [orderOperator, setOrderOperator] = useState("contains");
-    const [orderValue, setOrderValue] = useState("");
     const [targetTag, setTargetTag] = useState("");
+    const [conditions, setConditions] = useState<any[]>([{ ruleCategory: "metric", field: "totalSpent", operator: "greaterThan", value: "" }]);
 
     // Auto-populate form when AI returns a result
     useEffect(() => {
@@ -347,15 +331,20 @@ export default function NewRule() {
         setSelectedTemplate(null);
         setName(gen.name || aiPrompt);
         setTargetTag(gen.targetTag || "");
-        if (gen.ruleType === "order") {
-            setRuleType("order");
-            const cond = gen.conditions?.[0];
-            if (cond) { setOrderField(cond.field || "order_source"); setOrderOperator(cond.operator || "contains"); setOrderValue(String(cond.value || "")); }
+
+        let newConditions = [];
+        if (gen.conditions && gen.conditions.length > 0) {
+            // Standardize AI conditions
+            newConditions = gen.conditions.map((c: any) => ({
+                ruleCategory: c.ruleCategory || "metric",
+                field: c.field || "totalSpent",
+                operator: c.operator || "greaterThan",
+                value: String(c.value || "")
+            }));
         } else {
-            setRuleType("metric");
-            const cond = gen.conditions?.[0];
-            if (cond) { setField(cond.field || "totalSpent"); setOperator(cond.operator || "greaterThan"); setValue(String(cond.value || "")); }
+            newConditions = [{ ruleCategory: "metric", field: "totalSpent", operator: "greaterThan", value: "" }];
         }
+        setConditions(newConditions);
         setIsModalOpen(true);
     }, [aiFetcher.data]);
 
@@ -376,33 +365,50 @@ export default function NewRule() {
     const applyTemplate = (t: Template) => {
         setSelectedTemplate(t);
         setName(t.label);
-        setRuleType(t.ruleType);
         setTargetTag(t.tag);
         if (t.ruleType === "metric") {
-            setField(t.field || "totalSpent");
-            setOperator(t.operator || "greaterThan");
-            setValue(t.value || "");
+            setConditions([{ ruleCategory: "metric", field: t.field || "totalSpent", operator: t.operator || "greaterThan", value: t.value || "" }]);
         } else if (t.ruleType === "order") {
-            setOrderField(t.orderField || "order_source");
-            setOrderOperator(t.orderOperator || "contains");
-            setOrderValue(t.orderValue || "");
+            setConditions([{ ruleCategory: "order", field: t.orderField || "order_source", operator: t.orderOperator || "contains", value: t.orderValue || "" }]);
         }
         setIsModalOpen(true);
     };
 
     const openBlank = () => {
         setSelectedTemplate(null);
-        setName(""); setTargetTag(""); setRuleType("metric");
-        setField("totalSpent"); setOperator("greaterThan"); setValue("");
-        setOrderField("order_source"); setOrderOperator("contains"); setOrderValue("");
+        setName(""); setTargetTag("");
+        setConditions([{ ruleCategory: "metric", field: "totalSpent", operator: "greaterThan", value: "" }]);
         setIsModalOpen(true);
     };
 
+    const addCondition = () => {
+        setConditions([...conditions, { ruleCategory: "order", field: "order_source", operator: "contains", value: "" }]);
+    };
+
+    const updateCondition = (index: number, key: string, val: string) => {
+        const newConds = [...conditions];
+        newConds[index][key] = val;
+        // Auto-fix operator on field switch
+        if (key === "field") {
+            if (newConds[index].ruleCategory === "metric") {
+                newConds[index].operator = val === "lastOrderDate" ? "isBefore" : "greaterThan";
+            } else {
+                newConds[index].operator = getOps(val)[0]?.value || "contains";
+            }
+        }
+        if (key === "ruleCategory") {
+            if (val === "metric") { newConds[index].field = "totalSpent"; newConds[index].operator = "greaterThan"; }
+            else { newConds[index].field = "order_source"; newConds[index].operator = "contains"; }
+        }
+        setConditions(newConds);
+    };
+
+    const removeCondition = (index: number) => {
+        setConditions(conditions.filter((_, i) => i !== index));
+    };
+
     const handleSubmit = () => {
-        const fd: Record<string, string> = { name, ruleType, targetTag };
-        if (ruleType === "metric") Object.assign(fd, { field, operator, value });
-        else if (ruleType === "order") Object.assign(fd, { orderField, orderOperator, orderValue });
-        submit(fd, { method: "post" });
+        submit({ name, targetTag, conditionsJson: JSON.stringify(conditions) }, { method: "post" });
     };
 
     const metricFieldOptions = [
@@ -446,44 +452,63 @@ export default function NewRule() {
                             placeholder="e.g. High-value Customers"
                             autoComplete="off"
                         />
-                        <Select
-                            label="Rule Type"
-                            options={[
-                                { label: "Customer Metric", value: "metric" },
-                                { label: "Order Properties", value: "order" },
-                            ]}
-                            value={ruleType}
-                            onChange={v => { setRuleType(v); }}
-                        />
+                        <Text variant="headingSm" as="h6">Conditions (Match ALL)</Text>
+                        <BlockStack gap="300">
+                            {conditions.map((cond, index) => {
+                                const isMetric = cond.ruleCategory === "metric";
+                                const ops = isMetric
+                                    ? (cond.field === "lastOrderDate"
+                                        ? [{ label: "Before", value: "isBefore" }, { label: "After", value: "isAfter" }]
+                                        : [{ label: "Greater than (>)", value: "greaterThan" }, { label: "Less than (<)", value: "lessThan" }, { label: "Equals (=)", value: "equals" }])
+                                    : getOps(cond.field);
 
-                        {ruleType === "metric" && (
-                            <FormLayout.Group>
-                                <Select label="Customer Field" options={metricFieldOptions} value={field} onChange={v => { setField(v); setOperator("greaterThan"); }} />
-                                <Select label="Operator" options={metricOperatorOptions} value={operator} onChange={setOperator} />
-                                <TextField
-                                    label={field === "lastOrderDate" ? "Date (YYYY-MM-DD)" : "Value"}
-                                    value={value}
-                                    onChange={setValue}
-                                    placeholder={field === "totalSpent" ? "1000" : field === "orderCount" ? "5" : "2024-01-01"}
-                                    autoComplete="off"
-                                />
-                            </FormLayout.Group>
-                        )}
-
-                        {ruleType === "order" && (
-                            <FormLayout.Group>
-                                <Select label="Order Field" options={orderFieldOptions} value={orderField} onChange={v => { setOrderField(v); setOrderOperator(getOps(v)[0]?.value || "contains"); }} />
-                                <Select label="Operator" options={orderOperatorOptions} value={orderOperator} onChange={setOrderOperator} />
-                                <TextField
-                                    label="Value"
-                                    value={orderValue}
-                                    onChange={setOrderValue}
-                                    helpText={getHint(orderField)}
-                                    placeholder="e.g. facebook, paypal, true"
-                                    autoComplete="off"
-                                />
-                            </FormLayout.Group>
-                        )}
+                                return (
+                                    <div key={index} style={{ padding: "12px", background: "var(--p-color-bg-surface-secondary)", borderRadius: "8px", position: "relative" }}>
+                                        {conditions.length > 1 && (
+                                            <div style={{ position: "absolute", top: "12px", right: "12px", zIndex: 2 }}>
+                                                <Button size="icon" variant="tertiary" tone="critical" onClick={() => removeCondition(index)} icon={DeleteIcon} />
+                                            </div>
+                                        )}
+                                        <FormLayout>
+                                            <Select
+                                                label="Condition Scope"
+                                                options={[
+                                                    { label: "Customer Property", value: "metric" },
+                                                    { label: "Order Property", value: "order" },
+                                                ]}
+                                                value={cond.ruleCategory}
+                                                onChange={v => updateCondition(index, "ruleCategory", v)}
+                                            />
+                                            <FormLayout.Group>
+                                                <Select
+                                                    label="Field"
+                                                    options={isMetric ? metricFieldOptions : orderFieldOptions}
+                                                    value={cond.field}
+                                                    onChange={v => updateCondition(index, "field", v)}
+                                                />
+                                                <Select
+                                                    label="Operator"
+                                                    options={ops}
+                                                    value={cond.operator}
+                                                    onChange={v => updateCondition(index, "operator", v)}
+                                                />
+                                                <TextField
+                                                    label={isMetric ? (cond.field === "lastOrderDate" ? "Date (YYYY-MM-DD)" : "Value") : "Value"}
+                                                    value={cond.value}
+                                                    onChange={v => updateCondition(index, "value", v)}
+                                                    helpText={!isMetric ? getHint(cond.field) : ""}
+                                                    placeholder={isMetric ? (cond.field === "totalSpent" ? "1000" : cond.field === "orderCount" ? "5" : "2024-01-01") : "e.g. facebook, true"}
+                                                    autoComplete="off"
+                                                />
+                                            </FormLayout.Group>
+                                        </FormLayout>
+                                    </div>
+                                );
+                            })}
+                        </BlockStack>
+                        <InlineStack>
+                            <Button size="slim" icon={PlusIcon} onClick={addCondition}>Add AND Condition</Button>
+                        </InlineStack>
 
                         <TextField
                             label="Tag to Apply"
