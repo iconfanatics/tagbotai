@@ -49,6 +49,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     // ── Save Rule ────────────────────────────────────────────────
     const name = fd.get("name") as string;
     const targetTag = fd.get("targetTag") as string;
+    const matchType = (fd.get("matchType") as string) || "ALL";
     const conditionsJson = fd.get("conditionsJson") as string;
 
     if (!name?.trim() || !targetTag?.trim()) return { error: "Rule name and tag are required." };
@@ -73,7 +74,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         data: {
             storeId: store.id, name, description,
             conditions: JSON.stringify(conditions), targetTag,
-            isActive: true
+            matchType, isActive: true
         }
     });
 
@@ -256,6 +257,21 @@ const TEMPLATES: Template[] = [
         longDescription: "When order shipping country equals a specific 2-letter code, automatically add tag [Country]-Customer to customer.",
         ruleType: "order", orderField: "shipping_country", orderOperator: "equals", orderValue: "", tag: "Country-Customer",
     },
+    // New Additions per User Request
+    {
+        key: "high_volume_social", label: "High Value Social Ads", popular: true,
+        category: "order", icon: CashDollarIcon,
+        description: "Spent over $500 AND came from Facebook",
+        longDescription: "When orders are created where traffic source is Facebook and total spent is greater than $500, apply High-Value-FB.",
+        ruleType: "metric", field: "totalSpent", operator: "greaterThan", value: "500", tag: "High-Value-FB",
+    },
+    {
+        key: "tiktok_cod", label: "TikTok COD Buyers",
+        category: "payment", icon: PaymentIcon,
+        description: "Traffic from TikTok + Cash on Delivery",
+        longDescription: "When orders are created from TikTok using COD payment method, apply TikTok-COD.",
+        ruleType: "order", orderField: "payment_method", orderOperator: "contains", orderValue: "cash_on_delivery", tag: "TikTok-COD",
+    },
     // Discount
     {
         key: "discount_user", label: "Discount Hunters", popular: true,
@@ -322,6 +338,7 @@ export default function NewRule() {
     // Form state
     const [name, setName] = useState("");
     const [targetTag, setTargetTag] = useState("");
+    const [matchType, setMatchType] = useState("ALL");
     const [conditions, setConditions] = useState<any[]>([{ ruleCategory: "metric", field: "totalSpent", operator: "greaterThan", value: "" }]);
 
     // Auto-populate form when AI returns a result
@@ -331,6 +348,7 @@ export default function NewRule() {
         setSelectedTemplate(null);
         setName(gen.name || aiPrompt);
         setTargetTag(gen.targetTag || "");
+        setMatchType(gen.matchType || "ALL");
 
         let newConditions = [];
         if (gen.conditions && gen.conditions.length > 0) {
@@ -366,17 +384,32 @@ export default function NewRule() {
         setSelectedTemplate(t);
         setName(t.label);
         setTargetTag(t.tag);
-        if (t.ruleType === "metric") {
-            setConditions([{ ruleCategory: "metric", field: t.field || "totalSpent", operator: t.operator || "greaterThan", value: t.value || "" }]);
-        } else if (t.ruleType === "order") {
-            setConditions([{ ruleCategory: "order", field: t.orderField || "order_source", operator: t.orderOperator || "contains", value: t.orderValue || "" }]);
+        setMatchType("ALL");
+
+        let newConditions = [];
+        if (t.key === "high_volume_social") {
+            newConditions = [
+                { ruleCategory: "metric", field: "totalSpent", operator: "greaterThan", value: "500" },
+                { ruleCategory: "order", field: "order_source", operator: "contains", value: "facebook" }
+            ];
+        } else if (t.key === "tiktok_cod") {
+            newConditions = [
+                { ruleCategory: "order", field: "order_source", operator: "contains", value: "tiktok" },
+                { ruleCategory: "order", field: "payment_method", operator: "contains", value: "cash_on_delivery" }
+            ];
+        } else if (t.ruleType === "metric") {
+            newConditions = [{ ruleCategory: "metric", field: t.field || "totalSpent", operator: t.operator || "greaterThan", value: t.value || "" }];
+        } else {
+            newConditions = [{ ruleCategory: "order", field: t.orderField || "order_source", operator: t.orderOperator || "contains", value: t.orderValue || "" }];
         }
+
+        setConditions(newConditions);
         setIsModalOpen(true);
     };
 
     const openBlank = () => {
         setSelectedTemplate(null);
-        setName(""); setTargetTag("");
+        setName(""); setTargetTag(""); setMatchType("ALL");
         setConditions([{ ruleCategory: "metric", field: "totalSpent", operator: "greaterThan", value: "" }]);
         setIsModalOpen(true);
     };
@@ -408,7 +441,7 @@ export default function NewRule() {
     };
 
     const handleSubmit = () => {
-        submit({ name, targetTag, conditionsJson: JSON.stringify(conditions) }, { method: "post" });
+        submit({ name, targetTag, matchType, conditionsJson: JSON.stringify(conditions) }, { method: "post" });
     };
 
     const metricFieldOptions = [
@@ -448,7 +481,16 @@ export default function NewRule() {
                             placeholder="e.g. High-value Customers"
                             autoComplete="off"
                         />
-                        <Text variant="headingSm" as="h6">Conditions (Match ALL)</Text>
+                        <Select
+                            label="Multiple Conditions Behavior"
+                            options={[
+                                { label: "Match ALL conditions (AND)", value: "ALL" },
+                                { label: "Match ANY condition (OR)", value: "ANY" },
+                            ]}
+                            value={matchType}
+                            onChange={setMatchType}
+                        />
+                        <Text variant="headingSm" as="h6">Conditions</Text>
                         <BlockStack gap="300">
                             {conditions.map((cond, index) => {
                                 const isMetric = cond.ruleCategory === "metric";

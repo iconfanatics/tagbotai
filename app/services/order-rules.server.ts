@@ -130,14 +130,17 @@ export function evaluateOrderRules(
         // Skip if customer already has this tag
         if (existingCustomerTags.includes(rule.targetTag)) continue;
 
-        // AND logic: all order conditions must match
-        const isMatch = orderConditions.every(c => evaluateOrderCondition(orderData, c));
+        // AND logic vs OR logic
+        const isMatch = rule.matchType === "ANY"
+            ? orderConditions.some(c => evaluateOrderCondition(orderData, c))
+            : orderConditions.every(c => evaluateOrderCondition(orderData, c));
 
         if (isMatch) {
             const reasons = orderConditions.map(c => `order.${c.field} ${c.operator} "${c.value}"`);
+            const joinWord = rule.matchType === "ANY" ? " OR " : " AND ";
             results.push({
                 tag: rule.targetTag,
-                reason: `Order rule "${rule.name}" matched (${reasons.join(" AND ")})`
+                reason: `Order rule "${rule.name}" matched (${reasons.join(joinWord)})`
             });
         }
     }

@@ -70,6 +70,7 @@ model Rule {
   name           String
   description    String?
   conditions     String        // Stored as JSON string
+  matchType      String        @default("ALL") // "ALL" or "ANY"
   targetTag      String
   collectionId   String?       // Targeting specific Shopify collections
   collectionName String?

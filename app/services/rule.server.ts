@@ -47,14 +47,17 @@ export function evaluateRule(customer: Customer, rule: Rule): { isMatch: boolean
             return { isMatch: false, reason: "Order-based rule (skipped for customer eval)" };
         }
 
-        // AND logic: all conditions must be true
-        const isMatch = conditions.every((condition) => evaluateCondition(customer, condition));
+        // AND logic vs OR logic
+        const isMatch = rule.matchType === "ANY"
+            ? conditions.some((condition) => evaluateCondition(customer, condition))
+            : conditions.every((condition) => evaluateCondition(customer, condition));
 
         // Generate an english reason if it matches
         let reason = "";
         if (isMatch) {
             const reasons = conditions.map(c => `${c.field} ${c.operator} ${c.value}`);
-            reason = `Matched rule "${rule.name}" (${reasons.join(" AND ")})`;
+            const joinWord = rule.matchType === "ANY" ? " OR " : " AND ";
+            reason = `Matched rule "${rule.name}" (${reasons.join(joinWord)})`;
         } else {
             reason = `No longer matches rule "${rule.name}"`;
         }

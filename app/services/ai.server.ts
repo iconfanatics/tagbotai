@@ -9,11 +9,12 @@ export interface GeneratedRule {
     targetTag: string;
     description: string;
     ruleType: "metric" | "order";
+    matchType?: "ALL" | "ANY";
     conditions: Array<{
         field: string;
         operator: string;
         value: string;
-        ruleCategory?: "order";
+        ruleCategory?: "metric" | "order";
     }>;
 }
 
@@ -62,11 +63,13 @@ RULES:
 5. If about spend/revenue → use ruleType: "metric", field: "totalSpent"
 6. If about order count/frequency → field: "orderCount"
 7. All values must be strings in the JSON.
+8. If the user mentions "OR", "either", or asks for multiple independent paths, set "matchType" to "ANY". Otherwise default to "ALL" (AND logic).
 
 OUTPUT FORMAT — return ONLY raw JSON, no markdown:
 {
   "name": "Facebook Campaign Buyers",
   "ruleType": "order",
+  "matchType": "ALL",
   "targetTag": "Social-FB",
   "description": "Tags customers who ordered via Facebook",
   "conditions": [
