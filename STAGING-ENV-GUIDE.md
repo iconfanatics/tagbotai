@@ -1,62 +1,114 @@
-# How to Set Up a Shopify App Staging Environment on Vercel
-**Objective:** Create a safe, isolated clone of TagBot AI where you can push and test new code without affecting the live Production app or crashing your active merchants.
+# Staging Environment Setup Guide
+
+Complete guide based on actual setup of TagBot AI staging. Follow exactly in order.
 
 ---
 
-## Step 1: Create the "Staging App" in Shopify Partners
-Because Shopify requires completely unique API Keys and redirect URLs for each application instance, you cannot use your Live app for testing.
+## Step 1 — Create Staging App in Shopify Partners
 
-1. Log into your **[Shopify Partner Dashboard](https://partners.shopify.com/)**.
-2. Go to **Apps** in the left sidebar.
-3. Click **Create App** (or "Create App Manually").
-4. Name it **"TagBot AI (Staging)"**.
-5. Once created, go to **Client Credentials** and copy the new `Client ID` and `Client Secret`. *Keep these handy.*
+1. Go to [partners.shopify.com](https://partners.shopify.com) → **Apps → Create App**
+2. Name it **"TagBot AI (Staging)"**
+3. After creation, go to **Client Credentials** → copy the **Client ID** and **Client Secret**
+4. Go to **App Setup** → enable **"Embed in Shopify admin"** ← **critical, do this now**
 
-## Step 2: Create a Development Test Store
-You need a fake store to install your fake Staging app onto.
-1. Still inside the Partner Dashboard, click **Stores** on the left sidebar.
-2. Click **Add Store** -> **Create development store**.
-3. Select **"Test an app or theme"**.
-4. Name it something like "TagBot Dev Test" and click Create.
+---
 
-## Step 3: Set Up the Vercel Staging Branch
-Vercel has "Preview Deployments" built-in, meaning any branch other than `main` automatically gets its own isolated preview URL!
+## Step 2 — Create a Dev Test Store
 
-1. Open your terminal in VSCode and run the following to create and switch to a staging branch:
-   ```bash
-   git checkout -b staging
-   git push origin staging
-   ```
-2. Log into your **[Vercel Dashboard](https://vercel.com/api/auth/login)** and go to your `tagbot-ai` project.
-3. You will see a new deployment building under the "Preview" tab for the `staging` branch. 
-4. Once it finishes building, copy that **exact Preview URL** (it will look something like `https://tagbot-ai-git-staging-yourusername.vercel.app`).
+1. In Partners → **Stores → Add Store → Create development store**
+2. Select **"Test an app or theme"**
+3. Give it a name like "TagBot Dev Store"
 
-## Step 4: Link Vercel to your Staging App
-1. Go back to your **TagBot AI (Staging)** App in the Shopify Partner Dashboard.
-2. Go to **App setup**.
-3. Under **App URL**, paste your Vercel Preview URL.
-4. Under **Allowed redirection URL(s)**, paste:
-   `https://[YOUR_VERCEL_PREVIEW_URL]/auth/callback`
-   `https://[YOUR_VERCEL_PREVIEW_URL]/api/auth/callback`
-5. Save your changes.
+---
 
-## Step 5: Duplicate the Environment Variables for Staging
-Vercel allows you to have different `.env` variables for Production vs Preview. Since your Production app uses your Live Shopify API keys, your Preview app needs your Staging Shopify API keys!
+## Step 3 — Create the Staging Git Branch
 
-1. In your **Vercel Dashboard**, go to your Project **Settings** -> **Environment Variables**.
-2. Find your `SHOPIFY_API_KEY`. Uncheck "Preview" so it only applies to Production.
-3. Add a **New** `SHOPIFY_API_KEY`:
-   - Value: The `Client ID` from your *Staging* app.
-   - Environments: Check **ONLY "Preview"**.
-4. Repeat this exact process for `SHOPIFY_API_SECRET` and `SHOPIFY_APP_URL` (using the Vercel Preview URL you copied earlier).
+```bash
+cd ~/tag-bot-ai-smart-segmentation
+git checkout -b staging
+git push origin staging
+```
 
-## The Final Result: Your New Workflow
-You have now fully detached your testing environment from your live environment!
+---
 
-**When building new features:**
-1. Do your work in VSCode on the `staging` branch.
-2. Run `git push origin staging`.
-3. Vercel automatically deploys it.
-4. Go to your `TagBot Dev Test` Shopify store, click on `TagBot AI (Staging)`, and test your feature safely.
-5. If it works perfectly, go to GitHub and click **"Merge Pull Request"** to merge `staging` into `main`.
-6. Vercel will automatically deploy it to your live Production merchants!
+## Step 4 — Create the Staging Shopify Config File
+
+Run from inside the project folder:
+
+```bash
+shopify app config link --config shopify.app.staging.toml
+```
+
+Select **"TagBot AI (Staging)"** when prompted. Then update the generated file to match production — set the correct `application_url`, `redirect_urls`, `scopes`, and webhook subscriptions. Use `shopify.app.toml` as the template, just swap the URLs.
+
+Deploy the config to Shopify:
+
+```bash
+shopify app deploy --config shopify.app.staging.toml --force
+```
+
+---
+
+## Step 5 — Push Staging Config to GitHub
+
+```bash
+git add shopify.app.staging.toml
+git commit -m "Add staging Shopify config"
+git push origin staging
+```
+
+Vercel will auto-deploy the `staging` branch. Copy the Preview URL — it will look like:
+`https://tagbotai-git-staging-iconfanatics-projects.vercel.app`
+
+---
+
+## Step 6 — Set Vercel Environment Variables
+
+Go to **Vercel → Project → Settings → Environment Variables**.
+
+These vars need **different values** for Production vs Preview:
+
+| Variable | Production | Preview (Staging) |
+|---|---|---|
+| `SHOPIFY_API_KEY` | Production Client ID | **Staging Client ID** |
+| `SHOPIFY_API_SECRET` | Production Client Secret | **Staging Client Secret** |
+| `SHOPIFY_APP_URL` | `https://tagbotai.vercel.app` | **Staging Vercel URL** |
+
+Everything else (`TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`, `GEMINI_API_KEY`, `PRISMA_DB_URL`, `SCOPES`) → set to **All Environments**, same values.
+
+> **Note:** If you get "No environment variables were created", the var already exists. Edit it and enable the Preview checkbox instead.
+
+---
+
+## Step 7 — Disable Vercel Deployment Protection ← Easy to Miss
+
+Go to **Vercel → Project → Settings → Deployment Protection**
+
+Set **"Vercel Authentication"** to **Disabled** for Preview.
+
+Without this, Shopify can't load the staging app inside its iframe — it will say "refused to connect".
+
+---
+
+## Step 8 — Install Staging App on Dev Store
+
+1. Shopify Partners → **TagBot AI (Staging) → Select store** → pick your dev store
+2. Click **Install**
+
+The staging app should now load inside the Shopify admin.
+
+---
+
+## Daily Workflow
+
+```bash
+# Work on new features:
+git checkout staging
+# ... make changes ...
+git push origin staging       # auto-deploys to staging Vercel URL
+
+# Test in your dev store → when ready:
+git checkout main
+git merge staging
+git push origin main          # goes live to production merchants
+```
