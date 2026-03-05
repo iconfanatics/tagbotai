@@ -424,12 +424,12 @@ export default function FeaturesGuide() {
                                 <Text variant="headingMd" as="h2">About This App</Text>
                                 <InlineStack gap="600" wrap={false}>
                                     <BlockStack gap="100">
-                                        <Text variant="bodySm" as="p" tone="subdued">App Developed by</Text>
+                                        <Text variant="bodySm" as="p" tone="subdued">Co-Founder</Text>
                                         <Text variant="bodyMd" as="p" fontWeight="bold">MD Momin Ullah</Text>
                                     </BlockStack>
                                     <BlockStack gap="100">
-                                        <Text variant="bodySm" as="p" tone="subdued">Head of QA</Text>
-                                        <Text variant="bodyMd" as="p" fontWeight="bold">MD. Kamal Hossain</Text>
+                                        <Text variant="bodySm" as="p" tone="subdued">Co-Founder</Text>
+                                        <Text variant="bodyMd" as="p" fontWeight="bold">MD Kamal Hossain</Text>
                                     </BlockStack>
                                 </InlineStack>
                             </BlockStack>
