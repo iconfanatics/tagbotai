@@ -101,7 +101,6 @@ export default function ROIDashboard() {
     const navigate = useNavigate();
     const isFree = !planName || planName === "Free";
 
-    // Chart data — top 8 for readability
     const top8 = segments.slice(0, 8);
     const barChartData = top8.map((s, i) => ({
         name: s.tag.length > 12 ? s.tag.slice(0, 11) + "…" : s.tag,
@@ -117,157 +116,126 @@ export default function ROIDashboard() {
 
     const avgOV = totalOrders > 0 ? (totalRevenue / totalOrders).toFixed(2) : "0";
 
-    // Table rows
     const tableRows = segments.map((s, i) => {
         const pct = totalRevenue > 0 ? ((s.revenue / totalRevenue) * 100).toFixed(1) : "0";
         const barWidth = totalRevenue > 0 ? Math.round((s.revenue / (segments[0]?.revenue || 1)) * 100) : 0;
         return [
-            <InlineStack key={s.tag} gap="200" blockAlign="center" wrap={false}>
-                <div style={{ width: 10, height: 10, borderRadius: "50%", background: CHART_COLORS[i % CHART_COLORS.length], flexShrink: 0 }} />
-                <Text variant="bodyMd" fontWeight="semibold" as="span">{s.tag}</Text>
-            </InlineStack>,
-            <div key={`bar-${s.tag}`} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div key={s.tag} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ width: 10, height: 10, borderRadius: "50%", background: CHART_COLORS[i % CHART_COLORS.length] }} />
+                <span style={{ fontWeight: 600 }}>{s.tag}</span>
+            </div>,
+            <div key={`bar-${s.tag}`} style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <div style={{ width: 100, height: 6, background: "rgba(0,0,0,0.06)", borderRadius: 3, overflow: "hidden" }}>
-                    <div style={{ width: `${barWidth}%`, height: "100%", background: CHART_COLORS[i % CHART_COLORS.length], borderRadius: 3, transition: "width 0.4s ease" }} />
+                    <div style={{ width: `${barWidth}%`, height: "100%", background: CHART_COLORS[i % CHART_COLORS.length], borderRadius: 3 }} />
                 </div>
-                <Text variant="bodyMd" as="span">{`$${s.revenue.toLocaleString()}`}</Text>
+                <span>{`$${s.revenue.toLocaleString()}`}</span>
             </div>,
             s.customers.toLocaleString(),
             s.orders.toLocaleString(),
             `$${s.avgOrderValue.toLocaleString()}`,
-            <Badge key={`pct-${s.tag}`} tone="success">{`${pct}%`}</Badge>
+            <span key={`pct-${s.tag}`} className="ds-tag green">{`${pct}%`}</span>
         ];
     });
 
     return (
-        <Page
-            title="Revenue ROI"
-            subtitle="Revenue attributed to each customer tag segment."
-            backAction={{ content: "Dashboard", url: "/app" }}
-        >
-            <Layout>
+        <Page backAction={{ content: "Dashboard", url: "/app" }}>
+            <div className="ds-page" style={{ maxWidth: 1100, margin: '0 auto', paddingBottom: 60 }}>
+                
+                <div style={{ padding: '24px 0 32px' }}>
+                    <h1 className="ds-section-title" style={{ fontSize: 26, letterSpacing: '-0.5px' }}>
+                        📈 Revenue ROI
+                    </h1>
+                    <p style={{ fontSize: 14, color: '#9ca3af', margin: 0 }}>Revenue attributed to each customer tag segment.</p>
+                </div>
+
                 {isFree && (
-                    <Layout.Section>
-                        <Banner tone="warning">
-                            <Text as="p">Revenue analytics are available on <strong>Growth</strong> plan and above.</Text>
-                            <Box paddingBlockStart="200">
-                                <Button onClick={() => navigate("/app/pricing")}>Upgrade Now</Button>
-                            </Box>
-                        </Banner>
-                    </Layout.Section>
+                    <div className="ds-alert warning" style={{ marginBottom: 24 }}>
+                        <div style={{ flex: 1 }}>Revenue analytics are available on <strong>Growth</strong> plan and above.</div>
+                        <button className="ds-btn sm" style={{ background: '#fff', border: '1px solid #e5e7eb' }} onClick={() => navigate("/app/pricing")}>View Plans</button>
+                    </div>
                 )}
 
-                {/* ── KPI Row ────────────────────────────────── */}
-                <Layout.Section>
-                    <Grid>
-                        <Grid.Cell columnSpan={{ xs: 6, sm: 3, md: 3, lg: 3, xl: 3 }}>
-                            <KpiCard
-                                label="Total Revenue"
-                                value={`$${totalRevenue.toLocaleString()}`}
-                                sub={`${totalCustomers.toLocaleString()} customers tracked`}
-                                icon={MoneyIcon}
-                                tone="magic"
-                                bg="bg-surface-magic"
-                            />
-                        </Grid.Cell>
-                        <Grid.Cell columnSpan={{ xs: 6, sm: 3, md: 3, lg: 3, xl: 3 }}>
-                            <KpiCard
-                                label="Top Segment"
-                                value={segments[0]?.tag ?? "—"}
-                                sub={segments[0] ? `$${segments[0].revenue.toLocaleString()} revenue` : "No data"}
-                                icon={ChartVerticalIcon}
-                                tone="success"
-                            />
-                        </Grid.Cell>
-                        <Grid.Cell columnSpan={{ xs: 6, sm: 3, md: 3, lg: 3, xl: 3 }}>
-                            <KpiCard
-                                label="Unique Segments"
-                                value={segments.length.toString()}
-                                sub="Tag-based segments"
-                                icon={HashtagIcon}
-                            />
-                        </Grid.Cell>
-                        <Grid.Cell columnSpan={{ xs: 6, sm: 3, md: 3, lg: 3, xl: 3 }}>
-                            <KpiCard
-                                label="Avg Order Value"
-                                value={`$${avgOV}`}
-                                sub={`${totalOrders.toLocaleString()} total orders`}
-                                icon={OrderIcon}
-                            />
-                        </Grid.Cell>
-                    </Grid>
-                </Layout.Section>
+                {/* KPI Row */}
+                <div className="ds-kpi-grid">
+                    <div className="ds-kpi accent">
+                        <div className="ds-kpi-label">Total Revenue</div>
+                        <div className="ds-kpi-value">${totalRevenue.toLocaleString()}</div>
+                        <div className="ds-kpi-sub">{totalCustomers.toLocaleString()} customers tracked</div>
+                    </div>
+                    <div className="ds-kpi">
+                        <div className="ds-kpi-label">Top Segment</div>
+                        <div className="ds-kpi-value" style={{ color: '#16a34a' }}>{segments[0]?.tag ?? "—"}</div>
+                        <div className="ds-kpi-sub">{segments[0] ? `$${segments[0].revenue.toLocaleString()} revenue` : "No data"}</div>
+                    </div>
+                    <div className="ds-kpi">
+                        <div className="ds-kpi-label">Unique Segments</div>
+                        <div className="ds-kpi-value" style={{ color: '#6366f1' }}>{segments.length}</div>
+                        <div className="ds-kpi-sub">Tag-based segments</div>
+                    </div>
+                    <div className="ds-kpi">
+                        <div className="ds-kpi-label">Avg Order Value</div>
+                        <div className="ds-kpi-value">${avgOV}</div>
+                        <div className="ds-kpi-sub">{totalOrders.toLocaleString()} total orders</div>
+                    </div>
+                </div>
 
-                {/* ── Charts Row ──────────────────────────────── */}
+                {/* Charts Row */}
                 {segments.length > 0 && (
-                    <Layout.Section>
-                        <Grid>
-                            <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 6, lg: 6, xl: 6 }}>
-                                <Card roundedAbove="sm">
-                                    <BlockStack gap="300">
-                                        <InlineStack align="space-between" blockAlign="center">
-                                            <Text variant="headingMd" as="h3">Revenue by Segment</Text>
-                                            <Badge>{`${top8.length} shown`}</Badge>
-                                        </InlineStack>
-                                        <Divider />
-                                        <div style={{ height: 280 }}>
-                                            <React.Suspense fallback={<div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%" }}><Spinner size="large" /></div>}>
-                                                <DashboardChart chartData={barChartData} type="bar" height={280} />
-                                            </React.Suspense>
-                                        </div>
-                                    </BlockStack>
-                                </Card>
-                            </Grid.Cell>
+                    <div className="ds-grid-2" style={{ marginBottom: 24 }}>
+                        <div className="ds-card">
+                            <div className="ds-card-header">
+                                <div className="ds-card-title">Revenue by Segment</div>
+                                <span className="ds-tag gray" style={{ fontWeight: 500 }}>{top8.length} shown</span>
+                            </div>
+                            <div className="ds-divider" style={{ margin: '14px 0' }} />
+                            <div style={{ height: 280 }}>
+                                <React.Suspense fallback={<div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%" }}><Spinner size="large" /></div>}>
+                                    <DashboardChart chartData={barChartData} type="bar" height={280} />
+                                </React.Suspense>
+                            </div>
+                        </div>
 
-                            <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 6, lg: 6, xl: 6 }}>
-                                <Card roundedAbove="sm">
-                                    <BlockStack gap="300">
-                                        <InlineStack align="space-between" blockAlign="center">
-                                            <Text variant="headingMd" as="h3">Revenue Share</Text>
-                                            <Badge tone="info">{`$${totalRevenue.toLocaleString()} total`}</Badge>
-                                        </InlineStack>
-                                        <Divider />
-                                        <div style={{ height: 280 }}>
-                                            <React.Suspense fallback={<div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%" }}><Spinner size="large" /></div>}>
-                                                <DashboardChart chartData={donutChartData} type="donut" height={280} />
-                                            </React.Suspense>
-                                        </div>
-                                    </BlockStack>
-                                </Card>
-                            </Grid.Cell>
-                        </Grid>
-                    </Layout.Section>
+                        <div className="ds-card">
+                            <div className="ds-card-header">
+                                <div className="ds-card-title">Revenue Share</div>
+                                <span className="ds-tag purple" style={{ fontWeight: 500 }}>${totalRevenue.toLocaleString()} total</span>
+                            </div>
+                            <div className="ds-divider" style={{ margin: '14px 0' }} />
+                            <div style={{ height: 280 }}>
+                                <React.Suspense fallback={<div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%" }}><Spinner size="large" /></div>}>
+                                    <DashboardChart chartData={donutChartData} type="donut" height={280} />
+                                </React.Suspense>
+                            </div>
+                        </div>
+                    </div>
                 )}
 
-                {/* ── Detail Table ────────────────────────────── */}
-                <Layout.Section>
-                    <Card padding="0">
-                        <Box padding="400">
-                            <InlineStack align="space-between" blockAlign="center">
-                                <Text variant="headingMd" as="h3">All Segments</Text>
-                                <Badge>{`${segments.length} segments`}</Badge>
-                            </InlineStack>
-                        </Box>
-                        <Divider />
-                        {segments.length === 0 ? (
-                            <Box padding="500">
-                                <BlockStack gap="200" inlineAlign="center">
-                                    <Text as="p" tone="subdued" alignment="center">No customer data yet. Sync your customers to see revenue attribution.</Text>
-                                    <Button onClick={() => navigate("/app")}>Go to Dashboard</Button>
-                                </BlockStack>
-                            </Box>
-                        ) : (
-                            <DataTable
-                                columnContentTypes={["text", "text", "numeric", "numeric", "numeric", "text"]}
-                                headings={["Segment", "Revenue", "Customers", "Orders", "Avg. Order", "Share"]}
-                                rows={tableRows}
-                                hasZebraStripingOnData
-                                sortable={[false, false, true, true, true, false]}
-                            />
-                        )}
-                    </Card>
-                </Layout.Section>
-            </Layout>
+                {/* Detail Table */}
+                <div className="ds-card" style={{ padding: 0, overflow: 'hidden' }}>
+                    <div style={{ padding: '20px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f3f4f6' }}>
+                        <div className="ds-card-title" style={{ margin: 0 }}>All Segments</div>
+                        <span className="ds-tag gray" style={{ fontWeight: 500 }}>{segments.length} segments</span>
+                    </div>
+
+                    {segments.length === 0 ? (
+                        <div className="ds-empty">
+                            <div className="ds-empty-icon" style={{ background: '#f3f4f6' }}>📊</div>
+                            <div className="ds-empty-title">No Revenue Data</div>
+                            <div className="ds-empty-body">Sync your customers and wait for new orders to see revenue attribution by segment.</div>
+                            <button className="ds-btn ghost" style={{ marginTop: 8 }} onClick={() => navigate("/app")}>Go to Dashboard</button>
+                        </div>
+                    ) : (
+                        <DataTable
+                            columnContentTypes={["text", "text", "numeric", "numeric", "numeric", "text"]}
+                            headings={["Segment", "Revenue", "Customers", "Orders", "Avg. Order", "Share"]}
+                            rows={tableRows}
+                            hasZebraStripingOnData
+                            sortable={[false, false, true, true, true, false]}
+                        />
+                    )}
+                </div>
+
+            </div>
         </Page>
     );
 }

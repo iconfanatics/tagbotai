@@ -1,0 +1,236 @@
+/**
+ * app-design-system.css
+ * Shared design tokens and utility classes used across all app pages.
+ * Import this in any route with: import appStyles from "../styles/app-design-system.css?url";
+ * 
+ * Design Language:
+ *   Navy: #1a1a2e | Indigo: #6366f1 | Purple: #8b5cf6
+ *   Surface: #fff | Border: #e5e7eb | Subtle bg: #f9fafb
+ */
+
+/* ── Page wrapper ──────────────────────────────────────────────────────── */
+.ds-page { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+
+/* ── Section title ─────────────────────────────────────────────────────── */
+.ds-section-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: #1a1a2e;
+    margin: 0 0 16px;
+}
+
+/* ── KPI Grid ──────────────────────────────────────────────────────────── */
+.ds-kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 24px;
+}
+@media (max-width: 900px) { .ds-kpi-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 560px) { .ds-kpi-grid { grid-template-columns: 1fr; } }
+
+/* ── KPI Card ──────────────────────────────────────────────────────────── */
+.ds-kpi {
+    background: #fff;
+    border: 1.5px solid #e5e7eb;
+    border-radius: 16px;
+    padding: 20px 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    transition: box-shadow 0.2s, transform 0.2s;
+}
+.ds-kpi:hover { box-shadow: 0 6px 24px rgba(0,0,0,0.06); transform: translateY(-1px); }
+.ds-kpi.accent {
+    background: linear-gradient(135deg, #1a1a2e 0%, #0f3460 100%);
+    border-color: transparent;
+    box-shadow: 0 4px 20px rgba(99,102,241,0.2);
+}
+.ds-kpi-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #9ca3af;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+}
+.ds-kpi.accent .ds-kpi-label { color: rgba(255,255,255,0.5); }
+.ds-kpi-value {
+    font-size: 30px;
+    font-weight: 800;
+    color: #1a1a2e;
+    line-height: 1;
+    letter-spacing: -1px;
+}
+.ds-kpi.accent .ds-kpi-value { color: #fff; }
+.ds-kpi-sub {
+    font-size: 12px;
+    color: #9ca3af;
+}
+.ds-kpi.accent .ds-kpi-sub { color: rgba(255,255,255,0.45); }
+.ds-kpi-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 20px;
+    align-self: flex-start;
+}
+.ds-kpi-badge.green { background: #f0fdf4; color: #16a34a; }
+.ds-kpi-badge.red   { background: #fff1f2; color: #e11d48; }
+.ds-kpi-badge.blue  { background: #eff6ff; color: #2563eb; }
+.ds-kpi-badge.purple{ background: #f5f3ff; color: #7c3aed; }
+
+/* ── Content Card ──────────────────────────────────────────────────────── */
+.ds-card {
+    background: #fff;
+    border: 1.5px solid #e5e7eb;
+    border-radius: 16px;
+    padding: 24px;
+    transition: box-shadow 0.2s;
+}
+.ds-card:hover { box-shadow: 0 4px 20px rgba(0,0,0,0.05); }
+.ds-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+}
+.ds-card-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #1a1a2e;
+}
+.ds-card-subtitle {
+    font-size: 13px;
+    color: #9ca3af;
+    margin-top: 2px;
+}
+
+/* ── Divider ───────────────────────────────────────────────────────────── */
+.ds-divider {
+    height: 1px;
+    background: #f3f4f6;
+    margin: 20px 0;
+}
+
+/* ── Buttons ────────────────────────────────────────────────────────────── */
+.ds-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border: none;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 10px 20px;
+    transition: all 0.2s;
+}
+.ds-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.ds-btn.primary {
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    color: #fff;
+    box-shadow: 0 4px 14px rgba(99,102,241,0.3);
+}
+.ds-btn.primary:hover:not(:disabled) {
+    background: linear-gradient(135deg, #4f46e5, #7c3aed);
+    box-shadow: 0 6px 20px rgba(99,102,241,0.42);
+    transform: translateY(-1px);
+}
+.ds-btn.ghost {
+    background: #f3f4f6;
+    color: #374151;
+}
+.ds-btn.ghost:hover:not(:disabled) { background: #e5e7eb; }
+.ds-btn.danger {
+    background: #fff1f2;
+    color: #e11d48;
+}
+.ds-btn.danger:hover:not(:disabled) { background: #ffe4e6; }
+.ds-btn.sm { padding: 7px 14px; font-size: 13px; border-radius: 8px; }
+.ds-btn.lg { padding: 13px 28px; font-size: 15px; }
+
+/* ── Empty state ───────────────────────────────────────────────────────── */
+.ds-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 60px 24px;
+    text-align: center;
+    gap: 12px;
+}
+.ds-empty-icon {
+    width: 56px;
+    height: 56px;
+    background: #f5f3ff;
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+}
+.ds-empty-title { font-size: 16px; font-weight: 700; color: #1a1a2e; }
+.ds-empty-body  { font-size: 14px; color: #9ca3af; max-width: 320px; }
+
+/* ── Table ─────────────────────────────────────────────────────────────── */
+.ds-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.ds-table th {
+    text-align: left;
+    padding: 10px 14px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #9ca3af;
+    border-bottom: 1.5px solid #f3f4f6;
+}
+.ds-table td {
+    padding: 14px;
+    color: #374151;
+    border-bottom: 1px solid #f9fafb;
+    vertical-align: middle;
+}
+.ds-table tr:last-child td { border-bottom: none; }
+.ds-table tr:hover td { background: #fafafa; }
+
+/* ── Badge / Tag pill ──────────────────────────────────────────────────── */
+.ds-tag {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 20px;
+    background: #f5f3ff;
+    color: #6366f1;
+}
+.ds-tag.green  { background: #f0fdf4; color: #16a34a; }
+.ds-tag.red    { background: #fff1f2; color: #e11d48; }
+.ds-tag.gray   { background: #f3f4f6; color: #6b7280; }
+.ds-tag.navy   { background: #1a1a2e; color: #fff; }
+
+/* ── Layout grid 2-col ─────────────────────────────────────────────────── */
+.ds-grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+}
+@media (max-width: 700px) { .ds-grid-2 { grid-template-columns: 1fr; } }
+
+/* ── Banner / Alert ────────────────────────────────────────────────────── */
+.ds-alert {
+    border-radius: 12px;
+    padding: 14px 18px;
+    font-size: 14px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.ds-alert.info    { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
+.ds-alert.success { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
+.ds-alert.warning { background: #fffbeb; color: #92400e; border: 1px solid #fde68a; }
+.ds-alert.error   { background: #fff1f2; color: #9f1239; border: 1px solid #fecdd3; }
