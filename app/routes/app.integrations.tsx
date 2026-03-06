@@ -99,22 +99,25 @@ export default function Integrations() {
     };
 
     return (
-        <Page backAction={{ content: "Dashboard", url: "/app" }}>
-            <div className="ds-page" style={{ maxWidth: 840, margin: '0 auto', paddingBottom: 60 }}>
-                
-                <div style={{ padding: '24px 0 32px' }}>
-                    <h1 className="ds-section-title" style={{ fontSize: 26, letterSpacing: '-0.5px' }}>
-                        🔗 Marketing Integrations
-                    </h1>
-                    <p style={{ fontSize: 14, color: '#9ca3af', margin: 0 }}>Connect external platforms to auto-sync TagBot AI segments.</p>
-                </div>
-
+        <Page
+            title="Marketing Integrations"
+            subtitle="Connect your external platforms to auto-sync TagBot AI segments."
+        >
+            <Layout>
                 <Modal
                     open={isEliteModalOpen}
                     onClose={() => setIsEliteModalOpen(false)}
                     title="Upgrade to Elite"
-                    primaryAction={{ content: 'View Plans', onAction: () => navigate('/app/pricing') }}
-                    secondaryActions={[{ content: 'Cancel', onAction: () => setIsEliteModalOpen(false) }]}
+                    primaryAction={{
+                        content: 'View Plans',
+                        onAction: () => navigate('/app/pricing'),
+                    }}
+                    secondaryActions={[
+                        {
+                            content: 'Cancel',
+                            onAction: () => setIsEliteModalOpen(false),
+                        },
+                    ]}
                 >
                     <Modal.Section>
                         <BlockStack gap="300">
@@ -126,93 +129,117 @@ export default function Integrations() {
                     </Modal.Section>
                 </Modal>
 
-                {actionData?.message && (
-                    <div className={`ds-alert ${actionData.success ? 'success' : 'error'}`} style={{ marginBottom: 24 }}>
-                        {actionData.message}
-                    </div>
-                )}
+                <Layout.Section>
+                    {actionData?.success && (
+                        <Box paddingBlockEnd="400">
+                            <Banner tone="success" title={actionData.message} />
+                        </Box>
+                    )}
 
-                {!isElitePlan && (
-                    <div className="ds-alert warning" style={{ marginBottom: 24 }}>
-                        <div style={{ flex: 1 }}>You must be on the <strong>Elite</strong> plan to activate external marketing integrations.</div>
-                        <button className="ds-btn sm" style={{ background: '#fff', border: '1px solid #e5e7eb' }} onClick={() => navigate("/app/pricing")}>Upgrade Plan</button>
-                    </div>
-                )}
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-                    
-                    {/* Klaviyo Section */}
-                    <div className="ds-card">
-                        <div className="ds-card-header" style={{ marginBottom: 8 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                                <div style={{ color: '#6366f1', display: 'flex' }}><Icon source={AppsIcon} /></div>
-                                <div className="ds-card-title">Klaviyo Sync</div>
-                            </div>
-                            <span className={`ds-tag ${initialKlaviyo ? 'green' : 'red'}`}>
-                                {initialKlaviyo ? "Connected" : "Disconnected"}
-                            </span>
-                        </div>
-                        <p className="ds-card-subtitle" style={{ marginBottom: 24 }}>Automatically push TagBot AI segments into Klaviyo Profile Properties.</p>
-                        <div className="ds-divider" style={{ margin: '0 0 20px' }} />
-
-                        <div onClick={() => !isElitePlan && setIsEliteModalOpen(true)}>
-                            <TextField
-                                label="Klaviyo Private API Key"
-                                value={klaviyoApiKey}
-                                onChange={setKlaviyoApiKey}
-                                autoComplete="off"
-                                placeholder="pk_..."
-                                helpText="Found in Klaviyo -> Settings -> API Keys. Requires 'Profiles' read/write scope."
-                                disabled={!isElitePlan}
-                                type="password"
-                            />
-                        </div>
-
-                        <div style={{ marginTop: 20 }}>
-                            <button 
-                                className="ds-btn primary" 
-                                disabled={!isElitePlan || isSaving} 
-                                onClick={handleSaveKlaviyo}
+                    {!isElitePlan && (
+                        <Box paddingBlockEnd="400">
+                            <Banner
+                                tone="warning"
+                                title="Elite Plan Required"
+                                action={{ content: 'Upgrade Plan', onAction: () => navigate('/app/pricing') }}
                             >
-                                {isSaving ? "Saving..." : "Save Klaviyo Settings"}
-                            </button>
-                        </div>
-                    </div>
+                                <Text as="p">You must be on the Elite plan to activate external marketing integrations.</Text>
+                            </Banner>
+                        </Box>
+                    )}
+                </Layout.Section>
 
-                    {/* Mailchimp Section */}
-                    <div className="ds-card">
-                        <div className="ds-card-header" style={{ marginBottom: 8 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                                <div style={{ color: '#fbbf24', display: 'flex' }}><Icon source={AppsIcon} /></div>
-                                <div className="ds-card-title">Mailchimp Sync</div>
-                            </div>
-                            <span className={`ds-tag ${initialMailchimp ? 'green' : 'red'}`}>
-                                {initialMailchimp ? "Connected" : "Disconnected"}
-                            </span>
-                        </div>
-                        <p className="ds-card-subtitle" style={{ marginBottom: 24 }}>Automatically push customers and tags into your Mailchimp Audiences.</p>
-                        <div className="ds-divider" style={{ margin: '0 0 20px' }} />
+                {/* Klaviyo Section */}
+                <Layout.AnnotatedSection
+                    id="klaviyo-integration"
+                    title="Klaviyo Sync"
+                    description="Automatically push TagBot AI segments into Klaviyo Profile Properties to trigger highly targeted email and SMS campaigns."
+                >
+                    <Card roundedAbove="sm">
+                        <BlockStack gap="400">
+                            <InlineStack align="space-between" blockAlign="center">
+                                <InlineStack gap="200" align="start" blockAlign="center">
+                                    <Icon source={AppsIcon} tone="base" />
+                                    <Text variant="headingMd" as="h3">Klaviyo Configuration</Text>
+                                </InlineStack>
+                                <Box>
+                                    {initialKlaviyo ? (
+                                        <Badge tone="success" icon={CheckCircleIcon}>Connected</Badge>
+                                    ) : (
+                                        <Badge tone="critical" icon={XSmallIcon}>Disconnected</Badge>
+                                    )}
+                                </Box>
+                            </InlineStack>
 
-                        <div onClick={() => !isElitePlan && setIsEliteModalOpen(true)}>
-                            <BlockStack gap="400">
+                            <Divider />
+
+                            <div onClick={() => !isElitePlan && setIsEliteModalOpen(true)}>
                                 <TextField
-                                    label="Mailchimp API Key"
-                                    value={mailchimpApiKey}
-                                    onChange={setMailchimpApiKey}
+                                    label="Klaviyo Private API Key"
+                                    value={klaviyoApiKey}
+                                    onChange={setKlaviyoApiKey}
                                     autoComplete="off"
-                                    placeholder="..."
-                                    helpText="Your Mailchimp API key, generated in Account Settings."
+                                    placeholder="pk_..."
+                                    helpText="Found in Klaviyo -> Settings -> API Keys. Requires 'Profiles' read/write scope."
                                     disabled={!isElitePlan}
                                     type="password"
                                 />
-                                <div className="ds-grid-2">
+                            </div>
+
+                            <Box paddingBlockStart="200">
+                                <InlineStack align="start">
+                                    <Button disabled={!isElitePlan} loading={isSaving} icon={SaveIcon} onClick={handleSaveKlaviyo}>
+                                        Save Klaviyo Settings
+                                    </Button>
+                                </InlineStack>
+                            </Box>
+                        </BlockStack>
+                    </Card>
+                </Layout.AnnotatedSection>
+
+                {/* Mailchimp Section */}
+                <Layout.AnnotatedSection
+                    id="mailchimp-integration"
+                    title="Mailchimp Sync"
+                    description="Automatically push customers and apply tags within your Mailchimp Audiences based on intelligent TagBot Rules."
+                >
+                    <Card roundedAbove="sm">
+                        <BlockStack gap="400">
+                            <InlineStack align="space-between" blockAlign="center">
+                                <InlineStack gap="200" align="start" blockAlign="center">
+                                    <Icon source={AppsIcon} tone="base" />
+                                    <Text variant="headingMd" as="h3">Mailchimp Configuration</Text>
+                                </InlineStack>
+                                <Box>
+                                    {initialMailchimp ? (
+                                        <Badge tone="success" icon={CheckCircleIcon}>Connected</Badge>
+                                    ) : (
+                                        <Badge tone="critical" icon={XSmallIcon}>Disconnected</Badge>
+                                    )}
+                                </Box>
+                            </InlineStack>
+
+                            <Divider />
+
+                            <div onClick={() => !isElitePlan && setIsEliteModalOpen(true)}>
+                                <BlockStack gap="400">
                                     <TextField
-                                        label="Server Prefix"
+                                        label="Mailchimp API Key"
+                                        value={mailchimpApiKey}
+                                        onChange={setMailchimpApiKey}
+                                        autoComplete="off"
+                                        placeholder="..."
+                                        helpText="Your Mailchimp API key, generated in Account Settings."
+                                        disabled={!isElitePlan}
+                                        type="password"
+                                    />
+                                    <TextField
+                                        label="Server Prefix (Data Center)"
                                         value={mailchimpServerPrefix}
                                         onChange={setMailchimpServerPrefix}
                                         autoComplete="off"
                                         placeholder="us14"
-                                        helpText="The final segment of your API key."
+                                        helpText="The final segment of your API key (e.g. if key is xxx-us14, prefix is us14)."
                                         disabled={!isElitePlan}
                                     />
                                     <TextField
@@ -221,26 +248,24 @@ export default function Integrations() {
                                         onChange={setMailchimpListId}
                                         autoComplete="off"
                                         placeholder="e.g. 8d3a1fb"
-                                        helpText="Found in Mailchimp Audience Settings."
+                                        helpText="The specific Audience ID to sync to. Found in Mailchimp Audience Settings."
                                         disabled={!isElitePlan}
                                     />
-                                </div>
-                            </BlockStack>
-                        </div>
+                                </BlockStack>
+                            </div>
 
-                        <div style={{ marginTop: 24 }}>
-                            <button 
-                                className="ds-btn primary" 
-                                disabled={!isElitePlan || isSaving} 
-                                onClick={handleSaveMailchimp}
-                            >
-                                {isSaving ? "Saving..." : "Save Mailchimp Settings"}
-                            </button>
-                        </div>
-                    </div>
+                            <Box paddingBlockStart="200">
+                                <InlineStack align="start">
+                                    <Button disabled={!isElitePlan} loading={isSaving} icon={SaveIcon} onClick={handleSaveMailchimp}>
+                                        Save Mailchimp Settings
+                                    </Button>
+                                </InlineStack>
+                            </Box>
+                        </BlockStack>
+                    </Card>
+                </Layout.AnnotatedSection>
 
-                </div>
-            </div>
+            </Layout>
         </Page>
     );
 }
