@@ -6,7 +6,7 @@
  * Applies VIP / At-Risk tags based on deterministic rules against local Customer data.
  */
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
-import { useLoaderData, useActionData, useNavigation, useSubmit } from "react-router";
+import { useLoaderData, useActionData, useNavigation, useSubmit, useNavigate } from "react-router";
 import {
     Page, Layout, Card, Text, BlockStack, InlineStack, Button,
     Banner, Box, Badge, ProgressBar, List, Icon, Divider
@@ -83,130 +83,168 @@ export default function PredictPage() {
     const actionData = useActionData<typeof action>();
     const navigation = useNavigation();
     const submit = useSubmit();
+    const navigate = useNavigate();
 
     const isRunning = navigation.state === "submitting";
     const isFree = !planName || planName === "Free";
 
     const handleRun = () => submit({}, { method: "post" });
 
+    const totalActionable = vipCandidates + atRiskCandidates;
+
     return (
         <Page
-            title="Predictive Segmentation"
-            subtitle="Automatically label customers as VIP or At-Risk based on purchase behavior."
+            title="Predictive Engine"
+            subtitle="Autonomous customer segmentation control panel."
             backAction={{ content: "Dashboard", url: "/app" }}
         >
             <Layout>
-                {/* How it works */}
-                <Layout.Section>
-                    <Card>
-                        <BlockStack gap="400">
-                            <InlineStack gap="200" blockAlign="center">
-                                <Icon source={MagicIcon} tone="magic" />
-                                <Text variant="headingMd" as="h3">How It Works</Text>
-                            </InlineStack>
-                            <Divider />
-                            <InlineStack gap="600" wrap={false}>
-                                <BlockStack gap="200">
-                                    {/* @ts-ignore */}
-                                    <Badge tone="success">VIP Criteria</Badge>
-                                    <List>
-                                        <List.Item>3+ orders placed</List.Item>
-                                        <List.Item>$200+ lifetime spend</List.Item>
-                                        <List.Item>Ordered within last 60 days</List.Item>
-                                    </List>
-                                </BlockStack>
-                                <BlockStack gap="200">
-                                    {/* @ts-ignore */}
-                                    <Badge tone="warning">At-Risk Criteria</Badge>
-                                    <List>
-                                        <List.Item>2+ orders placed</List.Item>
-                                        <List.Item>Last order more than 90 days ago</List.Item>
-                                    </List>
-                                </BlockStack>
-                            </InlineStack>
-                            <Text as="p" tone="subdued" variant="bodySm">
-                                The engine is idempotent — customers who already have the correct tag are skipped. It demotes VIPs who no longer qualify.
-                            </Text>
-                        </BlockStack>
-                    </Card>
-                </Layout.Section>
-
-                {/* Current coverage stats */}
-                <Layout.Section>
-                    <InlineStack gap="400" wrap={false}>
-                        <div style={{ flex: 1 }}>
-                            <Card>
-                                <BlockStack gap="300">
-                                    <Text variant="headingSm" as="h3" tone="subdued">Total Customers</Text>
-                                    <Text variant="heading3xl" as="h2">{totalCustomers.toLocaleString()}</Text>
-                                </BlockStack>
-                            </Card>
-                        </div>
-                        <div style={{ flex: 1 }}>
-                            <Card>
-                                <BlockStack gap="300">
-                                    <Text variant="headingSm" as="h3" tone="subdued">Currently Tagged VIP</Text>
-                                    <Text variant="heading3xl" as="h2">{currentVipCount.toLocaleString()}</Text>
-                                    {vipCandidates > 0 && (
-                                        <Text as="p" tone="success" variant="bodySm">+{vipCandidates} new candidates ready</Text>
-                                    )}
-                                </BlockStack>
-                            </Card>
-                        </div>
-                        <div style={{ flex: 1 }}>
-                            <Card>
-                                <BlockStack gap="300">
-                                    <Text variant="headingSm" as="h3" tone="subdued">Currently Tagged At-Risk</Text>
-                                    <Text variant="heading3xl" as="h2">{currentAtRiskCount.toLocaleString()}</Text>
-                                    {atRiskCandidates > 0 && (
-                                        <Text as="p" tone="caution" variant="bodySm">+{atRiskCandidates} new candidates ready</Text>
-                                    )}
-                                </BlockStack>
-                            </Card>
-                        </div>
-                    </InlineStack>
-                </Layout.Section>
-
-                {/* Action result */}
-                {actionData?.message && (
+                {isFree && (
                     <Layout.Section>
-                        <Banner tone={actionData.success ? "success" : "critical"}>
-                            {actionData.message}
+                        <Banner tone="warning">
+                            <Text as="p">The automated Predictive Engine is available on <strong>Growth</strong> plan and above.</Text>
+                            <Box paddingBlockStart="200">
+                                <Button onClick={() => navigate("/app/pricing")}>Upgrade Now</Button>
+                            </Box>
                         </Banner>
                     </Layout.Section>
                 )}
 
-                {/* Run button */}
+                {/* Split Pane Control Panel */}
                 <Layout.Section>
-                    <Card>
-                        <BlockStack gap="300">
-                            <Text variant="headingMd" as="h3">Run Segmentation Now</Text>
-                            <Text as="p" tone="subdued">
-                                This will process all {totalCustomers.toLocaleString()} customers synchronously and apply VIP / At-Risk tags where applicable.
-                                {vipCandidates + atRiskCandidates > 0
-                                    ? ` ${vipCandidates + atRiskCandidates} customers are candidates for tagging.`
-                                    : " All customers are already correctly tagged."}
-                            </Text>
-                            {isRunning && (
-                                <Box paddingBlockStart="200">
-                                    <ProgressBar progress={undefined} size="small" tone="highlight" />
-                                    <Text as="p" tone="subdued" variant="bodySm">Processing customers... please keep this page open.</Text>
+                    <div className="split-pane">
+                        
+                        {/* LEFT PANE: Analytics & Status */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                            <div className="premium-card">
+                                <Box padding="500">
+                                    <BlockStack gap="400">
+                                        <InlineStack align="space-between" blockAlign="center">
+                                            <Text variant="headingLg" as="h2">Database Overview</Text>
+                                            <Badge tone="info">{`${totalCustomers.toLocaleString()} Indexed`}</Badge>
+                                        </InlineStack>
+                                        <Divider />
+                                        
+                                        <InlineStack gap="600" align="space-between" wrap={false}>
+                                            <BlockStack gap="200">
+                                                <Text variant="headingSm" as="h3" tone="subdued">VIP Segment</Text>
+                                                <div className="metric-value">{currentVipCount.toLocaleString()}</div>
+                                                {vipCandidates > 0 ? (
+                                                    <span className="metric-trend-up">↑ {vipCandidates} pending</span>
+                                                ) : (
+                                                    <span className="metric-trend-neutral" style={{ color: '#6b7280', fontSize: '0.85rem' }}>Up to date</span>
+                                                )}
+                                            </BlockStack>
+                                            
+                                            <div style={{ width: '1px', background: '#e5e7eb', height: '60px', alignSelf: 'center' }} />
+                                            
+                                            <BlockStack gap="200">
+                                                <Text variant="headingSm" as="h3" tone="subdued">At-Risk Segment</Text>
+                                                <div className="metric-value">{currentAtRiskCount.toLocaleString()}</div>
+                                                {atRiskCandidates > 0 ? (
+                                                    <span className="metric-trend-down">↓ {atRiskCandidates} pending</span>
+                                                ) : (
+                                                    <span className="metric-trend-neutral" style={{ color: '#6b7280', fontSize: '0.85rem' }}>Up to date</span>
+                                                )}
+                                            </BlockStack>
+                                        </InlineStack>
+                                    </BlockStack>
                                 </Box>
-                            )}
-                            <InlineStack>
-                                <Button
-                                    variant="primary"
-                                    icon={RefreshIcon}
-                                    disabled={isFree || isRunning}
-                                    loading={isRunning}
-                                    onClick={handleRun}
-                                >
-                                    {isFree ? "Upgrade to Use" : "Run Predictive Segmentation"}
-                                </Button>
-                            </InlineStack>
-                        </BlockStack>
-                    </Card>
+                            </div>
+
+                            <Card roundedAbove="sm">
+                                <BlockStack gap="400">
+                                    <InlineStack gap="200" blockAlign="center">
+                                        <Icon source={MagicIcon} tone="magic" />
+                                        <Text variant="headingMd" as="h3">Engine Parameters</Text>
+                                    </InlineStack>
+                                    <Divider />
+                                    <InlineStack gap="400" wrap={false}>
+                                        <div style={{ flex: 1 }}>
+                                            <BlockStack gap="200">
+                                                {/* @ts-ignore */}
+                                                <Badge tone="success">VIP Ruleset</Badge>
+                                                <List type="bullet">
+                                                    <List.Item>≥ 3 orders</List.Item>
+                                                    <List.Item>≥ $200 LTV</List.Item>
+                                                    <List.Item>Active &lt; 60 days</List.Item>
+                                                </List>
+                                            </BlockStack>
+                                        </div>
+                                        <div style={{ width: '1px', background: '#e5e7eb' }} />
+                                        <div style={{ flex: 1 }}>
+                                            <BlockStack gap="200">
+                                                {/* @ts-ignore */}
+                                                <Badge tone="critical">Attrition Ruleset</Badge>
+                                                <List type="bullet">
+                                                    <List.Item>≥ 2 orders</List.Item>
+                                                    <List.Item>Inactive &gt; 90 days</List.Item>
+                                                </List>
+                                            </BlockStack>
+                                        </div>
+                                    </InlineStack>
+                                </BlockStack>
+                            </Card>
+                        </div>
+
+                        {/* RIGHT PANE: Action Engine */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                            <div className="premium-card premium-card-glass" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                                <Box padding="500">
+                                    <BlockStack gap="500">
+                                        <div>
+                                            <h2 className="text-gradient" style={{ fontSize: '1.5rem', marginBottom: '8px' }}>Action Center</h2>
+                                            <Text as="p" tone="subdued">Execute deterministic tagging across your entire customer database instantly.</Text>
+                                        </div>
+
+                                        <div style={{ background: '#fef3c7', padding: '16px', borderRadius: '12px', border: '1px solid #fde68a' }}>
+                                            <BlockStack gap="200" inlineAlign="center">
+                                                <Text variant="headingXl" as="h2" tone="caution">{totalActionable.toLocaleString()}</Text>
+                                                <Text variant="bodyMd" as="p" fontWeight="medium">Customers Requiring Tag Updates</Text>
+                                            </BlockStack>
+                                        </div>
+
+                                        {isRunning ? (
+                                            <div style={{ padding: '24px 0', textAlign: 'center' }}>
+                                                <BlockStack gap="300" inlineAlign="center">
+                                                    <div style={{ color: '#4f46e5' }}><Icon source={RefreshIcon} /></div>
+                                                    <Text variant="headingSm" as="h3">Processing Database...</Text>
+                                                    <div style={{ width: '100%', maxWidth: 200 }}>
+                                                        {/* @ts-ignore */}
+                                                        <ProgressBar progress={undefined} size="small" tone="highlight" />
+                                                    </div>
+                                                </BlockStack>
+                                            </div>
+                                        ) : (
+                                            <div className="btn-premium">
+                                                <Button
+                                                    size="large"
+                                                    disabled={isFree || totalActionable === 0}
+                                                    onClick={handleRun}
+                                                    fullWidth
+                                                >
+                                                    {isFree ? "Upgrade required" : totalActionable === 0 ? "Database is synchronized" : "Run Synchronization Engine"}
+                                                </Button>
+                                            </div>
+                                        )}
+                                        
+                                        <Text as="p" variant="bodySm" tone="subdued" alignment="center">
+                                            Operations are completely idempotent and safe to run multiple times. Demotions happen automatically.
+                                        </Text>
+
+                                        {actionData?.message && (
+                                            <Banner tone={actionData.success ? "success" : "critical"}>
+                                                {actionData.message}
+                                            </Banner>
+                                        )}
+                                    </BlockStack>
+                                </Box>
+                            </div>
+                        </div>
+
+                    </div>
                 </Layout.Section>
+
             </Layout>
         </Page>
     );

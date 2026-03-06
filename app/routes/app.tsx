@@ -1,66 +1,41 @@
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
-import { Outlet, useLoaderData, useRouteError, Link, useNavigate } from "react-router";
+import { Link, Outlet, useLoaderData, useRouteError, isRouteErrorResponse } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
-import { AppProvider as PolarisAppProvider } from "@shopify/polaris";
+import { AppProvider as PolarisAppProvider, Spinner } from "@shopify/polaris";
 import polarisTranslations from "@shopify/polaris/locales/en.json";
 import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
 
-export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
-
-import { Spinner } from "@shopify/polaris";
-
 import { authenticate } from "../shopify.server";
-import { sendWelcomeEmail } from "../services/email.server";
-
 import db from "../db.server";
+import { getCachedStore } from "../services/cache.server";
+
+// Import our new premium complex UI extensions
+import premiumStyles from "../styles/app-premium.css?url";
+
+export const links = () => [
+  { rel: "stylesheet", href: polarisStyles },
+  { rel: "stylesheet", href: premiumStyles }
+];
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session, admin } = await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
   const shop = session.shop;
 
-  const existingStore = await db.store.findUnique({ where: { shop } });
-
-  if (!existingStore) {
-    // This is a brand new installation! Send the Welcome Email.
-    try {
-      const response = await admin.graphql(`
-          #graphql
-          query {
-            shop {
-              contactEmail
-              email
-              name
-            }
-          }
-        `);
-      const data = await response.json();
-      const email = data.data?.shop?.contactEmail || data.data?.shop?.email;
-      const shopName = data.data?.shop?.name || shop;
-
-      if (email) {
-        // Send it asynchronously so we don't block the Shopify App install redirect
-        sendWelcomeEmail(shopName, email).catch(console.error);
-      }
-    } catch (e) {
-      console.error("[INSTALL HOOK] Failed to fetch shop email for welcome payload", e);
-    }
+  let store = await getCachedStore(shop);
+  if (!store) {
+    store = await db.store.upsert({
+      where: { shop },
+      create: { shop },
+      update: {}
+    });
   }
 
-  // Ensure the store is registered and active in our database
-  await db.store.upsert({
-    where: { shop },
-    create: { shop, isActive: true },
-    update: { isActive: true }
-  });
-
-  // eslint-disable-next-line no-undef
   return { apiKey: process.env.SHOPIFY_API_KEY || "" };
 };
 
 export default function App() {
   const { apiKey } = useLoaderData<typeof loader>();
-  const navigate = useNavigate();
 
   return (
     <AppProvider embedded apiKey={apiKey}>
@@ -74,15 +49,15 @@ export default function App() {
         }}
       >
         <ui-nav-menu>
-          <Link to="/app" rel="home">Home</Link>
+          <Link to="/app" rel="home">Dashboard</Link>
           <Link to="/app/rules">Rules</Link>
-          <Link to="/app/cleanup">Cleanup</Link>
+          <Link to="/app/predict">Predictive</Link>
           <Link to="/app/roi">Revenue ROI</Link>
           <Link to="/app/workflows">Workflows</Link>
-          <Link to="/app/predict">Predictive</Link>
           <Link to="/app/integrations">Integrations</Link>
-          <Link to="/app/pricing">Pricing Plans</Link>
+          <Link to="/app/cleanup">Cleanup</Link>
           <Link to="/app/settings">Settings</Link>
+          <Link to="/app/pricing">Pricing Plans</Link>
           <Link to="/app/guide">Testing Guide</Link>
         </ui-nav-menu>
         <Outlet />

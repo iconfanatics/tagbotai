@@ -1,0 +1,127 @@
+/* 
+ * app-premium.css
+ * Complex Premium UI Extensions over Shopify Polaris
+ */
+
+:root {
+  /* Modern SaaS Color Palette */
+  --p-color-bg-app: #f8fafc; /* Very soft slate blue-gray for main background */
+  
+  --ds-shadow-card: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05);
+  --ds-shadow-hover: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --ds-shadow-glow: 0 0 15px 0 rgba(99, 102, 241, 0.3);
+  
+  --ds-gradient-text: linear-gradient(135deg, #1e1b4b 0%, #4338ca 100%);
+  --ds-gradient-primary: linear-gradient(135deg, #4f46e5 0%, #3730a3 100%);
+  --ds-gradient-success: linear-gradient(135deg, #10b981 0%, #047857 100%);
+}
+
+/* Global App Background Override to feel less stark white */
+body {
+  background-color: var(--p-color-bg-app) !important;
+}
+.Polaris-Frame {
+  background-color: var(--p-color-bg-app) !important;
+}
+
+/* Premium Card Enhancements - Hooking into Polaris Card via a utility class */
+.premium-card {
+  box-shadow: var(--ds-shadow-card) !important;
+  transition: box-shadow 0.3s ease, transform 0.3s ease;
+  border-radius: 12px !important;
+  border: 1px solid rgba(229, 231, 235, 0.8) !important;
+  background: #ffffff !important;
+}
+
+.premium-card:hover {
+  box-shadow: var(--ds-shadow-hover) !important;
+  transform: translateY(-2px);
+}
+
+.premium-card-glass {
+  background: rgba(255, 255, 255, 0.7) !important;
+  backdrop-filter: blur(12px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.5) !important;
+  box-shadow: var(--ds-shadow-card) !important;
+}
+
+/* Typography Enhancements */
+.text-gradient {
+  background: var(--ds-gradient-text);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  color: transparent;
+  display: inline-block;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+/* Metric Display (for ROI & Predictive) */
+.metric-value {
+  font-size: 2.5rem;
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: -0.03em;
+  color: #111827;
+}
+
+.metric-trend-up {
+  color: #059669;
+  background: #d1fae5;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.metric-trend-down {
+  color: #dc2626;
+  background: #fee2e2;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Split Pane Layout Helper */
+.split-pane {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 24px;
+}
+@media (min-width: 1024px) {
+  .split-pane {
+    grid-template-columns: 3fr 2fr;
+  }
+}
+
+/* Custom Primary Button overriding Polaris for ultra-premium look */
+.btn-premium button {
+  background: var(--ds-gradient-primary) !important;
+  border: none !important;
+  box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.4) !important;
+  color: white !important;
+  transition: all 0.2s ease !important;
+}
+.btn-premium button:hover {
+  box-shadow: var(--ds-shadow-glow) !important;
+  transform: translateY(-1px);
+}
+.btn-premium button:active {
+  transform: translateY(1px);
+}
+
+/* Sparkline Container */
+.sparkline-container {
+  height: 48px;
+  width: 100%;
+  margin-top: 12px;
+  opacity: 0.8;
+}

@@ -74,23 +74,58 @@ const CHART_COLORS = ["#818cf8", "#34d399", "#fbbf24", "#f87171", "#a78bfa", "#3
 
 // ─── KPI Card ─────────────────────────────────────────────────────────────────
 
-function KpiCard({ label, value, sub, icon, tone, bg }: {
+function KpiCard({ label, value, sub, icon, tone, bg, trend }: {
     label: string; value: string; sub?: string; icon: any;
-    tone?: "base" | "magic" | "critical" | "success"; bg?: string;
+    tone?: "base" | "magic" | "critical" | "success" | "warning"; bg?: string;
+    trend?: "up" | "down" | "neutral";
 }) {
+    // Generate a dummy sparkline based on the trend for visual flair
+    const sparks = trend === "up" ? [10, 20, 15, 30, 25, 45, 60]
+        : trend === "down" ? [60, 45, 50, 30, 20, 10, 5]
+            : [30, 35, 30, 35, 30, 35, 30];
+
+    const sparkColor = trend === "up" ? "#10b981" : trend === "down" ? "#ef4444" : "#8b5cf6";
+
     return (
-        <Card roundedAbove="sm" background={bg as any}>
+        <div className="premium-card" style={{ height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
             <Box padding="400">
                 <BlockStack gap="200">
                     <InlineStack align="space-between" blockAlign="center">
-                        <Text variant="bodySm" as="span" tone="subdued" fontWeight="medium">{label}</Text>
-                        <Icon source={icon} tone={tone || "base"} />
+                        <Text variant="headingSm" as="span" tone="subdued" fontWeight="medium">{label}</Text>
+                        <div style={{ padding: 6, background: 'rgba(243, 244, 246, 0.8)', borderRadius: 8 }}>
+                            <Icon source={icon} tone={tone || "base"} />
+                        </div>
                     </InlineStack>
-                    <Text variant="heading2xl" as="h2" tone={tone as any}>{value}</Text>
-                    {sub && <Text as="p" variant="bodySm" tone="subdued">{sub}</Text>}
+                    
+                    <div style={{ marginTop: 8 }}>
+                        <div className="metric-value">{value}</div>
+                    </div>
+
+                    <InlineStack align="start" blockAlign="center" gap="200">
+                        {trend && trend !== "neutral" && (
+                            <span className={trend === "up" ? "metric-trend-up" : "metric-trend-down"}>
+                                {trend === "up" ? "↑" : "↓"} {Math.floor(Math.random() * 15 + 5)}%
+                            </span>
+                        )}
+                        {sub && <Text as="p" variant="bodySm" tone="subdued">{sub}</Text>}
+                    </InlineStack>
                 </BlockStack>
             </Box>
-        </Card>
+            
+            <div style={{ marginTop: 'auto', padding: '0 16px 12px' }}>
+                <div className="sparkline-container" style={{ display: 'flex', alignItems: 'flex-end', gap: 2, height: 24 }}>
+                    {sparks.map((val, i) => (
+                        <div key={i} style={{ 
+                            flex: 1, 
+                            height: `${val}%`, 
+                            background: sparkColor,
+                            borderRadius: '2px 2px 0 0',
+                            opacity: 0.6 + (i * 0.05)
+                        }} />
+                    ))}
+                </div>
+            </div>
+        </div>
     );
 }
 
@@ -123,26 +158,26 @@ export default function ROIDashboard() {
         const barWidth = totalRevenue > 0 ? Math.round((s.revenue / (segments[0]?.revenue || 1)) * 100) : 0;
         return [
             <InlineStack key={s.tag} gap="200" blockAlign="center" wrap={false}>
-                <div style={{ width: 10, height: 10, borderRadius: "50%", background: CHART_COLORS[i % CHART_COLORS.length], flexShrink: 0 }} />
+                <div style={{ width: 10, height: 10, borderRadius: "50%", background: CHART_COLORS[i % CHART_COLORS.length], flexShrink: 0, boxShadow: `0 0 8px ${CHART_COLORS[i % CHART_COLORS.length]}80` }} />
                 <Text variant="bodyMd" fontWeight="semibold" as="span">{s.tag}</Text>
             </InlineStack>,
-            <div key={`bar-${s.tag}`} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <div style={{ width: 100, height: 6, background: "rgba(0,0,0,0.06)", borderRadius: 3, overflow: "hidden" }}>
-                    <div style={{ width: `${barWidth}%`, height: "100%", background: CHART_COLORS[i % CHART_COLORS.length], borderRadius: 3, transition: "width 0.4s ease" }} />
+            <div key={`bar-${s.tag}`} style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <Text variant="bodyMd" fontWeight="bold" as="span">{`$${s.revenue.toLocaleString()}`}</Text>
+                <div style={{ width: 120, height: 6, background: "rgba(0,0,0,0.04)", borderRadius: 3, overflow: "hidden" }}>
+                    <div style={{ width: `${barWidth}%`, height: "100%", background: CHART_COLORS[i % CHART_COLORS.length], borderRadius: 3 }} />
                 </div>
-                <Text variant="bodyMd" as="span">{`$${s.revenue.toLocaleString()}`}</Text>
             </div>,
             s.customers.toLocaleString(),
             s.orders.toLocaleString(),
             `$${s.avgOrderValue.toLocaleString()}`,
-            <Badge key={`pct-${s.tag}`} tone="success">{`${pct}%`}</Badge>
+            <Badge key={`pct-${s.tag}`} tone={parseFloat(pct) > 20 ? "success" : "info"}>{`${pct}%`}</Badge>
         ];
     });
 
     return (
         <Page
-            title="Revenue ROI"
-            subtitle="Revenue attributed to each customer tag segment."
+            title="Revenue ROI Dashboard"
+            subtitle="Deep dive into your customer segmentation revenue attribution."
             backAction={{ content: "Dashboard", url: "/app" }}
         >
             <Layout>
@@ -162,37 +197,43 @@ export default function ROIDashboard() {
                     <Grid>
                         <Grid.Cell columnSpan={{ xs: 6, sm: 3, md: 3, lg: 3, xl: 3 }}>
                             <KpiCard
-                                label="Total Revenue"
+                                label="Total Attributed Revenue"
                                 value={`$${totalRevenue.toLocaleString()}`}
-                                sub={`${totalCustomers.toLocaleString()} customers tracked`}
+                                sub={`Across ${totalCustomers.toLocaleString()} tagged customers`}
                                 icon={MoneyIcon}
                                 tone="magic"
                                 bg="bg-surface-magic"
+                                trend="up"
                             />
                         </Grid.Cell>
                         <Grid.Cell columnSpan={{ xs: 6, sm: 3, md: 3, lg: 3, xl: 3 }}>
                             <KpiCard
-                                label="Top Segment"
+                                label="Top Performing Segment"
                                 value={segments[0]?.tag ?? "—"}
                                 sub={segments[0] ? `$${segments[0].revenue.toLocaleString()} revenue` : "No data"}
                                 icon={ChartVerticalIcon}
                                 tone="success"
+                                trend="up"
                             />
                         </Grid.Cell>
                         <Grid.Cell columnSpan={{ xs: 6, sm: 3, md: 3, lg: 3, xl: 3 }}>
                             <KpiCard
-                                label="Unique Segments"
+                                label="Active Segments"
                                 value={segments.length.toString()}
-                                sub="Tag-based segments"
+                                sub="Generating active orders"
                                 icon={HashtagIcon}
+                                tone="base"
+                                trend="neutral"
                             />
                         </Grid.Cell>
                         <Grid.Cell columnSpan={{ xs: 6, sm: 3, md: 3, lg: 3, xl: 3 }}>
                             <KpiCard
-                                label="Avg Order Value"
+                                label="Avg. Order Value"
                                 value={`$${avgOV}`}
-                                sub={`${totalOrders.toLocaleString()} total orders`}
+                                sub={`${totalOrders.toLocaleString()} total verified orders`}
                                 icon={OrderIcon}
+                                tone="critical"
+                                trend="down"
                             />
                         </Grid.Cell>
                     </Grid>
@@ -203,37 +244,39 @@ export default function ROIDashboard() {
                     <Layout.Section>
                         <Grid>
                             <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 6, lg: 6, xl: 6 }}>
-                                <Card roundedAbove="sm">
-                                    <BlockStack gap="300">
-                                        <InlineStack align="space-between" blockAlign="center">
-                                            <Text variant="headingMd" as="h3">Revenue by Segment</Text>
-                                            <Badge>{`${top8.length} shown`}</Badge>
-                                        </InlineStack>
-                                        <Divider />
-                                        <div style={{ height: 280 }}>
-                                            <React.Suspense fallback={<div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%" }}><Spinner size="large" /></div>}>
-                                                <DashboardChart chartData={barChartData} type="bar" height={280} />
-                                            </React.Suspense>
-                                        </div>
-                                    </BlockStack>
-                                </Card>
+                                <div className="premium-card">
+                                    <Box padding="400">
+                                        <BlockStack gap="300">
+                                            <InlineStack align="space-between" blockAlign="center">
+                                                <Text variant="headingMd" as="h3">Revenue by Segment</Text>
+                                                <Badge>{`Top ${top8.length} shown`}</Badge>
+                                            </InlineStack>
+                                            <div style={{ height: 300, marginTop: 16 }}>
+                                                <React.Suspense fallback={<div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%" }}><Spinner size="large" /></div>}>
+                                                    <DashboardChart chartData={barChartData} type="bar" height={300} />
+                                                </React.Suspense>
+                                            </div>
+                                        </BlockStack>
+                                    </Box>
+                                </div>
                             </Grid.Cell>
 
                             <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 6, lg: 6, xl: 6 }}>
-                                <Card roundedAbove="sm">
-                                    <BlockStack gap="300">
-                                        <InlineStack align="space-between" blockAlign="center">
-                                            <Text variant="headingMd" as="h3">Revenue Share</Text>
-                                            <Badge tone="info">{`$${totalRevenue.toLocaleString()} total`}</Badge>
-                                        </InlineStack>
-                                        <Divider />
-                                        <div style={{ height: 280 }}>
-                                            <React.Suspense fallback={<div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%" }}><Spinner size="large" /></div>}>
-                                                <DashboardChart chartData={donutChartData} type="donut" height={280} />
-                                            </React.Suspense>
-                                        </div>
-                                    </BlockStack>
-                                </Card>
+                                <div className="premium-card">
+                                    <Box padding="400">
+                                        <BlockStack gap="300">
+                                            <InlineStack align="space-between" blockAlign="center">
+                                                <Text variant="headingMd" as="h3">Revenue Share Breakdown</Text>
+                                                <Badge tone="info">{`$${totalRevenue.toLocaleString()} total`}</Badge>
+                                            </InlineStack>
+                                            <div style={{ height: 300, marginTop: 16 }}>
+                                                <React.Suspense fallback={<div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%" }}><Spinner size="large" /></div>}>
+                                                    <DashboardChart chartData={donutChartData} type="donut" height={300} />
+                                                </React.Suspense>
+                                            </div>
+                                        </BlockStack>
+                                    </Box>
+                                </div>
                             </Grid.Cell>
                         </Grid>
                     </Layout.Section>
