@@ -171,7 +171,7 @@ export default function FeaturesGuide() {
                                     <Text variant="headingSm" as="h3">How to Test:</Text>
                                     <List type="number">
                                         <List.Item>Open a new tab and navigate to: <code>https://[your-url]/super-admin</code></List.Item>
-                                        <List.Item>Log in with password: <strong>admin123</strong></List.Item>
+                                        <List.Item>Log in with the master password set by the app administrator via a secure environment variable.</List.Item>
                                         <List.Item>Test the <strong>Pricing Configuration</strong> card — change the yearly discount % and click Save Pricing. Then open the Plans page as a merchant to see the updated price.</List.Item>
                                         <List.Item>Test plan overrides by clicking "Set Pro" or "Set Elite" for your store.</List.Item>
                                     </List>

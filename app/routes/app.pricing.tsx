@@ -44,14 +44,18 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     const paidPlans = ["Growth Plan", "Growth Plan Yearly", "Pro Plan", "Pro Plan Yearly", "Elite Plan", "Elite Plan Yearly"];
 
+    // isTest should be true only in development. Set BILLING_TEST_MODE=true in local .env.
+    // In production (Vercel), leave BILLING_TEST_MODE unset — real charges apply.
+    const isTestMode = process.env.BILLING_TEST_MODE === "true";
+
     if (paidPlans.includes(plan)) {
         try {
             await billing.require({
                 plans: [plan] as any,
-                isTest: true,
+                isTest: isTestMode,
                 onFailure: async () => billing.request({
                     plan: plan as any,
-                    isTest: true,
+                    isTest: isTestMode,
                     returnUrl: `https://${url.host}/app/pricing`,
                 }),
             });

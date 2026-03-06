@@ -2,18 +2,13 @@ import { useNavigation, useActionData } from "react-router";
 import { ActionFunctionArgs, redirect } from "react-router";
 import { Page, Layout, Card, Text, BlockStack, TextField, Banner } from "@shopify/polaris";
 import { useState } from "react";
-import { getAdminSession, adminSessionStorage } from "../adminSession.server";
+import { getAdminSession, adminSessionStorage, SUPER_ADMIN_PASSWORD } from "../adminSession.server";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
     const formData = await request.formData();
     const password = formData.get("password") as string;
 
-    // Log for debugging
-    console.log("[LOGIN ACTION] Received password attempt.");
-
-    const MASTER_PASSWORD = process.env.SUPER_ADMIN_PASSWORD || "tagbotadmin";
-
-    if (password === MASTER_PASSWORD) {
+    if (password === SUPER_ADMIN_PASSWORD) {
         const session = await getAdminSession(request);
         session.set("adminId", "super_admin_logged_in");
 
