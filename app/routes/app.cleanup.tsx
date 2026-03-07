@@ -212,8 +212,9 @@ export default function SmartCleanup() {
                 {/* ── PROGRESS BANNER (shown while submitting) ── */}
                 {isSubmitting && submittingTag && (
                     <Layout.Section>
-                        <Card>
-                            <BlockStack gap="300">
+                        <div className="premium-card">
+                            <Box padding="500">
+                                <BlockStack gap="300">
                                 <Text variant="headingSm" as="h3">
                                     {submittingIntent === "merge"
                                         ? `Merging "${submittingTag}"…`
@@ -250,8 +251,9 @@ export default function SmartCleanup() {
                                         }
                                     `}</style>
                                 </Box>
-                            </BlockStack>
-                        </Card>
+                                </BlockStack>
+                            </Box>
+                        </div>
                     </Layout.Section>
                 )}
 
@@ -266,7 +268,7 @@ export default function SmartCleanup() {
 
                 {/* ── TAG LIST ── */}
                 <Layout.Section>
-                    <Card padding="0">
+                    <div className="premium-card">
                         <Box padding="400">
                             <InlineStack align="space-between" blockAlign="center">
                                 <InlineStack gap="200" blockAlign="center">
@@ -314,7 +316,7 @@ export default function SmartCleanup() {
                                 </ResourceItem>
                             )}
                         />
-                    </Card>
+                    </div>
                 </Layout.Section>
             </Layout>
 

@@ -643,8 +643,9 @@ export default function NewRule() {
                     {/* Search + Category filters */}
                     <Layout.Section>
 
-                        <Card>
-                            <BlockStack gap="400">
+                        <div className="premium-card">
+                            <Box padding="400">
+                                <BlockStack gap="400">
                                 <TextField
                                     label=""
                                     labelHidden
@@ -677,21 +678,22 @@ export default function NewRule() {
                                         </button>
                                     ))}
                                 </InlineStack>
-                            </BlockStack>
-                        </Card>
+                                </BlockStack>
+                            </Box>
+                        </div>
                     </Layout.Section>
 
                     {/* Template Cards Grid */}
                     <Layout.Section>
                         {filtered.length === 0 ? (
-                            <Card>
-                                <Box padding="600">
+                            <div className="premium-card">
+                                <Box padding="400">
                                     <BlockStack gap="200" inlineAlign="center">
                                         <Text as="p" tone="subdued" alignment="center">No templates match your search. Try a different keyword or category.</Text>
                                         <Button onClick={openBlank}>Create Custom Rule</Button>
                                     </BlockStack>
                                 </Box>
-                            </Card>
+                            </div>
                         ) : (
                             <div style={{
                                 display: "grid",
@@ -760,15 +762,19 @@ export default function NewRule() {
 
                     {/* Footer CTA */}
                     <Layout.Section>
-                        <Card background="bg-surface-magic">
-                            <InlineStack align="space-between" blockAlign="center" wrap>
-                                <BlockStack gap="100">
-                                    <Text variant="headingSm" as="h3">Want something specific?</Text>
-                                    <Text as="p" tone="subdued" variant="bodySm">Can't find a template? Build your own rule with any condition.</Text>
-                                </BlockStack>
-                                <Button icon={PlusIcon} onClick={openBlank}>Create Custom Rule</Button>
-                            </InlineStack>
-                        </Card>
+                        <div className="premium-card" style={{ background: "var(--p-color-bg-surface-magic)" }}>
+                            <Box padding="400">
+                                <InlineStack align="space-between" blockAlign="center" wrap>
+                                    <BlockStack gap="100">
+                                        <Text variant="headingSm" as="h3">Want something specific?</Text>
+                                        <Text as="p" tone="subdued" variant="bodySm">Can't find a template? Build your own rule with any condition.</Text>
+                                    </BlockStack>
+                                    <div className="btn-premium">
+                                        <Button icon={PlusIcon} onClick={openBlank}>Create Custom Rule</Button>
+                                    </div>
+                                </InlineStack>
+                            </Box>
+                        </div>
                     </Layout.Section>
                 </Layout>
             </Page>

@@ -158,19 +158,21 @@ export default function RulesManagement() {
             >
                 <Layout>
                     <Layout.Section>
-                        <Card padding="0">
-                            <EmptyState
-                                heading="Automate your customer segmentation"
-                                action={{
-                                    content: 'Create your first rule',
-                                    onAction: () => navigate('/app/rules/new'),
-                                    icon: AutomationIcon
-                                }}
-                                image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
-                            >
-                                <p>Create smart rules to automatically tag customers based on their purchase behavior as soon as they interact with your store.</p>
-                            </EmptyState>
-                        </Card>
+                        <div className="premium-card">
+                            <Box padding="500">
+                                <EmptyState
+                                    heading="Automate your customer segmentation"
+                                    action={{
+                                        content: 'Create your first rule',
+                                        onAction: () => navigate('/app/rules/new'),
+                                        icon: AutomationIcon
+                                    }}
+                                    image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
+                                >
+                                    <p>Create smart rules to automatically tag customers based on their purchase behavior as soon as they interact with your store.</p>
+                                </EmptyState>
+                            </Box>
+                        </div>
                     </Layout.Section>
                 </Layout>
             </Page>
@@ -289,7 +291,7 @@ export default function RulesManagement() {
                 </Modal>
 
                 <Layout.Section>
-                    <Card padding="0">
+                    <div className="premium-card">
                         <Box padding="400">
                             <BlockStack gap="200">
                                 <Text variant="headingMd" as="h3">Active Smart Rules</Text>
@@ -312,7 +314,7 @@ export default function RulesManagement() {
                         >
                             {rowMarkup}
                         </IndexTable>
-                    </Card>
+                    </div>
                 </Layout.Section>
             </Layout>
         </Page>
