@@ -2,18 +2,18 @@ import { useState } from "react";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
 import { useSubmit, useActionData, useNavigation, useLoaderData } from "react-router";
 import { authenticate } from "../shopify.server";
-import { Page, Layout, Card, BlockStack, Text, FormLayout, TextField, Select, Button, Banner, Box, Icon } from "@shopify/polaris";
+import { Page, Layout, Card, BlockStack, Text, FormLayout, TextField, Select, Button, Banner, Box, Icon, InlineStack } from "@shopify/polaris";
 import { ChatIcon, EmailIcon } from "@shopify/polaris-icons";
 import { getCachedStore } from "../services/cache.server";
 import { sendEmail } from "../services/email.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
     const { session } = await authenticate.admin(request);
-    const store = await getCachedStore(session.shop);
     
     return { 
         shop: session.shop,
-        storeEmail: store?.email || ""
+        // Since we don't store merchant emails in our DB directly, we let them fill it in
+        storeEmail: ""
     };
 };
 
@@ -147,15 +147,26 @@ export default function SupportPage() {
                                 </Text>
                             </Box>
                             
-                            <BlockStack gap="200">
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    <Icon source={EmailIcon} tone="base" />
-                                    <Text as="p"><strong>Email:</strong> support@tagbot.ai</Text>
-                                </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    <Icon source={ChatIcon} tone="base" />
-                                    <Text as="p"><strong>Live Chat:</strong> Available on our website</Text>
-                                </div>
+                            <BlockStack gap="300">
+                                <InlineStack gap="300" wrap={false} blockAlign="start">
+                                    <Box>
+                                        <Icon source={EmailIcon} tone="base" />
+                                    </Box>
+                                    <BlockStack gap="100">
+                                        <Text as="p" fontWeight="bold">Email Support</Text>
+                                        <Text as="p" tone="subdued">support@tagbot.ai</Text>
+                                    </BlockStack>
+                                </InlineStack>
+                                
+                                <InlineStack gap="300" wrap={false} blockAlign="start">
+                                    <Box>
+                                        <Icon source={ChatIcon} tone="base" />
+                                    </Box>
+                                    <BlockStack gap="100">
+                                        <Text as="p" fontWeight="bold">Live Chat</Text>
+                                        <Text as="p" tone="subdued">Available on tagbotai.com</Text>
+                                    </BlockStack>
+                                </InlineStack>
                             </BlockStack>
                         </BlockStack>
                     </Card>
