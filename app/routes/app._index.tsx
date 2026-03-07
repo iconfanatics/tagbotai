@@ -451,7 +451,6 @@ export default function Index() {
                   <Layout.Section>
                     <Box paddingBlockEnd="100">
                       <InlineStack gap="200" blockAlign="center">
-                        <Icon source={PersonIcon} tone="subdued" />
                         <Text variant="headingSm" as="h3" tone="subdued">Customer Overview</Text>
                       </InlineStack>
                     </Box>
@@ -475,7 +474,6 @@ export default function Index() {
                   <Layout.Section>
                     <Box paddingBlockEnd="100">
                       <InlineStack gap="200" blockAlign="center">
-                        <Icon source={OrderIcon} tone="magic" />
                         <Text variant="headingSm" as="h3" tone="subdued">Order-Based Tags</Text>
                         <Badge tone="magic">New</Badge>
                       </InlineStack>
