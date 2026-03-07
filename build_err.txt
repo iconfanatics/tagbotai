@@ -1,0 +1,127 @@
+npm warn Unknown project config "shamefully-hoist". This will stop working in the next major version of npm.
+
+> build
+> react-router build
+
+vite v6.4.1 building for production...
+transforming...
+✓ 1220 modules transformed.
+✗ Build failed in 4.18s
+[vite]: Rollup failed to resolve import "@shopify/shopify-app-remix/server" from "/home/sany/tag-bot-ai-smart-segmentation/app/routes/app.tsx".
+This is most likely unintended because it can break your application at runtime.
+If you do want to externalize this module explicitly add it to
+`build.rollupOptions.external`
+    at viteLog (file:///home/sany/tag-bot-ai-smart-segmentation/node_modules/vite/dist/node/chunks/dep-D4NMHUTW.js:46374:15)
+    at file:///home/sany/tag-bot-ai-smart-segmentation/node_modules/vite/dist/node/chunks/dep-D4NMHUTW.js:46432:18
+    at onwarn (/home/sany/tag-bot-ai-smart-segmentation/node_modules/@react-router/dev/dist/cli/index.js:1659:11)
+    at file:///home/sany/tag-bot-ai-smart-segmentation/node_modules/vite/dist/node/chunks/dep-D4NMHUTW.js:46430:7
+    at onRollupLog (file:///home/sany/tag-bot-ai-smart-segmentation/node_modules/vite/dist/node/chunks/dep-D4NMHUTW.js:46422:5)
+    at onLog (file:///home/sany/tag-bot-ai-smart-segmentation/node_modules/vite/dist/node/chunks/dep-D4NMHUTW.js:46072:7)
+    at file:///home/sany/tag-bot-ai-smart-segmentation/node_modules/rollup/dist/es/shared/node-entry.js:20981:32
+    at Object.logger [as onLog] (file:///home/sany/tag-bot-ai-smart-segmentation/node_modules/rollup/dist/es/shared/node-entry.js:22968:9)
+    at ModuleLoader.handleInvalidResolvedId (file:///home/sany/tag-bot-ai-smart-segmentation/node_modules/rollup/dist/es/shared/node-entry.js:21712:26)
+    at file:///home/sany/tag-bot-ai-smart-segmentation/node_modules/rollup/dist/es/shared/node-entry.js:21670:26 {
+  watchFiles: [
+    '/home/sany/tag-bot-ai-smart-segmentation/app/routes/webhooks.customers.data_request.tsx',
+    '/home/sany/tag-bot-ai-smart-segmentation/app/root.tsx',
+    '/home/sany/tag-bot-ai-smart-segmentation/app/routes/webhooks.app.scopes_update.tsx',
+    '/home/sany/tag-bot-ai-smart-segmentation/app/routes/webhooks.customers.create.tsx',
+    '/home/sany/tag-bot-ai-smart-segmentation/app/routes/webhooks.customers.redact.tsx',
+    '/home/sany/tag-bot-ai-smart-segmentation/app/routes/webhooks.app.uninstalled.tsx',
+    '/home/sany/tag-bot-ai-smart-segmentation/app/routes/webhooks.orders.create.tsx',
+    '/home/sany/tag-bot-ai-smart-segmentation/app/routes/webhooks.orders.paid.tsx',
+    '/home/sany/tag-bot-ai-smart-segmentation/app/routes/webhooks.shop.redact.tsx',
+    '/home/sany/tag-bot-ai-smart-segmentation/app/routes/super-admin.tsx',
+    '/home/sany/tag-bot-ai-smart-segmentation/app/routes/super-admin._index.tsx',
+    '/home/sany/tag-bot-ai-smart-segmentation/app/routes/super-admin.login.tsx',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/@react-router/dev/dist/config/defaults/entry.client.tsx',
+    '/home/sany/tag-bot-ai-smart-segmentation/app/routes/_index/route.tsx',
+    '/home/sany/tag-bot-ai-smart-segmentation/app/routes/auth.login/route.tsx',
+    '/home/sany/tag-bot-ai-smart-segmentation/app/routes/auth.$.tsx',
+    '/home/sany/tag-bot-ai-smart-segmentation/app/routes/app.tsx',
+    '/home/sany/tag-bot-ai-smart-segmentation/app/routes/app.integrations.tsx',
+    '/home/sany/tag-bot-ai-smart-segmentation/app/routes/app.rules._index.tsx',
+    '/home/sany/tag-bot-ai-smart-segmentation/app/routes/app.additional.tsx',
+    '/home/sany/tag-bot-ai-smart-segmentation/app/routes/app.rules.new.tsx',
+    '/home/sany/tag-bot-ai-smart-segmentation/app/routes/app.workflows.tsx',
+    '/home/sany/tag-bot-ai-smart-segmentation/app/routes/app.settings.tsx',
+    '/home/sany/tag-bot-ai-smart-segmentation/app/routes/app.ai.rule.tsx',
+    '/home/sany/tag-bot-ai-smart-segmentation/app/routes/app.cleanup.tsx',
+    '/home/sany/tag-bot-ai-smart-segmentation/app/routes/app.predict.tsx',
+    '/home/sany/tag-bot-ai-smart-segmentation/app/routes/app.pricing.tsx',
+    '/home/sany/tag-bot-ai-smart-segmentation/app/routes/app._index.tsx',
+    '/home/sany/tag-bot-ai-smart-segmentation/app/routes/app.export.tsx',
+    '/home/sany/tag-bot-ai-smart-segmentation/app/routes/app.guide.tsx',
+    '/home/sany/tag-bot-ai-smart-segmentation/app/routes/app.roi.tsx',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/react/index.js',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/react-dom/client.js',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/react/jsx-runtime.js',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/react-router/dist/development/dom-export.mjs',
+    '/home/sany/tag-bot-ai-smart-segmentation/package.json',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/react-router/dist/development/chunk-4LKRSAEJ.mjs',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/react-router/dist/development/chunk-JZWAC4HX.mjs',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/react/cjs/react.production.min.js',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/react-dom/index.js',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/react/cjs/react-jsx-runtime.production.min.js',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/react-router/node_modules/cookie/dist/index.js',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/set-cookie-parser/lib/set-cookie.js',
+    '/home/sany/tag-bot-ai-smart-segmentation/app/styles/app-premium.css',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/react-dom/cjs/react-dom.production.min.js',
+    '/home/sany/tag-bot-ai-smart-segmentation/app/routes/_index/styles.module.css',
+    '/home/sany/tag-bot-ai-smart-segmentation/app/components/DashboardChart.tsx',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/scheduler/index.js',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/scheduler/cjs/scheduler.production.min.js',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/react-router/dist/development/index.mjs',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/@shopify/polaris/build/esm/index.js',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/@shopify/polaris/locales/en.json',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/@shopify/polaris-icons/dist/index.mjs',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/@shopify/polaris/build/esm/styles.css',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/@shopify/polaris/build/esm/configure.js',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/@shopify/polaris/build/esm/utilities/within-content-context.js',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/@shopify/polaris/build/esm/components/ThemeProvider/ThemeProvider.js',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/@shopify/polaris/build/esm/types.js',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/@shopify/polaris/build/esm/utilities/color-transformers.js',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/@shopify/polaris/build/esm/components/shared.js',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/@shopify/polaris/build/esm/utilities/use-copy-to-clipboard.js',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/@shopify/polaris/build/esm/utilities/use-event-listener.js',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/@shopify/polaris/build/esm/utilities/use-hover.js',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/@shopify/polaris/build/esm/utilities/use-media-query.js',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/@shopify/polaris/build/esm/utilities/use-focus.js',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/@shopify/polaris/build/esm/utilities/use-theme.js',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/@shopify/polaris/build/esm/utilities/breakpoints.js',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/@shopify/polaris/build/esm/components/AccountConnection/AccountConnection.js',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/@shopify/polaris/build/esm/utilities/use-index-resource-state.js',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/@shopify/polaris/build/esm/components/AppProvider/AppProvider.js',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/@shopify/polaris/build/esm/components/ActionMenu/ActionMenu.js',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/@shopify/polaris/build/esm/components/ActionList/ActionList.js',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/@shopify/polaris/build/esm/components/Backdrop/Backdrop.js',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/@shopify/polaris/build/esm/components/Autocomplete/Autocomplete.js',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/@shopify/polaris/build/esm/components/Badge/types.js',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/@shopify/polaris/build/esm/components/Avatar/Avatar.js',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/@shopify/polaris/build/esm/components/Badge/Badge.js',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/@shopify/polaris/build/esm/components/Box/Box.js',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/@shopify/polaris/build/esm/components/Banner/Banner.js',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/@shopify/polaris/build/esm/components/Bleed/Bleed.js',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/@shopify/polaris/build/esm/components/Breadcrumbs/Breadcrumbs.js',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/@shopify/polaris/build/esm/components/BulkActions/BulkActions.js',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/@shopify/polaris/build/esm/components/ButtonGroup/ButtonGroup.js',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/@shopify/polaris/build/esm/components/Button/utils.js',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/@shopify/polaris/build/esm/components/CalloutCard/CalloutCard.js',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/@shopify/polaris/build/esm/components/Card/Card.js',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/@shopify/polaris/build/esm/components/Button/Button.js',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/@shopify/polaris/build/esm/components/ChoiceList/ChoiceList.js',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/@shopify/polaris/build/esm/components/Checkbox/Checkbox.js',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/@shopify/polaris/build/esm/components/Combobox/Combobox.js',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/@shopify/polaris/build/esm/components/ColorPicker/ColorPicker.js',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/@shopify/polaris/build/esm/components/Collapsible/Collapsible.js',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/@shopify/polaris/build/esm/components/InlineGrid/InlineGrid.js',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/@shopify/polaris/build/esm/components/Connected/Connected.js',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/@shopify/polaris/build/esm/components/ContextualSaveBar/ContextualSaveBar.js',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/@shopify/polaris/build/esm/components/DataTable/DataTable.js',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/@shopify/polaris/build/esm/components/DescriptionList/DescriptionList.js',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/@shopify/polaris/build/esm/components/Divider/Divider.js',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/@shopify/polaris/build/esm/components/DatePicker/DatePicker.js',
+    '/home/sany/tag-bot-ai-smart-segmentation/node_modules/@shopify/polaris/build/esm/components/EmptySearchResult/EmptySearchResult.js',
+    ... 1070 more items
+  ]
+}

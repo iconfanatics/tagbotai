@@ -53,6 +53,7 @@ model Store {
   mailchimpApiKey       String?
   mailchimpServerPrefix String?
   mailchimpListId       String?
+  welcomeEmailSent      Boolean       @default(false)
   createdAt             DateTime   @default(now())
   updatedAt             DateTime   @updatedAt
   rules                 Rule[]

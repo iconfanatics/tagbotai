@@ -5,6 +5,7 @@ import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import db from "../db.server";
+import { sendWelcomeEmail } from "../services/email.server";
 import { getCachedStore } from "../services/cache.server";
 import { enqueueSyncJob } from "../services/queue.server";
 import {
@@ -80,7 +81,27 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
   const sixtyDaysAgo = new Date();
-  sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
+  // Fire the Welcome Email if it hasn't been sent yet
+  if (!store.welcomeEmailSent && store.planName) {
+      try {
+          const activeSession = await db.session.findFirst({
+              where: { shop: session.shop, isOnline: false }
+          });
+          
+          if (activeSession?.email) {
+              const success = await sendWelcomeEmail(session.shop, activeSession.email);
+              if (success) {
+                  // Mark as sent so we don't spam them on every refresh
+                  await db.store.update({
+                      where: { id: store.id },
+                      data: { welcomeEmailSent: true }
+                  });
+              }
+          }
+      } catch (e) {
+          console.error("Failed to sequence Welcome Email:", e);
+      }
+  }
 
   // Reset stuck sync
   if (store.isSyncing && store.updatedAt) {

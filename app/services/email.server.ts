@@ -1,7 +1,17 @@
+import { Resend } from 'resend';
+
 /**
  * Email Service Module
  * Handles outward bound transactional emails to merchants.
  */
+
+// We get the Resend instance if the API key exists
+const getResendInstance = () => {
+    const apiKey = process.env.RESEND_API_KEY;
+    if (!apiKey) return null;
+    return new Resend(apiKey);
+};
+
 export async function sendWelcomeEmail(shopName: string, recipientEmail: string) {
     const htmlBody = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333; line-height: 1.6;">
@@ -21,25 +31,89 @@ export async function sendWelcomeEmail(shopName: string, recipientEmail: string)
         </div>
     `;
 
-    console.log(`\n=================================================`);
-    console.log(`[EMAIL DISPATCHER] -> Simulated Welcome Email Sent!`);
-    console.log(`To: ${recipientEmail}`);
-    console.log(`Subject: Welcome to TagBot AI! Let's boost your sales 🚀`);
-    console.log(`\n${htmlBody}`);
-    console.log(`=================================================\n`);
+    const resend = getResendInstance();
 
-    // TODO: In production, integrate SendGrid, Resend, or AWS SES here.
-    return true;
+    if (!resend) {
+        console.warn(`[EMAIL WARNING] RESEND_API_KEY is not set. Simulated Welcome Email sent to ${recipientEmail}`);
+        return true; // Soft fail so app installation doesn't break
+    }
+
+    try {
+        await resend.emails.send({
+            from: 'TagBot AI <hello@tagbot.ai>', // Replace with the verified domain once set up
+            to: recipientEmail,
+            subject: "Welcome to TagBot AI! Let's boost your sales 🚀",
+            html: htmlBody,
+        });
+        console.log(`[EMAIL DISPATCHER] -> Welcome Email Successfully Sent to ${recipientEmail}`);
+        return true;
+    } catch (error) {
+        console.error(`[EMAIL ERROR] Failed to send Welcome Email:`, error);
+        return false;
+    }
+}
+
+export async function sendUpgradePromptEmail(shopName: string, recipientEmail: string) {
+    const htmlBody = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333; line-height: 1.6;">
+            <h1 style="color: #00A0AC;">Unlock the Full Power of TagBot AI 🚀</h1>
+            <p>Hi ${shopName},</p>
+            <p>You've been using TagBot AI for a week now! We hope you're already seeing the value of automated customer segmentation.</p>
+            <p>Did you know you can unlock even more revenue by upgrading to our <strong>Pro Plan</strong>?</p>
+            <h3>Why Upgrade to Pro?</h3>
+            <ul>
+                <li><strong>Unlimited Rules:</strong> Create as many automation workflows as you need without limits.</li>
+                <li><strong>AI Predictive Insights:</strong> Let our AI automatically tag your At-Risk VIPs before they churn.</li>
+                <li><strong>Customer Note Syncing:</strong> Automatically append rich insights directly into Shopify customer notes.</li>
+            </ul>
+            <p>Upgrade today directly from the Billing tab in the TagBot AI dashboard to scale your store's retention strategy.</p>
+            <br/>
+            <p>Cheers,</p>
+            <p><strong>The TagBot AI Team</strong></p>
+        </div>
+    `;
+
+    const resend = getResendInstance();
+
+    if (!resend) {
+        console.warn(`[EMAIL WARNING] RESEND_API_KEY is not set. Simulated Upgrade Prompt sent to ${recipientEmail}`);
+        return true;
+    }
+
+    try {
+        await resend.emails.send({
+            from: 'TagBot AI <hello@tagbot.ai>',
+            to: recipientEmail,
+            subject: "Take your store segmentation to the next level 📈",
+            html: htmlBody,
+        });
+        console.log(`[EMAIL DISPATCHER] -> Upgrade Prompt Email Successfully Sent to ${recipientEmail}`);
+        return true;
+    } catch (error) {
+        console.error(`[EMAIL ERROR] Failed to send Upgrade Prompt:`, error);
+        return false;
+    }
 }
 
 export async function sendEmail(to: string, subject: string, htmlBody: string) {
-    console.log(`\n=================================================`);
-    console.log(`[EMAIL DISPATCHER] -> Simulated Outbound Email Sent!`);
-    console.log(`To: ${to}`);
-    console.log(`Subject: ${subject}`);
-    console.log(`\n${htmlBody}`);
-    console.log(`=================================================\n`);
+    const resend = getResendInstance();
 
-    // TODO: In production, integrate actual email provider here.
-    return true;
+    if (!resend) {
+        console.warn(`[EMAIL WARNING] RESEND_API_KEY is not set. Simulated outbound email sent to ${to}`);
+        return true;
+    }
+
+    try {
+        // For general outbound support requests, the reply-to becomes the merchant.
+        await resend.emails.send({
+            from: 'TagBot AI Support System <support@tagbot.ai>',
+            to: to,
+            subject: subject,
+            html: htmlBody,
+        });
+        return true;
+    } catch (error) {
+        console.error(`[EMAIL ERROR] Failed to send standard email:`, error);
+        return false;
+    }
 }

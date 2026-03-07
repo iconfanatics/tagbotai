@@ -35,6 +35,7 @@ CREATE TABLE "Store" (
     "mailchimpApiKey" TEXT,
     "mailchimpServerPrefix" TEXT,
     "mailchimpListId" TEXT,
+    "welcomeEmailSent" BOOLEAN NOT NULL DEFAULT false,
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" DATETIME NOT NULL
 );
