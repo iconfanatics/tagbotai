@@ -31,3 +31,15 @@ export async function sendWelcomeEmail(shopName: string, recipientEmail: string)
     // TODO: In production, integrate SendGrid, Resend, or AWS SES here.
     return true;
 }
+
+export async function sendEmail(to: string, subject: string, htmlBody: string) {
+    console.log(`\n=================================================`);
+    console.log(`[EMAIL DISPATCHER] -> Simulated Outbound Email Sent!`);
+    console.log(`To: ${to}`);
+    console.log(`Subject: ${subject}`);
+    console.log(`\n${htmlBody}`);
+    console.log(`=================================================\n`);
+
+    // TODO: In production, integrate actual email provider here.
+    return true;
+}

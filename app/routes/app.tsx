@@ -58,7 +58,7 @@ export default function App() {
           <Link to="/app/cleanup">Cleanup</Link>
           <Link to="/app/settings">Settings</Link>
           <Link to="/app/pricing">Pricing Plans</Link>
-          <Link to="/app/guide">Testing Guide</Link>
+          <Link to="/app/support">Support</Link>
         </ui-nav-menu>
         <Outlet />
       </PolarisAppProvider>
