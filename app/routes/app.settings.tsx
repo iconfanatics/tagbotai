@@ -1,8 +1,8 @@
 import { useState } from "react";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
 import { useLoaderData, useSubmit, useActionData, useNavigation, useNavigate } from "react-router";
-import { Page, Layout, Card, BlockStack, Text, InlineStack, Banner, Checkbox, Button, Box, Icon, Modal } from "@shopify/polaris";
-import { SettingsIcon, CheckIcon } from "@shopify/polaris-icons";
+import { Page, Layout, Card, BlockStack, Text, InlineStack, Banner, Checkbox, Button, Box, Icon, Modal, Link } from "@shopify/polaris";
+import { SettingsIcon, CheckIcon, InfoIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { getCachedStore, invalidateStoreCache } from "../services/cache.server";
@@ -137,8 +137,9 @@ export default function Settings() {
                         </Box>
                     )}
 
-                    <Card>
-                        <BlockStack gap="400">
+                    <div className="premium-card">
+                        <Box padding="400">
+                            <BlockStack gap="400">
                             <InlineStack gap="200" align="start" blockAlign="center">
                                 <Icon source={SettingsIcon} tone="base" />
                                 <Text variant="headingMd" as="h3">General Preferences</Text>
@@ -164,7 +165,30 @@ export default function Settings() {
                                 </Button>
                             </Box>
                         </BlockStack>
-                    </Card>
+                    </Box>
+                </div>
+            </Layout.Section>
+
+            {/* Legal Section */}
+            <Layout.Section>
+                <div className="premium-card">
+                    <Box padding="400">
+                        <BlockStack gap="400">
+                            <InlineStack gap="200" align="start" blockAlign="center">
+                                <Icon source={InfoIcon} tone="base" />
+                                <Text variant="headingMd" as="h3">Legal & Compliance</Text>
+                            </InlineStack>
+                                <Text as="p" tone="subdued">
+                                    Review our policies regarding data collection, usage, and your rights as a merchant.
+                                    These documents are also publicly available on our Shopify App Store listing.
+                                </Text>
+                                <InlineStack gap="400">
+                                    <Link url="/privacy" target="_blank">Privacy Policy</Link>
+                                    <Link url="/terms" target="_blank">Terms of Service</Link>
+                                </InlineStack>
+                            </BlockStack>
+                        </Box>
+                    </div>
                 </Layout.Section>
             </Layout>
         </Page>
