@@ -97,8 +97,8 @@ export async function processOneCustomer(
                             edges {
                                 node {
                                     createdAt
-                                    subtotalPrice
-                                    totalDiscounts
+                                    subtotalPriceSet { shopMoney { amount } }
+                                    totalDiscountsSet { shopMoney { amount } }
                                     discountCodes
                                     paymentGatewayNames
                                     sourceIdentifier
@@ -128,8 +128,8 @@ export async function processOneCustomer(
                 // Map the graphql order payload to match the REST webhook shape that evaluateOrderRules expects
                 const o = orderEdge.node;
                 const mappedOrder = {
-                    subtotal_price: o.subtotalPrice,
-                    total_discounts: o.totalDiscounts,
+                    subtotal_price: o.subtotalPriceSet?.shopMoney?.amount || "0",
+                    total_discounts: o.totalDiscountsSet?.shopMoney?.amount || "0",
                     discount_codes: o.discountCodes ? o.discountCodes.map((c: string) => ({ code: c })) : [],
                     payment_gateway_names: o.paymentGatewayNames,
                     source_name: o.channel?.name || o.sourceIdentifier,
