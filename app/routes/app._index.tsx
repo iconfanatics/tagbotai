@@ -486,7 +486,17 @@ export default function Index() {
                         <KpiCard label="Order Tags Fired" value={orderTagsFired} icon={HashtagIcon} tone="success" />
                       </Grid.Cell>
                       <Grid.Cell columnSpan={{ xs: 6, sm: 3, md: 3, lg: 3, xl: 3 }}>
-                        <KpiCard label="Top Order Tag" value={topOrderTags[0]?.tag || "—"} icon={DiscountIcon} />
+                        <Card roundedAbove="sm">
+                          <Box padding="400">
+                            <BlockStack gap="200">
+                              <InlineStack align="space-between" blockAlign="center">
+                                <Text variant="bodySm" as="span" tone="subdued" fontWeight="medium">Top Order Tag</Text>
+                                <Icon source={DiscountIcon} tone="base" />
+                              </InlineStack>
+                              <Text variant="headingXl" as="h2">{topOrderTags[0]?.tag || "—"}</Text>
+                            </BlockStack>
+                          </Box>
+                        </Card>
                       </Grid.Cell>
                       <Grid.Cell columnSpan={{ xs: 6, sm: 3, md: 3, lg: 3, xl: 3 }}>
                         <Card roundedAbove="sm">
