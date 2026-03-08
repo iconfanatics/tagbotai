@@ -34,8 +34,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         db.customer.count({
             where: {
                 storeId: store.id,
-                orderCount: { gte: 3 },
-                totalSpent: { gte: 200 },
+                orderCount: { gte: 1 },
+                totalSpent: { gte: 50 },
                 lastOrderDate: { gte: sixtyDaysAgo },
                 NOT: { tags: { contains: "VIP" } }
             }
@@ -43,7 +43,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         db.customer.count({
             where: {
                 storeId: store.id,
-                orderCount: { gte: 2 },
+                orderCount: { gte: 1 },
                 lastOrderDate: { lt: ninetyDaysAgo },
                 NOT: { tags: { contains: "At-Risk" } }
             }
@@ -165,8 +165,8 @@ export default function PredictPage() {
                                                 {/* @ts-ignore */}
                                                 <Badge tone="success">VIP Ruleset</Badge>
                                                 <List type="bullet">
-                                                    <List.Item>≥ 3 orders</List.Item>
-                                                    <List.Item>≥ $200 LTV</List.Item>
+                                                    <List.Item>≥ 1 orders</List.Item>
+                                                    <List.Item>≥ $50 LTV</List.Item>
                                                     <List.Item>Active &lt; 60 days</List.Item>
                                                 </List>
                                             </BlockStack>
@@ -177,7 +177,7 @@ export default function PredictPage() {
                                                 {/* @ts-ignore */}
                                                 <Badge tone="critical">Attrition Ruleset</Badge>
                                                 <List type="bullet">
-                                                    <List.Item>≥ 2 orders</List.Item>
+                                                    <List.Item>≥ 1 orders</List.Item>
                                                     <List.Item>Inactive &gt; 90 days</List.Item>
                                                 </List>
                                             </BlockStack>

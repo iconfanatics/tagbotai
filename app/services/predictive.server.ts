@@ -5,8 +5,8 @@
  * applies tags via the existing manageCustomerTags pipeline)
  *
  * Rules (deterministic, no LLM overhead):
- *   VIP       → orderCount ≥ 3 AND totalSpent ≥ 200 AND last order within 60 days
- *   At-Risk   → orderCount ≥ 2 AND last order > 90 days ago
+ *   VIP       → orderCount ≥ 1 AND totalSpent ≥ 50 AND last order within 60 days
+ *   At-Risk   → orderCount ≥ 1 AND last order > 90 days ago
  *
  * Idempotent: customers already carrying the target tag are skipped.
  */
@@ -63,8 +63,8 @@ export async function runPredictiveSegmentation(
 
             // ── VIP Scoring ──────────────────────────────────────────────────
             const isVipCandidate =
-                customer.orderCount >= 3 &&
-                customer.totalSpent >= 200 &&
+                customer.orderCount >= 1 &&
+                customer.totalSpent >= 50 &&
                 lastOrder !== null &&
                 lastOrder >= sixtyDaysAgo;
 
@@ -80,7 +80,7 @@ export async function runPredictiveSegmentation(
 
             // ── At-Risk Scoring ──────────────────────────────────────────────
             const isAtRiskCandidate =
-                customer.orderCount >= 2 &&
+                customer.orderCount >= 1 &&
                 lastOrder !== null &&
                 lastOrder < ninetyDaysAgo;
 
