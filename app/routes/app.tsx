@@ -51,6 +51,7 @@ export default function App() {
         <ui-nav-menu>
           <Link to="/app" rel="home">Dashboard</Link>
           <Link to="/app/rules">Rules</Link>
+          <Link to="/app/timeline">Customer Timeline</Link>
           <Link to="/app/predict">Predictive</Link>
           <Link to="/app/roi">Revenue ROI</Link>
           <Link to="/app/workflows">Workflows</Link>
