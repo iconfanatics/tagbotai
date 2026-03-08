@@ -76,12 +76,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const rows = matchingCustomers.map(c => 
     `"${c.firstName || ''}","${c.lastName || ''}","${c.email || ''}",${c.totalSpent},${c.orderCount}`
   ).join("\n");
-  const csvStr = header + rows;
+  
+  // Add UTF-8 BOM so Excel and other spreadsheet software read it correctly
+  const bom = "\uFEFF";
+  const csvStr = bom + header + rows;
 
   return new Response(csvStr, {
     status: 200,
     headers: {
-      "Content-Type": "text/csv",
+      "Content-Type": "text/csv; charset=utf-8",
       "Content-Disposition": `attachment; filename="${segmentToExport.replace(/\s+/g, "_")}_segment.csv"`
     }
   });
