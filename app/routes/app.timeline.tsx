@@ -110,21 +110,20 @@ export default function Timeline() {
             <BlockStack gap="400">
               <Text variant="headingMd" as="h2">Find Customer</Text>
               
-              <InlineStack gap="200" blockAlign="center" wrap={false}>
-                <div style={{ flex: 1 }}>
-                  <TextField 
-                    label="" 
-                    labelHidden 
-                    value={searchValue} 
-                    onChange={handleSearchChange} 
-                    placeholder="Email or name..." 
-                    autoComplete="off" 
-                    prefix={<Icon source={SearchIcon} />}
-                    onBlur={submitSearch}
-                  />
-                </div>
-                <Button onClick={submitSearch}>Search</Button>
-              </InlineStack>
+              <form onSubmit={(e) => { e.preventDefault(); submitSearch(); }}>
+                <TextField 
+                  label="Search customers" 
+                  labelHidden 
+                  value={searchValue} 
+                  onChange={handleSearchChange} 
+                  placeholder="Email or name..." 
+                  autoComplete="off" 
+                  prefix={<Icon source={SearchIcon} />}
+                  connectedRight={<Button submit>Search</Button>}
+                  clearButton
+                  onClearButtonClick={() => handleSearchChange("")}
+                />
+              </form>
 
               <Divider />
               
@@ -136,7 +135,9 @@ export default function Timeline() {
                   customers.map(c => {
                     const isSelected = selectedCustomer?.id === c.id;
                     const name = c.firstName ? `${c.firstName} ${c.lastName || ""}` : "Guest User";
-                    const initials = c.firstName ? c.firstName.charAt(0).toUpperCase() : "?";
+                    const initials = c.firstName 
+                      ? `${c.firstName.charAt(0)}${c.lastName ? c.lastName.charAt(0) : ''}`.toUpperCase() 
+                      : "U";
                     
                     return (
                       <div 
@@ -150,11 +151,13 @@ export default function Timeline() {
                         }}
                       >
                         <InlineStack gap="300" blockAlign="center" wrap={false}>
-                          <Avatar initials={initials} customer name={name} />
-                          <BlockStack gap="0">
-                            <Text as="p" fontWeight={isSelected ? "bold" : "regular"}>{name}</Text>
-                            <Text as="p" variant="bodySm" tone="subdued">{c.email || c.id}</Text>
-                          </BlockStack>
+                          <Avatar initials={initials} name={name} />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <BlockStack gap="0">
+                              <Text as="p" fontWeight={isSelected ? "bold" : "regular"} truncate>{name}</Text>
+                              <Text as="p" variant="bodySm" tone="subdued" truncate>{c.email || c.id}</Text>
+                            </BlockStack>
+                          </div>
                         </InlineStack>
                       </div>
                     );
