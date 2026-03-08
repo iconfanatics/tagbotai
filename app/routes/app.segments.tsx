@@ -1,5 +1,5 @@
-import { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
-import { useLoaderData, useNavigate, Form } from "react-router";
+import { LoaderFunctionArgs } from "react-router";
+import { useLoaderData, useNavigate } from "react-router";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import db from "../db.server";
@@ -20,20 +20,27 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // In a massive production app, we would use native SQL grouping or background aggregation jobs.
   const allCustomers = await db.customer.findMany({
     where: { storeId: store.id },
-    select: { id: true, tags: true, totalSpent: true }
+    select: { id: true, tags: true, totalSpent: true, firstName: true, lastName: true, email: true, orderCount: true }
   });
 
-  const segmentsMap: Record<string, { count: number; totalSpent: number }> = {};
+  const segmentsMap: Record<string, { count: number; totalSpent: number; customers: any[] }> = {};
 
   allCustomers.forEach((c) => {
     if (c.tags) {
       const tagsArray = c.tags.split(",").map((t) => t.trim()).filter(Boolean);
       tagsArray.forEach((tag) => {
         if (!segmentsMap[tag]) {
-          segmentsMap[tag] = { count: 0, totalSpent: 0 };
+          segmentsMap[tag] = { count: 0, totalSpent: 0, customers: [] };
         }
         segmentsMap[tag].count += 1;
         segmentsMap[tag].totalSpent += c.totalSpent;
+        segmentsMap[tag].customers.push({
+          firstName: c.firstName || "",
+          lastName: c.lastName || "",
+          email: c.email || "",
+          totalSpent: c.totalSpent,
+          orderCount: c.orderCount
+        });
       });
     }
   });
@@ -43,55 +50,36 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       name,
       count: data.count,
       totalSpent: data.totalSpent,
+      customers: data.customers
     }))
     .sort((a, b) => b.count - a.count);
 
   return { segments };
 };
 
-export const action = async ({ request }: ActionFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
-  const store = await getCachedStore(session.shop);
-  if (!store) throw new Error("Store not found");
-
-  const formData = await request.formData();
-  const segmentToExport = formData.get("segment")?.toString();
-
-  if (!segmentToExport) {
-    return new Response("Segment name missing", { status: 400 });
-  }
-
-  const allCustomers = await db.customer.findMany({
-    where: { storeId: store.id, tags: { contains: segmentToExport } },
-    select: { firstName: true, lastName: true, email: true, totalSpent: true, orderCount: true, tags: true }
-  });
-
-  const matchingCustomers = allCustomers.filter(c => {
-    if (!c.tags) return false;
-    const tagArray = c.tags.split(",").map(t => t.trim());
-    return tagArray.includes(segmentToExport);
-  });
-
-  const header = "First Name,Last Name,Email,Total Spent,Orders\n";
-  const rows = matchingCustomers.map(c => 
-    `"${c.firstName || ''}","${c.lastName || ''}","${c.email || ''}",${c.totalSpent},${c.orderCount}`
-  ).join("\n");
-  
-  // Add UTF-8 BOM so Excel and other spreadsheet software read it correctly
-  const bom = "\uFEFF";
-  const csvStr = bom + header + rows;
-
-  return new Response(csvStr, {
-    status: 200,
-    headers: {
-      "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="${segmentToExport.replace(/\s+/g, "_")}_segment.csv"`
-    }
-  });
-};
-
 export default function SmartSegments() {
   const { segments } = useLoaderData<typeof loader>();
+
+  const downloadCustomerCSV = (segmentName: string, customers: any[]) => {
+    const header = "First Name,Last Name,Email,Total Spent,Orders\n";
+    const rows = customers.map(c => 
+      `"${c.firstName}","${c.lastName}","${c.email}",${c.totalSpent},${c.orderCount}`
+    ).join("\n");
+    
+    // Add UTF-8 BOM so Excel and other spreadsheet software read it correctly
+    const bom = "\uFEFF";
+    const csvStr = bom + header + rows;
+
+    const blob = new Blob([csvStr], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `${segmentName.replace(/\s+/g, "_")}_segment.csv`);
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   return (
     <Page 
@@ -141,17 +129,14 @@ export default function SmartSegments() {
                     </BlockStack>
 
                     <Box paddingBlockStart="200">
-                      <Form method="post" reloadDocument>
-                        <input type="hidden" name="segment" value={segment.name} />
-                        <Button 
-                          size="medium"
-                          fullWidth 
-                          icon={ExportIcon}
-                          submit
-                        >
-                          Download CSV
-                        </Button>
-                      </Form>
+                      <Button 
+                        size="medium"
+                        fullWidth 
+                        icon={ExportIcon}
+                        onClick={() => downloadCustomerCSV(segment.name, segment.customers)}
+                      >
+                        Download CSV
+                      </Button>
                     </Box>
                   </BlockStack>
                 </Card>
