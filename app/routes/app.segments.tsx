@@ -106,7 +106,7 @@ export default function SmartSegments() {
                         icon={ExternalIcon}
                         onClick={() => {
                           // Redirect to Shopify's native customer list filtered by this tag
-                          window.open(`shopify:admin/customers?query=${encodeURIComponent(segment.name)}`, "_blank");
+                          window.open(`shopify:admin/customers?query=${encodeURIComponent(`customer_tags CONTAINS '${segment.name}'`)}`, "_blank");
                         }}
                       >
                         View in Shopify
