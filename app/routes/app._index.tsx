@@ -493,7 +493,17 @@ export default function Index() {
                                 <Text variant="bodySm" as="span" tone="subdued" fontWeight="medium">Top Order Tag</Text>
                                 <Icon source={DiscountIcon} tone="base" />
                               </InlineStack>
-                              <Text variant="headingXl" as="h2">{topOrderTags[0]?.tag || "—"}</Text>
+                              <div style={{
+                                fontSize: "clamp(1.2rem, 2vw, 1.5rem)",
+                                fontWeight: 700,
+                                whiteSpace: "nowrap",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                color: "#111827",
+                                lineHeight: 1.2
+                              }}>
+                                {topOrderTags[0]?.tag || "—"}
+                              </div>
                             </BlockStack>
                           </Box>
                         </Card>
