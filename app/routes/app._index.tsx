@@ -19,6 +19,7 @@ import {
 } from "@shopify/polaris-icons";
 
 const DashboardChart = React.lazy(() => import("../components/DashboardChart"));
+const OnboardingTour = React.lazy(() => import("../components/OnboardingTour"));
 const MemoizedDataTable = React.memo(DataTable);
 
 // ─── Error Boundary ───────────────────────────────────────────────────────────
@@ -68,6 +69,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     return {
       currentPlanName: "Free",
       monthlyTagCount: 0,
+      hasSeenTour: true,
       dashboardDataPromise: Promise.resolve({
         metrics: [0, 0, 0, 0, 0, 0, []],
         churningCustomers: [],
@@ -182,6 +184,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   return {
     currentPlanName: store.planName,
     monthlyTagCount: store.monthlyTagCount,
+    hasSeenTour: store.hasSeenTour,
     dashboardDataPromise: getDashboardData()
   };
 };
@@ -196,6 +199,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   const formData = await request.formData();
   const actionType = formData.get("action");
+  
+  if (actionType === "complete_tour") {
+    await db.store.update({ where: { id: store.id }, data: { hasSeenTour: true } });
+    return { success: true };
+  }
 
   if (actionType === "send_winback_offer") {
     const customerId = formData.get("customerId") as string;
@@ -284,7 +292,7 @@ function KpiCard({ label, value, icon, tone, bg }: {
 
 export default function Index() {
   const shopify = useAppBridge();
-  const { currentPlanName, monthlyTagCount, dashboardDataPromise } = useLoaderData<typeof loader>();
+  const { currentPlanName, monthlyTagCount, hasSeenTour, dashboardDataPromise } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigate = useNavigate();
   const submit = useSubmit();
@@ -369,6 +377,9 @@ export default function Index() {
         { content: "New Rule", icon: PlusIcon, onAction: () => navigate("/app/rules/new") }
       ]}
     >
+      <Suspense fallback={null}>
+        {!hasSeenTour && <OnboardingTour />}
+      </Suspense>
       <style>{`
         .dashboard-section-title { display: flex; align-items: center; gap: 8px; padding: 4px 0 8px; }
         .dashboard-section-title .icon { width: 20px; height: 20px; color: var(--p-color-icon-secondary); }
@@ -514,8 +525,12 @@ export default function Index() {
                             <BlockStack gap="200">
                               <Text variant="bodySm" as="span" tone="subdued" fontWeight="medium">Quick Actions</Text>
                               <InlineStack gap="200" wrap>
-                                <Button size="micro" icon={PlusIcon} onClick={() => navigate("/app/rules/new")}>New Order Rule</Button>
-                                <Button size="micro" icon={ViewIcon} onClick={() => navigate("/app/rules")} variant="plain">View All</Button>
+                                <span className="tour-new-rule-btn">
+                                  <Button size="micro" icon={PlusIcon} onClick={() => navigate("/app/rules/new")}>New Order Rule</Button>
+                                </span>
+                                <span className="tour-view-rules-btn">
+                                  <Button size="micro" icon={ViewIcon} onClick={() => navigate("/app/rules")} variant="plain">View All</Button>
+                                </span>
                               </InlineStack>
                             </BlockStack>
                           </Box>
@@ -629,32 +644,35 @@ export default function Index() {
 
                   {/* ── Row 6: Recent Activity ────────────────── */}
                   <Layout.Section>
-                    <Card padding="0">
-                      <Box padding="400">
-                        <InlineStack align="space-between" blockAlign="center">
-                          <Text variant="headingMd" as="h3">Recent Activity</Text>
-                          <Button size="micro" onClick={() => navigate("/app/rules")}>Manage Rules</Button>
-                        </InlineStack>
-                      </Box>
-                      <Divider />
-                      {recentLogs.length > 0 ? (
-                        <MemoizedDataTable
-                          columnContentTypes={["text", "text", "text", "text", "text"]}
-                          headings={["Customer", "Email", "Tag", "Source", "Time"]}
-                          rows={logRows}
-                          hasZebraStripingOnData
-                        />
-                      ) : (
-                        <Box padding="500">
-                          <BlockStack gap="200" inlineAlign="center">
-                            <Text as="p" tone="subdued" alignment="center">No tagging activity yet. Create a rule and sync customers to get started.</Text>
-                            <InlineStack align="center" gap="200">
-                              <Button onClick={() => navigate("/app/rules/new")}>Create First Rule</Button>
-                            </InlineStack>
-                          </BlockStack>
+                    <span className="tour-sync-btn">
+                      <Card padding="0">
+                        <Box padding="400">
+                          <InlineStack align="space-between" blockAlign="center">
+                            <Text variant="headingMd" as="h3">Recent Activity</Text>
+                            <Button size="micro" onClick={() => navigate("/app/rules")}>Manage Rules</Button>
+                          </InlineStack>
                         </Box>
-                      )}
-                    </Card>
+                        <Divider />
+                        {recentLogs.length > 0 ? (
+                          <MemoizedDataTable
+                            columnContentTypes={["text", "text", "text", "text", "text"]}
+                            headings={["Customer", "Email", "Tag", "Source", "Time"]}
+                            rows={logRows}
+                            hasZebraStripingOnData
+                          />
+                        ) : (
+                          <Box padding="500">
+                            <BlockStack gap="200" inlineAlign="center">
+                              <Text as="p" tone="subdued" alignment="center">No tagging activity yet. Create a rule and sync customers to get started.</Text>
+                              <InlineStack align="center" gap="200">
+                                <Button onClick={() => navigate("/app/rules/new")}>Create First Rule</Button>
+                                <Button onClick={handleSync} loading={isSyncing} variant="primary">Sync Customers</Button>
+                              </InlineStack>
+                            </BlockStack>
+                          </Box>
+                        )}
+                      </Card>
+                    </span>
                   </Layout.Section>
                 </>
               );
