@@ -152,10 +152,10 @@ export default function Timeline() {
                       >
                         <InlineStack gap="300" blockAlign="center" wrap={false}>
                           <Avatar initials={initials} name={name} />
-                          <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ flex: 1, minWidth: 0, wordBreak: "break-all" }}>
                             <BlockStack gap="0">
-                              <Text as="p" fontWeight={isSelected ? "bold" : "regular"} truncate>{name}</Text>
-                              <Text as="p" variant="bodySm" tone="subdued" truncate>{c.email || c.id}</Text>
+                              <Text as="p" fontWeight={isSelected ? "bold" : "regular"}>{name}</Text>
+                              <Text as="p" variant="bodySm" tone="subdued">{c.email || c.id}</Text>
                             </BlockStack>
                           </div>
                         </InlineStack>
