@@ -1,5 +1,5 @@
-import { LoaderFunctionArgs } from "react-router";
-import { useLoaderData, useNavigate } from "react-router";
+import { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
+import { useLoaderData, useNavigate, Form } from "react-router";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import db from "../db.server";
@@ -8,7 +8,7 @@ import {
   Page, Layout, Card, Text, BlockStack, InlineStack, Badge, Button, Icon, Divider, EmptyState, Box
 } from "@shopify/polaris";
 import {
-  HashtagIcon, ExternalIcon, ChartLineIcon
+  HashtagIcon, ChartLineIcon, ExportIcon
 } from "@shopify/polaris-icons";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -47,6 +47,44 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     .sort((a, b) => b.count - a.count);
 
   return { segments };
+};
+
+export const action = async ({ request }: ActionFunctionArgs) => {
+  const { session } = await authenticate.admin(request);
+  const store = await getCachedStore(session.shop);
+  if (!store) throw new Error("Store not found");
+
+  const formData = await request.formData();
+  const segmentToExport = formData.get("segment")?.toString();
+
+  if (!segmentToExport) {
+    return new Response("Segment name missing", { status: 400 });
+  }
+
+  const allCustomers = await db.customer.findMany({
+    where: { storeId: store.id, tags: { contains: segmentToExport } },
+    select: { firstName: true, lastName: true, email: true, totalSpent: true, orderCount: true, tags: true }
+  });
+
+  const matchingCustomers = allCustomers.filter(c => {
+    if (!c.tags) return false;
+    const tagArray = c.tags.split(",").map(t => t.trim());
+    return tagArray.includes(segmentToExport);
+  });
+
+  const header = "First Name,Last Name,Email,Total Spent,Orders\n";
+  const rows = matchingCustomers.map(c => 
+    `"${c.firstName || ''}","${c.lastName || ''}","${c.email || ''}",${c.totalSpent},${c.orderCount}`
+  ).join("\n");
+  const csvStr = header + rows;
+
+  return new Response(csvStr, {
+    status: 200,
+    headers: {
+      "Content-Type": "text/csv",
+      "Content-Disposition": `attachment; filename="${segmentToExport.replace(/\s+/g, "_")}_segment.csv"`
+    }
+  });
 };
 
 export default function SmartSegments() {
@@ -100,17 +138,17 @@ export default function SmartSegments() {
                     </BlockStack>
 
                     <Box paddingBlockStart="200">
-                      <Button 
-                        size="medium"
-                        fullWidth 
-                        icon={ExternalIcon}
-                        onClick={() => {
-                          // Redirect to Shopify's native customer list filtered by this tag
-                          window.open(`shopify:admin/customers?query=${encodeURIComponent(`customer_tags CONTAINS '${segment.name}'`)}`, "_blank");
-                        }}
-                      >
-                        View in Shopify
-                      </Button>
+                      <Form method="post" reloadDocument>
+                        <input type="hidden" name="segment" value={segment.name} />
+                        <Button 
+                          size="medium"
+                          fullWidth 
+                          icon={ExportIcon}
+                          submit
+                        >
+                          Download CSV
+                        </Button>
+                      </Form>
                     </Box>
                   </BlockStack>
                 </Card>
