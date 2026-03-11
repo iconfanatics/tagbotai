@@ -225,12 +225,22 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                     }
                 }
 
-                // Log the actions
+                // Log the actions for Customer tags
                 for (const item of tagsToAddLog) {
+                    if (item.targetEntity === "order") continue; // We handle orders separately below
                     await db.activityLog.create({
                         data: { storeId: store.id, customerId, action: "TAG_ADDED", tagContext: item.tag, reason: item.reason }
                     });
                 }
+                
+                // Log the actions for Order tags
+                for (const item of tagsToAddLog) {
+                    if (item.targetEntity !== "order") continue;
+                    await db.activityLog.create({
+                        data: { storeId: store.id, customerId, action: "TAG_ADDED", tagContext: item.tag, reason: item.reason }
+                    });
+                }
+
                 for (const item of tagsToRemoveLog) {
                     await db.activityLog.create({
                         data: { storeId: store.id, customerId, action: "TAG_REMOVED", tagContext: item.tag, reason: item.reason }

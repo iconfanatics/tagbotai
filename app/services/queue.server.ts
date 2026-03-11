@@ -214,10 +214,19 @@ export async function processOneCustomer(
             }
 
             for (const item of tagsToAddLog) {
+                if (item.targetEntity === "order") continue; // Handled below
                 await db.activityLog.create({
                     data: { storeId, customerId, action: "TAG_ADDED", tagContext: item.tag, reason: `[Historical Sync] ${item.reason}` }
                 });
             }
+
+            for (const item of tagsToAddLog) {
+                if (item.targetEntity !== "order") continue;
+                await db.activityLog.create({
+                    data: { storeId, customerId, action: "TAG_ADDED", tagContext: item.tag, reason: `[Historical Sync] ${item.reason}` }
+                });
+            }
+
             for (const item of tagsToRemoveLog) {
                 await db.activityLog.create({
                     data: { storeId, customerId, action: "TAG_REMOVED", tagContext: item.tag, reason: `[Historical Sync] ${item.reason}` }
