@@ -47,6 +47,7 @@ CREATE TABLE "Rule" (
     "description" TEXT,
     "conditions" TEXT NOT NULL,
     "targetTag" TEXT NOT NULL,
+    "targetEntity" TEXT NOT NULL DEFAULT 'customer',
     "collectionId" TEXT,
     "collectionName" TEXT,
     "isActive" BOOLEAN NOT NULL DEFAULT true,
