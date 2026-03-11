@@ -118,7 +118,7 @@ export default function RulesManagement() {
         }
     }
 
-    const handleExportSegment = (ruleId: string, ruleName: string) => {
+    const handleExportSegment = (ruleId: string, ruleName: string, ruleEntity: string) => {
         if (currentPlanName === "Free" || currentPlanName === "") {
             setIsUpgradeModalOpen(true);
         } else {
@@ -126,6 +126,7 @@ export default function RulesManagement() {
             // Build the URL preserving the Shopify session query params (host, shop, etc.)
             const params = new URLSearchParams(window.location.search);
             params.set("ruleId", ruleId);
+            params.set("entity", ruleEntity);
             const exportUrl = `/app/export?${params.toString()}`;
 
             window.fetch(exportUrl)
@@ -135,7 +136,7 @@ export default function RulesManagement() {
                     const url = window.URL.createObjectURL(blob);
                     const a = document.createElement("a");
                     a.href = url;
-                    a.download = `export-${ruleName.replace(/\\s+/g, '-')}.csv`;
+                    a.download = `export-${ruleEntity}-${ruleName.replace(/\\s+/g, '-')}.csv`;
                     document.body.appendChild(a);
                     a.click();
                     a.remove();
@@ -214,7 +215,7 @@ export default function RulesManagement() {
                     </IndexTable.Cell>
                     <IndexTable.Cell>
                         <Text variant="bodyMd" fontWeight="semibold" as="span">
-                            {rule.matchingCustomers.toLocaleString()}
+                            {rule.targetEntity === "order" ? "N/A" : rule.matchingCustomers.toLocaleString()}
                         </Text>
                     </IndexTable.Cell>
                     <IndexTable.Cell>
@@ -227,10 +228,10 @@ export default function RulesManagement() {
                     </IndexTable.Cell>
                     <IndexTable.Cell>
                         <InlineStack wrap={false} gap="200" align="end">
-                            <Tooltip content="Export Segment CSV (Pro)">
+                            <Tooltip content={`Export ${rule.targetEntity === 'order' ? 'Orders' : 'Customers'} CSV (Pro)`}>
                                 <Button
                                     icon={ExportIcon}
-                                    onClick={() => handleExportSegment(rule.id, rule.name)}
+                                    onClick={() => handleExportSegment(rule.id, rule.name, rule.targetEntity)}
                                     accessibilityLabel={`Export segment for ${rule.name}`}
                                 />
                             </Tooltip>

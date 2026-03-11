@@ -8,7 +8,7 @@ import {
   Page, Layout, Card, Text, BlockStack, InlineStack, Badge, Button, Icon, Divider, EmptyState, Box
 } from "@shopify/polaris";
 import {
-  HashtagIcon, ChartLineIcon, ExportIcon
+  HashtagIcon, ChartLineIcon, ExportIcon, OrderIcon
 } from "@shopify/polaris-icons";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -17,20 +17,46 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   if (!store) throw new Error("Store not found");
 
   // Fetch all customers for this store to aggregate segments
-  // In a massive production app, we would use native SQL grouping or background aggregation jobs.
   const allCustomers = await db.customer.findMany({
     where: { storeId: store.id },
     select: { id: true, tags: true, totalSpent: true, firstName: true, lastName: true, email: true, orderCount: true }
   });
 
-  const segmentsMap: Record<string, { count: number; totalSpent: number; customers: any[] }> = {};
+  // Fetch all active rules so we know which tags are intended for Orders vs Customers
+  const rules = await db.rule.findMany({
+    where: { storeId: store.id },
+    select: { targetTag: true, targetEntity: true }
+  });
 
+  const orderRules = rules.filter(r => r.targetEntity === "order").map(r => r.targetTag.toLowerCase());
+
+  // To get order segments, we group the activity log by tag context where action is TAG_ADDED and target is an order rule
+  const logsGroups = await db.activityLog.groupBy({
+    by: ['tagContext'],
+    where: { storeId: store.id, action: "TAG_ADDED" },
+    _count: { id: true }
+  });
+
+  // Create a fast lookup for rule entity types
+  const ruleEntityMap = new Map();
+  rules.forEach(r => ruleEntityMap.set(r.targetTag.toLowerCase(), r.targetEntity));
+
+  const getTargetEntity = (tag: string) => {
+    return ruleEntityMap.get(tag.toLowerCase()) || "customer";
+  };
+
+  const segmentsMap: Record<string, { count: number; totalSpent: number; customers: any[], type: "customer" | "order" }> = {};
+
+  // 1. Process Customer Segments
   allCustomers.forEach((c) => {
     if (c.tags) {
       const tagsArray = c.tags.split(",").map((t) => t.trim()).filter(Boolean);
       tagsArray.forEach((tag) => {
+        // Only tally this from the Customer table if it's actually a customer tag
+        if (getTargetEntity(tag) !== "customer") return;
+
         if (!segmentsMap[tag]) {
-          segmentsMap[tag] = { count: 0, totalSpent: 0, customers: [] };
+          segmentsMap[tag] = { count: 0, totalSpent: 0, customers: [], type: "customer" };
         }
         segmentsMap[tag].count += 1;
         segmentsMap[tag].totalSpent += c.totalSpent;
@@ -45,12 +71,27 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     }
   });
 
+  // 2. Process Order Segments
+  // We don't store dollar values on the activity log for orders, so we'll just show the count
+  logsGroups.forEach((group) => {
+    const tag = group.tagContext || "";
+    if (getTargetEntity(tag) === "order") {
+      segmentsMap[tag] = {
+         count: group._count.id,
+         totalSpent: 0, // N/A for raw order logs
+         customers: [], // Will be generated via CSV export on the fly
+         type: "order"
+      };
+    }
+  });
+
   const segments = Object.entries(segmentsMap)
     .map(([name, data]) => ({
       name,
       count: data.count,
       totalSpent: data.totalSpent,
-      customers: data.customers
+      customers: data.customers,
+      type: data.type
     }))
     .sort((a, b) => b.count - a.count);
 
@@ -60,7 +101,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 export default function SmartSegments() {
   const { segments } = useLoaderData<typeof loader>();
 
-  const downloadCustomerCSV = (segmentName: string, customers: any[]) => {
+  const downloadCustomerCSV = (segmentName: string, customers: any[], type: "customer" | "order") => {
+    if (type === "order") {
+      // Order CSVs are generated natively via Shopify GraphQL
+      const params = new URLSearchParams(window.location.search);
+      params.set("tag", segmentName);
+      params.set("entity", "order");
+      window.location.href = `/app/export?${params.toString()}`;
+      return;
+    }
+
     const header = "First Name,Last Name,Email,Total Spent,Orders\n";
     const rows = customers.map(c => 
       `"${c.firstName}","${c.lastName}","${c.email}",${c.totalSpent},${c.orderCount}`
@@ -104,25 +154,29 @@ export default function SmartSegments() {
                   <BlockStack gap="400">
                     <InlineStack align="space-between" blockAlign="center">
                       <InlineStack gap="200" blockAlign="center">
-                        <div style={{ background: "var(--p-color-bg-surface-magic)", padding: "8px", borderRadius: "8px", display: "flex", color: "var(--p-color-text-magic)" }}>
-                          <Icon source={HashtagIcon} />
+                        <div style={{ background: segment.type === "order" ? "var(--p-color-bg-surface-info)" : "var(--p-color-bg-surface-magic)", padding: "8px", borderRadius: "8px", display: "flex", color: segment.type === "order" ? "var(--p-color-text-info)" : "var(--p-color-text-magic)" }}>
+                          <Icon source={segment.type === "order" ? OrderIcon : HashtagIcon} />
                         </div>
                         <Text variant="headingMd" as="h2">{segment.name}</Text>
                       </InlineStack>
-                      <Badge tone="magic">{`${segment.count} Customers`}</Badge>
+                      <Badge tone={segment.type === "order" ? "info" : "magic"}>{`${segment.count} ${segment.type === "order" ? 'Orders' : 'Customers'}`}</Badge>
                     </InlineStack>
 
                     <Divider />
 
                     <BlockStack gap="200">
                       <Text variant="bodyMd" as="p" tone="subdued">
-                        Customers with the <strong>{segment.name}</strong> tag applied by AI rules.
+                        {segment.type === "order" ? 'Orders' : 'Customers'} with the <strong>{segment.name}</strong> tag applied by AI rules.
                       </Text>
                       <Box paddingBlockStart="200">
                         <InlineStack gap="200" blockAlign="center">
                           <Icon source={ChartLineIcon} tone="subdued" />
                           <Text as="span" variant="bodySm" tone="subdued">
-                            Segment Value: <strong>${segment.totalSpent.toFixed(2)}</strong>
+                            {segment.type === "order" ? (
+                                "Export exact value data via CSV"
+                            ) : (
+                                <>Segment Value: <strong>${segment.totalSpent.toFixed(2)}</strong></>
+                            )}
                           </Text>
                         </InlineStack>
                       </Box>
@@ -133,7 +187,7 @@ export default function SmartSegments() {
                         size="medium"
                         fullWidth 
                         icon={ExportIcon}
-                        onClick={() => downloadCustomerCSV(segment.name, segment.customers)}
+                        onClick={() => downloadCustomerCSV(segment.name, segment.customers, segment.type)}
                       >
                         Download CSV
                       </Button>
