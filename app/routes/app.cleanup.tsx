@@ -4,7 +4,7 @@ import {
     Page, Layout, Card, Text, BlockStack, InlineStack, Badge,
     Button, Box, TextField, Modal, Icon, Banner, ResourceList, ResourceItem
 } from "@shopify/polaris";
-import { MagicIcon, DeleteIcon, ReplaceIcon } from "@shopify/polaris-icons";
+import { MagicIcon, DeleteIcon, ReplaceIcon, OrderIcon, HashtagIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { getCachedStore } from "../services/cache.server";
@@ -21,16 +21,47 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         select: { tags: true }
     });
 
-    const tagCounts: Record<string, number> = {};
+    const activeRules = await db.rule.findMany({
+        where: { storeId: store.id },
+        select: { targetTag: true, targetEntity: true }
+    });
+
+    const ruleEntityMap = new Map();
+    activeRules.forEach(r => ruleEntityMap.set(r.targetTag.toLowerCase(), r.targetEntity));
+
+    const getTargetEntity = (tag: string) => {
+        return ruleEntityMap.get(tag.toLowerCase()) || "customer";
+    };
+
+    const tagCounts: Record<string, { count: number, type: "customer" | "order" }> = {};
+
+    // 1. Tally Customer Tags
     for (const c of customers) {
         if (!c.tags) continue;
         for (const tag of c.tags.split(",").map(t => t.trim()).filter(Boolean)) {
-            tagCounts[tag] = (tagCounts[tag] || 0) + 1;
+            if (getTargetEntity(tag) !== "customer") continue;
+            
+            if (!tagCounts[tag]) tagCounts[tag] = { count: 0, type: "customer" };
+            tagCounts[tag].count++;
         }
     }
 
+    // 2. Tally Order Tags via ActivityLog proxy
+    const orderLogs = await db.activityLog.groupBy({
+        by: ['tagContext'],
+        where: { storeId: store.id, action: "TAG_ADDED" },
+        _count: { id: true }
+    });
+
+    orderLogs.forEach(group => {
+        const tag = group.tagContext || "";
+        if (tag && getTargetEntity(tag) === "order") {
+            tagCounts[tag] = { count: group._count.id, type: "order" };
+        }
+    });
+
     const sortedTags = Object.entries(tagCounts)
-        .map(([name, count]) => ({ id: name, name, count }))
+        .map(([name, data]) => ({ id: name, name, count: data.count, type: data.type }))
         .sort((a, b) => b.count - a.count);
 
     return { sortedTags, planName: store.planName, storeId: store.id };
@@ -51,74 +82,157 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const targetTag = form.get("targetTag") as string;
     const destinationTag = form.get("destinationTag") as string | null;
 
+    const type = form.get("type") as string || "customer";
+
     if (!targetTag) return { success: false, message: "No tag specified." };
-
-    // Find all customers who have this tag in our local database
-    const affected = await db.customer.findMany({
-        where: { storeId: store.id, tags: { contains: targetTag } },
-        select: { id: true, tags: true }
-    });
-
-    if (affected.length === 0) {
-        return { success: true, message: `No customers found with the tag "${targetTag}".`, count: 0 };
-    }
 
     let processedCount = 0;
     let errorCount = 0;
 
-    for (const customer of affected) {
-        try {
-            const gid = `gid://shopify/Customer/${customer.id}`;
+    if (type === "order") {
+        // =============== PROCESS ORDERS (Directly from Shopify via GraphQL) ===============
+        const MAX_ORDERS = 5000;
+        let hasNextPage = true;
+        let cursor: string | null = null;
+        let allOrderGids: string[] = [];
 
-            // Fetch current tags from Shopify
-            const response = await admin.graphql(`
-                #graphql
-                query GetCustomerTags($id: ID!) {
-                    customer(id: $id) { tags }
-                }
-            `, { variables: { id: gid } });
-            const resData = await response.json();
-            const currentTags: string[] = resData.data?.customer?.tags ?? [];
-
-            // Compute new tag list
-            let newTags = currentTags.filter(t => t !== targetTag);
-            if (intent === "merge" && destinationTag && !newTags.includes(destinationTag)) {
-                newTags.push(destinationTag);
-            }
-
-            // Push to Shopify
-            await admin.graphql(`
-                #graphql
-                mutation UpdateTags($input: CustomerInput!) {
-                    customerUpdate(input: $input) {
-                        userErrors { field message }
+        // 1. Fetch all orders with this tag
+        while (hasNextPage && allOrderGids.length < MAX_ORDERS) {
+            const query = `
+                query FetchOrdersByTag($query: String!, $cursor: String) {
+                    orders(first: 50, query: $query, after: $cursor) {
+                        pageInfo { hasNextPage, endCursor }
+                        edges { node { id } }
                     }
                 }
-            `, { variables: { input: { id: gid, tags: newTags } } });
+            `;
+            const variables = { query: `tag:'${targetTag}'`, cursor };
+            const response = await admin.graphql(query, { variables });
+            const data: any = await response.json();
 
-            // Update our local DB
-            await db.customer.update({
-                where: { id_storeId: { id: customer.id, storeId: store.id } },
-                data: { tags: newTags.join(",") }
-            });
+            if (!data.data?.orders) break;
 
-            // Log it
-            await db.activityLog.create({
-                data: {
-                    storeId: store.id,
-                    customerId: customer.id,
-                    action: "TAG_REMOVED",
-                    tagContext: targetTag,
-                    reason: intent === "merge"
-                        ? `Merged into "${destinationTag}" via Tag Cleanup`
-                        : "Deleted via Tag Cleanup"
+            const edges = data.data.orders.edges;
+            allOrderGids = allOrderGids.concat(edges.map((e: any) => e.node.id));
+
+            hasNextPage = data.data.orders.pageInfo.hasNextPage;
+            cursor = data.data.orders.pageInfo.endCursor;
+        }
+
+        if (allOrderGids.length === 0) {
+            return { success: true, message: `No orders found with the tag "${targetTag}".`, count: 0 };
+        }
+
+        // 2. Perform the mutations
+        for (const orderGid of allOrderGids) {
+            try {
+                // First remove the old tag
+                await admin.graphql(`
+                    #graphql
+                    mutation RemoveOrderTag($id: ID!, $tags: [String!]!) {
+                        tagsRemove(id: $id, tags: $tags) { userErrors { field message } }
+                    }
+                `, { variables: { id: orderGid, tags: [targetTag] } });
+
+                // If merging, add the new tag
+                if (intent === "merge" && destinationTag) {
+                    await admin.graphql(`
+                        #graphql
+                        mutation AddOrderTag($id: ID!, $tags: [String!]!) {
+                            tagsAdd(id: $id, tags: $tags) { userErrors { field message } }
+                        }
+                    `, { variables: { id: orderGid, tags: [destinationTag] } });
                 }
-            });
 
-            processedCount++;
-        } catch (e: any) {
-            console.error(`[CLEANUP] Failed for customer ${customer.id}:`, e.message);
-            errorCount++;
+                // Delete the ActivityLog cache proxy for this so the UI updates
+                await db.activityLog.deleteMany({
+                    where: { storeId: store.id, action: "TAG_ADDED", tagContext: targetTag }
+                });
+
+                if (intent === "merge" && destinationTag) {
+                     await db.activityLog.create({
+                        data: {
+                            storeId: store.id,
+                            customerId: "cleanup-merge", // Orders don't store strict customer refs in our proxy
+                            action: "TAG_ADDED",
+                            tagContext: destinationTag,
+                            reason: `Merged from "${targetTag}" via Tag Cleanup`
+                        }
+                    });
+                }
+
+                processedCount++;
+            } catch (err: any) {
+                console.error(`[CLEANUP] Failed to process order tag for ${orderGid}:`, err.message);
+                errorCount++;
+            }
+        }
+
+    } else {
+        // =============== PROCESS CUSTOMERS (Proxy DB Cache Strategy) ===============
+        const affected = await db.customer.findMany({
+            where: { storeId: store.id, tags: { contains: targetTag } },
+            select: { id: true, tags: true }
+        });
+
+        if (affected.length === 0) {
+            return { success: true, message: `No customers found with the tag "${targetTag}".`, count: 0 };
+        }
+
+        for (const customer of affected) {
+            try {
+                const gid = `gid://shopify/Customer/${customer.id}`;
+
+                // Fetch current tags from Shopify
+                const response = await admin.graphql(`
+                    #graphql
+                    query GetCustomerTags($id: ID!) {
+                        customer(id: $id) { tags }
+                    }
+                `, { variables: { id: gid } });
+                const resData = await response.json();
+                const currentTags: string[] = resData.data?.customer?.tags ?? [];
+
+                // Compute new tag list
+                let newTags = currentTags.filter((t: string) => t !== targetTag);
+                if (intent === "merge" && destinationTag && !newTags.includes(destinationTag)) {
+                    newTags.push(destinationTag);
+                }
+
+                // Push to Shopify
+                await admin.graphql(`
+                    #graphql
+                    mutation UpdateTags($input: CustomerInput!) {
+                        customerUpdate(input: $input) {
+                            userErrors { field message }
+                        }
+                    }
+                `, { variables: { input: { id: gid, tags: newTags } } });
+
+                // Update our local DB
+                await db.customer.update({
+                    where: { id_storeId: { id: customer.id, storeId: store.id } },
+                    data: { tags: newTags.join(",") }
+                });
+
+                // Log it
+                await db.activityLog.create({
+                    data: {
+                        storeId: store.id,
+                        customerId: customer.id,
+                        action: "TAG_REMOVED",
+                        tagContext: targetTag,
+                        reason: intent === "merge"
+                            ? `Merged into "${destinationTag}" via Tag Cleanup`
+                            : "Deleted via Tag Cleanup"
+                    }
+                });
+
+                processedCount++;
+            } catch (e: any) {
+                console.error(`[CLEANUP] Failed for customer ${customer.id}:`, e.message);
+                errorCount++;
+            }
         }
     }
 
@@ -160,16 +274,17 @@ export default function SmartCleanup() {
     const [mergeSource, setMergeSource] = useState("");
     const [mergeDest, setMergeDest] = useState("");
 
-    const handleDelete = (tag: string) => {
-        if (!confirm(`Remove "${tag}" from ALL customers? This cannot be undone.`)) return;
+    const handleDelete = (tag: string, type: "customer" | "order") => {
+        if (!confirm(`Remove "${tag}" from ALL ${type === 'order' ? 'orders' : 'customers'}? This cannot be undone.`)) return;
         setActiveTag(tag);
         const fd = new FormData();
         fd.set("intent", "delete");
         fd.set("targetTag", tag);
+        fd.set("type", type);
         submit(fd, { method: "post" });
     };
 
-    const openMerge = (tag: string) => {
+    const openMerge = (tag: string, type: "customer" | "order") => {
         setMergeSource(tag);
         setMergeDest("");
         setMergeOpen(true);
@@ -179,10 +294,16 @@ export default function SmartCleanup() {
         if (!mergeDest.trim()) return;
         setActiveTag(mergeSource);
         setMergeOpen(false);
+
+        // Find the type of the source tag from the loader data
+        const sourceObj = sortedTags.find(t => t.name === mergeSource);
+        const sourceType = sourceObj?.type || "customer";
+
         const fd = new FormData();
         fd.set("intent", "merge");
         fd.set("targetTag", mergeSource);
         fd.set("destinationTag", mergeDest.trim());
+        fd.set("type", sourceType);
         submit(fd, { method: "post" });
     };
 
@@ -218,7 +339,7 @@ export default function SmartCleanup() {
                                 <Text variant="headingSm" as="h3">
                                     {submittingIntent === "merge"
                                         ? `Merging "${submittingTag}"…`
-                                        : `Deleting tag "${submittingTag}" from all customers…`}
+                                        : `Deleting tag "${submittingTag}" from all ${navigation.formData?.get("type") === 'order' ? 'orders' : 'customers'}…`}
                                 </Text>
                                 <Text as="p" tone="subdued">
                                     Please keep this page open. TagBot AI is updating Shopify tags in real time.
@@ -286,17 +407,22 @@ export default function SmartCleanup() {
                             renderItem={(item) => (
                                 <ResourceItem id={item.id} onClick={() => { }} disabled={isFree}>
                                     <InlineStack align="space-between" blockAlign="center">
-                                        <BlockStack gap="100">
-                                            <Text variant="bodyMd" fontWeight="bold" as="h3">{item.name}</Text>
-                                            <Text variant="bodySm" tone="subdued" as="span">{item.count} customers</Text>
-                                        </BlockStack>
+                                        <InlineStack gap="300" blockAlign="center">
+                                            <div style={{ background: item.type === "order" ? "var(--p-color-bg-surface-info)" : "var(--p-color-bg-surface-magic)", padding: "6px", borderRadius: "6px", display: "flex", color: item.type === "order" ? "var(--p-color-text-info)" : "var(--p-color-text-magic)" }}>
+                                                <Icon source={item.type === "order" ? OrderIcon : HashtagIcon} />
+                                            </div>
+                                            <BlockStack gap="100">
+                                                <Text variant="bodyMd" fontWeight="bold" as="h3">{item.name}</Text>
+                                                <Text variant="bodySm" tone="subdued" as="span">{item.count} {item.type === 'order' ? 'orders' : 'customers'}</Text>
+                                            </BlockStack>
+                                        </InlineStack>
                                         <InlineStack gap="200">
                                             {/* @ts-ignore */}
                                             <Button
                                                 size="micro"
                                                 icon={ReplaceIcon}
                                                 disabled={isFree || isSubmitting}
-                                                onClick={() => openMerge(item.name)}
+                                                onClick={() => openMerge(item.name, item.type as any)}
                                             >
                                                 Merge Into…
                                             </Button>
@@ -307,7 +433,7 @@ export default function SmartCleanup() {
                                                 icon={DeleteIcon}
                                                 disabled={isFree || isSubmitting}
                                                 loading={isSubmitting && activeTag === item.name}
-                                                onClick={() => handleDelete(item.name)}
+                                                onClick={() => handleDelete(item.name, item.type as any)}
                                             >
                                                 Delete All
                                             </Button>
