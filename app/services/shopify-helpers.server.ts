@@ -22,44 +22,58 @@ export async function fetchAllCustomers(admin: any, isFree: boolean) {
     let hasNextPage = true;
 
     while (hasNextPage && allEdges.length < hardCap) {
-        const remaining: number = hardCap - allEdges.length;
-        const batchSize: number = Math.min(pageSize, remaining);
+        const remaining = hardCap - allEdges.length;
+        const batchSize = Math.min(pageSize, remaining);
 
-        const afterClause: string = cursor ? `, after: "${cursor}"` : "";
-
-        const res: any = await admin.graphql(`#graphql
-            query fetchCustomers {
-                customers(first: ${batchSize}${afterClause}) {
-                    edges {
-                        cursor
-                        node {
-                            id
-                            email
-                            firstName
-                            lastName
-                            amountSpent { amount }
-                            numberOfOrders
-                            tags
+        try {
+            const res = await admin.graphql(`#graphql
+                query fetchCustomers($first: Int!, $after: String) {
+                    customers(first: $first, after: $after) {
+                        edges {
+                            cursor
+                            node {
+                                id
+                                email
+                                firstName
+                                lastName
+                                amountSpent { amount }
+                                numberOfOrders
+                                tags
+                            }
+                        }
+                        pageInfo {
+                            hasNextPage
+                            endCursor
                         }
                     }
-                    pageInfo {
-                        hasNextPage
-                    }
                 }
+            `, {
+                variables: {
+                    first: batchSize,
+                    after: cursor
+                }
+            });
+
+            const data: any = await res.json();
+            
+            if (data.errors) {
+                console.error("[SHOPIFY_HELPERS] GraphQL Error:", JSON.stringify(data.errors, null, 2));
+                break;
             }
-        `);
 
-        const data: any = await res.json();
-        const edges: any[] = data.data?.customers?.edges || [];
-        const pageInfo: any = data.data?.customers?.pageInfo;
+            const edges = data.data?.customers?.edges || [];
+            const pageInfo = data.data?.customers?.pageInfo;
 
-        allEdges.push(...edges);
+            allEdges.push(...edges);
 
-        hasNextPage = pageInfo?.hasNextPage ?? false;
-        if (edges.length > 0) {
-            cursor = edges[edges.length - 1].cursor;
-        } else {
-            hasNextPage = false;
+            hasNextPage = pageInfo?.hasNextPage ?? false;
+            cursor = pageInfo?.endCursor || null;
+
+            if (edges.length === 0) hasNextPage = false;
+
+        } catch (err: any) {
+            console.error("[SHOPIFY_HELPERS] Network/Parse Error fetching customers:", err.message);
+            break;
         }
     }
 
