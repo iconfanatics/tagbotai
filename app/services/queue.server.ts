@@ -98,7 +98,7 @@ export async function processOneCustomer(
                 const orderRes = await admin.graphql(`#graphql
                     query getCustomerOrders($id: ID!, $cursor: String) {
                         customer(id: $id) {
-                            orders(first: 50, after: $cursor, sortKey: CREATED_AT, reverse: true) {
+                            orders(first: 50, after: $cursor) {
                                 pageInfo {
                                     hasNextPage
                                     endCursor
@@ -128,7 +128,7 @@ export async function processOneCustomer(
                             }
                         }
                     }
-                `, { variables: { id: `gid://shopify/Customer/${customerId}`, cursor } });
+                `, { variables: { id: `gid://shopify/Customer/${customerId}`, cursor: cursor || null } });
 
                 const orderData: any = await orderRes.json();
                 const ordersConnection: any = orderData.data?.customer?.orders;
@@ -215,15 +215,23 @@ export async function processOneCustomer(
 
             for (const item of tagsToAddLog) {
                 if (item.targetEntity === "order") continue; // Handled below
+                
+                // Fetch the rule ID to properly attribute the activity
+                const rule = await db.rule.findFirst({ where: { storeId, targetTag: item.tag } });
+                
                 await db.activityLog.create({
-                    data: { storeId, customerId, action: "TAG_ADDED", tagContext: item.tag, reason: `[Historical Sync] ${item.reason}` }
+                    data: { storeId, customerId, action: "TAG_ADDED", tagContext: item.tag, reason: `[Historical Sync] ${item.reason}`, ruleId: rule?.id }
                 });
             }
 
             for (const item of tagsToAddLog) {
                 if (item.targetEntity !== "order") continue;
+                
+                // Fetch the rule ID to properly attribute the activity
+                const rule = await db.rule.findFirst({ where: { storeId, targetTag: item.tag, targetEntity: "order" } });
+
                 await db.activityLog.create({
-                    data: { storeId, customerId, action: "TAG_ADDED", tagContext: item.tag, reason: `[Historical Sync] ${item.reason}` }
+                    data: { storeId, customerId, action: "TAG_ADDED", tagContext: item.tag, reason: `[Historical Sync] ${item.reason}`, ruleId: rule?.id }
                 });
             }
 

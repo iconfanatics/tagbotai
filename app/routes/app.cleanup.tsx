@@ -12,7 +12,7 @@ import { useState } from "react";
 
 // ─── Loader ───────────────────────────────────────────────────────────────────
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-    const { session } = await authenticate.admin(request);
+    const { session, admin } = await authenticate.admin(request);
     const store = await getCachedStore(session.shop);
     if (!store) throw new Error("Store not found");
 
@@ -35,8 +35,39 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
     const tagCounts: Record<string, { count: number, type: "customer" | "order" }> = {};
 
-    // 2. Discover Order Tags natively through recent activity because if the Rule is deleted,
-    // the tag is otherwise assumed to be a customer tag.
+    // 2. Discover ALL Order Tags natively from Shopify to capture pre-existing tags
+    try {
+        const orderTagsRes = await admin.graphql(`
+            #graphql
+            query FetchRecentOrderTags {
+                orders(first: 250, sortKey: CREATED_AT, reverse: true) {
+                    edges {
+                        node {
+                            tags
+                        }
+                    }
+                }
+            }
+        `);
+        const orderTagsData: any = await orderTagsRes.json();
+        const orderEdges = orderTagsData.data?.orders?.edges || [];
+        
+        for (const edge of orderEdges) {
+            const tags: string[] = edge.node.tags || [];
+            for (const t of tags) {
+                const tag = t.trim();
+                if (!tag) continue;
+                // Pre-existing tags are dynamically assigned as order tags if they only show up here
+                ruleEntityMap.set(tag.toLowerCase(), "order");
+                if (!tagCounts[tag]) tagCounts[tag] = { count: 0, type: "order" };
+                tagCounts[tag].count++;
+            }
+        }
+    } catch(err) {
+        console.error("Failed to fetch legacy order tags", err);
+    }
+
+    // 2b. Also keep the ActivityLog memory for historically deleted rules to ensure parity
     const orderLogsRaw = await db.activityLog.findMany({
         where: { storeId: store.id, action: "TAG_ADDED" },
         select: { tagContext: true, rule: { select: { targetEntity: true } } }
@@ -44,18 +75,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
     const recognizedOrderTags = new Set<string>();
 
-    // Grouping them manually in JS for reliable counting
     orderLogsRaw.forEach(log => {
         const tag = (log.tagContext || "").trim();
-        // Determine if it was an order tag by checking its direct historical relation to the rule,
-        // or checking the global cache we built above
         const isOrderTag = log.rule?.targetEntity === "order" || ruleEntityMap.get(tag.toLowerCase()) === "order";
         
         if (tag && isOrderTag) {
             recognizedOrderTags.add(tag.toLowerCase());
-            ruleEntityMap.set(tag.toLowerCase(), "order"); // Persist the knowledge 
+            ruleEntityMap.set(tag.toLowerCase(), "order");
             if (!tagCounts[tag]) tagCounts[tag] = { count: 0, type: "order" };
-            tagCounts[tag].count++;
+            // Don't double-count if we already found it in the GraphQL query
         }
     });
 

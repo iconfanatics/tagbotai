@@ -109,14 +109,13 @@ function evaluateOrderCondition(orderData: Record<string, any>, condition: Order
 
     switch (operator) {
         case "equals":
-            // Check numeric equality first (e.g. 50.00 === 50)
-            if (!isNaN(Number(rawActual)) && !isNaN(Number(value))) {
+            if (rawActual !== "" && !isNaN(Number(rawActual)) && !isNaN(Number(value))) {
                 return Number(rawActual) === Number(value);
             }
-            return String(rawActual).toLowerCase() === value.toLowerCase();
+            return String(rawActual).toLowerCase() === String(value).toLowerCase();
 
         case "contains":
-            return String(rawActual).toLowerCase().includes(value.toLowerCase());
+            return String(rawActual).toLowerCase().includes(String(value).toLowerCase());
 
         case "greaterThan":
             return Number(rawActual) > Number(value);
@@ -125,10 +124,10 @@ function evaluateOrderCondition(orderData: Record<string, any>, condition: Order
             return Number(rawActual) < Number(value);
 
         case "notEquals":
-            if (!isNaN(Number(rawActual)) && !isNaN(Number(value))) {
+            if (rawActual !== "" && !isNaN(Number(rawActual)) && !isNaN(Number(value))) {
                 return Number(rawActual) !== Number(value);
             }
-            return String(rawActual).toLowerCase() !== value.toLowerCase();
+            return String(rawActual).toLowerCase() !== String(value).toLowerCase();
 
         default:
             return false;
