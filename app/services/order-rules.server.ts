@@ -109,6 +109,10 @@ function evaluateOrderCondition(orderData: Record<string, any>, condition: Order
 
     switch (operator) {
         case "equals":
+            // Check numeric equality first (e.g. 50.00 === 50)
+            if (!isNaN(Number(rawActual)) && !isNaN(Number(value))) {
+                return Number(rawActual) === Number(value);
+            }
             return String(rawActual).toLowerCase() === value.toLowerCase();
 
         case "contains":
@@ -121,6 +125,9 @@ function evaluateOrderCondition(orderData: Record<string, any>, condition: Order
             return Number(rawActual) < Number(value);
 
         case "notEquals":
+            if (!isNaN(Number(rawActual)) && !isNaN(Number(value))) {
+                return Number(rawActual) !== Number(value);
+            }
             return String(rawActual).toLowerCase() !== value.toLowerCase();
 
         default:
@@ -157,8 +164,9 @@ export function evaluateOrderRules(
         // It might also have metric conditions (mixed rule)
         const metricConditions = conditions.filter((c: any) => c.ruleCategory === "metric");
 
-        // Skip if customer already has this tag
-        if (existingCustomerTags.includes(rule.targetTag)) continue;
+        // Skip if customer already has this tag, BUT only if the rule targets the customer.
+        // If the rule targets the order, we want to tag the order regardless of the customer's history.
+        if (rule.targetEntity === "customer" && existingCustomerTags.includes(rule.targetTag)) continue;
 
         // Evaluate all conditions across both scopes
         const evaluateGenericCondition = (c: any) => {
