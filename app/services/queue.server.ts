@@ -89,28 +89,38 @@ export async function processOneCustomer(
         });
 
         if (hasOrderRules) {
-            // Fetch last 50 orders for this customer to check historical rule matches
-            const orderRes = await admin.graphql(`#graphql
-                query getCustomerOrders($id: ID!) {
-                    customer(id: $id) {
-                        orders(first: 50, sortKey: CREATED_AT, reverse: true) {
-                            edges {
-                                node {
-                                    id
-                                    createdAt
-                                    subtotalPriceSet { shopMoney { amount } }
-                                    totalDiscountsSet { shopMoney { amount } }
-                                    discountCodes
-                                    paymentGatewayNames
-                                    sourceIdentifier
-                                    channel { name }
-                                    shippingAddress { city countryCode }
-                                    lineItems(first: 50) {
-                                        edges {
-                                            node {
-                                                quantity
-                                                customAttributes { key value }
-                                                product { tags }
+            // Fetch ALL orders for this customer to check historical rule matches
+            let hasNextPage = true;
+            let cursor: string | null = null;
+            let allOrderEdges: any[] = [];
+
+            while (hasNextPage) {
+                const orderRes = await admin.graphql(`#graphql
+                    query getCustomerOrders($id: ID!, $cursor: String) {
+                        customer(id: $id) {
+                            orders(first: 50, after: $cursor, sortKey: CREATED_AT, reverse: true) {
+                                pageInfo {
+                                    hasNextPage
+                                    endCursor
+                                }
+                                edges {
+                                    node {
+                                        id
+                                        createdAt
+                                        subtotalPriceSet { shopMoney { amount } }
+                                        totalDiscountsSet { shopMoney { amount } }
+                                        discountCodes
+                                        paymentGatewayNames
+                                        sourceIdentifier
+                                        channel { name }
+                                        shippingAddress { city countryCode }
+                                        lineItems(first: 50) {
+                                            edges {
+                                                node {
+                                                    quantity
+                                                    customAttributes { key value }
+                                                    product { tags }
+                                                }
                                             }
                                         }
                                     }
@@ -118,14 +128,24 @@ export async function processOneCustomer(
                             }
                         }
                     }
-                }
-            `, { variables: { id: `gid://shopify/Customer/${customerId}` } });
+                `, { variables: { id: `gid://shopify/Customer/${customerId}`, cursor } });
 
-            const orderData = await orderRes.json();
-            const orderEdges = orderData.data?.customer?.orders?.edges || [];
+                const orderData: any = await orderRes.json();
+                const ordersConnection: any = orderData.data?.customer?.orders;
+                
+                if (!ordersConnection) break;
+
+                allOrderEdges = allOrderEdges.concat(ordersConnection.edges || []);
+                hasNextPage = ordersConnection.pageInfo?.hasNextPage || false;
+                cursor = ordersConnection.pageInfo?.endCursor || null;
+
+                // Simple rate-limit respect
+                if (hasNextPage) await new Promise(r => setTimeout(r, 250));
+            }
+
             const existingTags = tagsToAdd.map(t => t.tag).concat(upsertedCustomer.tags ? upsertedCustomer.tags.split(",").map(t => t.trim()) : []);
 
-            for (const orderEdge of orderEdges) {
+            for (const orderEdge of allOrderEdges) {
                 // Map the graphql order payload to match the REST webhook shape that evaluateOrderRules expects
                 const o = orderEdge.node;
                 const mappedOrder = {
