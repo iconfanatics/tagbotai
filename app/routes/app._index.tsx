@@ -139,7 +139,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         allRules,
       ] = await Promise.all([
         Promise.all([
-          db.activityLog.count({ where: { storeId: store.id, action: "TAG_ADDED" } }),
+          db.activityLog.count({
+            where: {
+              storeId: store.id,
+              action: "TAG_ADDED",
+              OR: [
+                { rule: { targetEntity: "customer" } },
+                { ruleId: null }
+              ]
+            }
+          }),
           db.customer.count({ where: { storeId: store.id, tags: { contains: "VIP" } } }),
           db.customer.count({ where: { storeId: store.id, tags: { contains: "At-Risk" } } }),
           db.customer.count({ where: { storeId: store.id, orderCount: { gt: 1 }, NOT: { tags: { contains: "VIP" } } } }),

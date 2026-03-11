@@ -256,7 +256,7 @@ export async function manageOrderTags(
       else limit = Infinity;
 
       if (store.monthlyTagCount + tagsToAdd.length > limit) {
-        console.log(`Store ${store.shop} hit tag limit (${limit}). Skipping ${tagsToAdd.length} order tag add.`);
+        console.warn(`[LIMIT_HIT] Store ${store.shop} (Plan: ${store.planName}) reached tag limit of ${limit}. Cannot add tags: ${tagsToAdd.join(", ")} to order ${orderId}.`);
         allowedToTag = false;
         tagsToAdd = [];
       } else {

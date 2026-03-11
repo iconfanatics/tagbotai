@@ -43,9 +43,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
     const rulesWithMetrics = rules.map(rule => {
         let matchingCustomerCount = 0;
-        for (const customer of allTaggedCustomers) {
-            if (customer.tags?.includes(rule.targetTag)) {
-                matchingCustomerCount++;
+        if (rule.targetEntity === "customer") {
+            for (const customer of allTaggedCustomers) {
+                if (customer.tags?.includes(rule.targetTag)) {
+                    matchingCustomerCount++;
+                }
             }
         }
 

@@ -164,8 +164,11 @@ export function evaluateOrderRules(
         const metricConditions = conditions.filter((c: any) => c.ruleCategory === "metric");
 
         // Skip if customer already has this tag, BUT only if the rule targets the customer.
-        // If the rule targets the order, we want to tag the order regardless of the customer's history.
         if (rule.targetEntity === "customer" && existingCustomerTags.includes(rule.targetTag)) continue;
+
+        // Skip if order already has this tag (newly added check)
+        const orderTags = order.tags || [];
+        if (rule.targetEntity === "order" && orderTags.includes(rule.targetTag)) continue;
 
         // Evaluate all conditions across both scopes
         const evaluateGenericCondition = (c: any) => {

@@ -107,6 +107,7 @@ export async function processOneCustomer(
                                     node {
                                         id
                                         createdAt
+                                        tags
                                         subtotalPriceSet { shopMoney { amount } }
                                         totalDiscountsSet { shopMoney { amount } }
                                         discountCodes
@@ -157,6 +158,7 @@ export async function processOneCustomer(
                     referring_site: "", // GraphQL limits this
                     landing_site: "",
                     shipping_address: { city: o.shippingAddress?.city, country_code: o.shippingAddress?.countryCode },
+                    tags: o.tags || [],
                     line_items: o.lineItems.edges.map((le: any) => ({
                         quantity: le.node.quantity,
                         properties: le.node.customAttributes ? le.node.customAttributes.map((ca: any) => ({ name: ca.key, value: ca.value })) : []
