@@ -21,24 +21,29 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         select: { tags: true }
     });
 
-    const activeRules = await db.rule.findMany({
+    // 1. Fetch ALL Rules (including inactive ones if they exist) to map Target Entities
+    const allRules = await db.rule.findMany({
         where: { storeId: store.id },
         select: { targetTag: true, targetEntity: true }
     });
 
     const ruleEntityMap = new Map();
-    activeRules.forEach(r => ruleEntityMap.set(r.targetTag.toLowerCase(), r.targetEntity));
+    allRules.forEach(r => {
+        // Map the lowercase tag to its target entity
+        ruleEntityMap.set(r.targetTag.toLowerCase(), r.targetEntity);
+    });
 
     const getTargetEntity = (tag: string) => {
-        return ruleEntityMap.get(tag.toLowerCase()) || "customer";
+        return ruleEntityMap.get(tag.toLowerCase()) || "customer"; // Default to customer if unknown
     };
 
     const tagCounts: Record<string, { count: number, type: "customer" | "order" }> = {};
 
-    // 1. Tally Customer Tags
+    // 2. Tally Customer Tags strictly from Customer Data
     for (const c of customers) {
         if (!c.tags) continue;
         for (const tag of c.tags.split(",").map(t => t.trim()).filter(Boolean)) {
+            // Only tally it here if we believe it's a customer tag
             if (getTargetEntity(tag) !== "customer") continue;
             
             if (!tagCounts[tag]) tagCounts[tag] = { count: 0, type: "customer" };
@@ -46,17 +51,18 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         }
     }
 
-    // 2. Tally Order Tags via ActivityLog proxy
-    const orderLogs = await db.activityLog.groupBy({
-        by: ['tagContext'],
+    // 3. Tally Order Tags via ActivityLog proxy
+    const orderLogsRaw = await db.activityLog.findMany({
         where: { storeId: store.id, action: "TAG_ADDED" },
-        _count: { id: true }
+        select: { tagContext: true }
     });
 
-    orderLogs.forEach(group => {
-        const tag = group.tagContext || "";
+    // Grouping them manually in JS for reliable counting
+    orderLogsRaw.forEach(log => {
+        const tag = (log.tagContext || "").trim();
         if (tag && getTargetEntity(tag) === "order") {
-            tagCounts[tag] = { count: group._count.id, type: "order" };
+            if (!tagCounts[tag]) tagCounts[tag] = { count: 0, type: "order" };
+            tagCounts[tag].count++;
         }
     });
 
