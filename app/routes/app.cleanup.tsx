@@ -33,13 +33,37 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         ruleEntityMap.set(r.targetTag.toLowerCase(), r.targetEntity);
     });
 
+    const tagCounts: Record<string, { count: number, type: "customer" | "order" }> = {};
+
+    // 2. Discover Order Tags natively through recent activity because if the Rule is deleted,
+    // the tag is otherwise assumed to be a customer tag.
+    const orderLogsRaw = await db.activityLog.findMany({
+        where: { storeId: store.id, action: "TAG_ADDED" },
+        select: { tagContext: true, rule: { select: { targetEntity: true } } }
+    });
+
+    const recognizedOrderTags = new Set<string>();
+
+    // Grouping them manually in JS for reliable counting
+    orderLogsRaw.forEach(log => {
+        const tag = (log.tagContext || "").trim();
+        // Determine if it was an order tag by checking its direct historical relation to the rule,
+        // or checking the global cache we built above
+        const isOrderTag = log.rule?.targetEntity === "order" || ruleEntityMap.get(tag.toLowerCase()) === "order";
+        
+        if (tag && isOrderTag) {
+            recognizedOrderTags.add(tag.toLowerCase());
+            ruleEntityMap.set(tag.toLowerCase(), "order"); // Persist the knowledge 
+            if (!tagCounts[tag]) tagCounts[tag] = { count: 0, type: "order" };
+            tagCounts[tag].count++;
+        }
+    });
+
     const getTargetEntity = (tag: string) => {
         return ruleEntityMap.get(tag.toLowerCase()) || "customer"; // Default to customer if unknown
     };
 
-    const tagCounts: Record<string, { count: number, type: "customer" | "order" }> = {};
-
-    // 2. Tally Customer Tags strictly from Customer Data
+    // 3. Tally Customer Tags strictly from Customer Data
     for (const c of customers) {
         if (!c.tags) continue;
         for (const tag of c.tags.split(",").map(t => t.trim()).filter(Boolean)) {
@@ -50,21 +74,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
             tagCounts[tag].count++;
         }
     }
-
-    // 3. Tally Order Tags via ActivityLog proxy
-    const orderLogsRaw = await db.activityLog.findMany({
-        where: { storeId: store.id, action: "TAG_ADDED" },
-        select: { tagContext: true }
-    });
-
-    // Grouping them manually in JS for reliable counting
-    orderLogsRaw.forEach(log => {
-        const tag = (log.tagContext || "").trim();
-        if (tag && getTargetEntity(tag) === "order") {
-            if (!tagCounts[tag]) tagCounts[tag] = { count: 0, type: "order" };
-            tagCounts[tag].count++;
-        }
-    });
 
     const sortedTags = Object.entries(tagCounts)
         .map(([name, data]) => ({ id: name, name, count: data.count, type: data.type }))

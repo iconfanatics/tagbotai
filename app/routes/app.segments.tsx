@@ -103,12 +103,27 @@ export default function SmartSegments() {
 
   const downloadCustomerCSV = (segmentName: string, customers: any[], type: "customer" | "order") => {
     if (type === "order") {
-      // Order CSVs are generated natively via Shopify GraphQL
-      const params = new URLSearchParams(window.location.search);
-      params.set("tag", segmentName);
-      params.set("entity", "order");
-      window.location.href = `/app/export?${params.toString()}`;
-      return;
+        // For Shopify Embedded Apps, changing window.location.href to a relative
+        // path strips the iframe auth token, kicking them to a login screen.
+        // Instead, we use fetch() which natively includes Shopify's session header,
+        // then we manually trigger the browser's download dialog using a Blob.
+        const exportUrl = `/app/export?tag=${encodeURIComponent(segmentName)}&entity=order`;
+        
+        fetch(exportUrl)
+          .then(async (res) => {
+             if (!res.ok) throw new Error("Export failed");
+             const blob = await res.blob();
+             const url = window.URL.createObjectURL(blob);
+             const a = document.createElement('a');
+             a.href = url;
+             a.download = `${segmentName.replace(/\s+/g, "_")}_orders.csv`;
+             document.body.appendChild(a);
+             a.click();
+             a.remove();
+          })
+          .catch(err => console.error(err));
+        
+        return;
     }
 
     const header = "First Name,Last Name,Email,Total Spent,Orders\n";

@@ -136,7 +136,8 @@ export default function RulesManagement() {
                     const url = window.URL.createObjectURL(blob);
                     const a = document.createElement("a");
                     a.href = url;
-                    a.download = `export-${ruleEntity}-${ruleName.replace(/\\s+/g, '-')}.csv`;
+                    const safeName = ruleName.replace(/\s+/g, '-');
+                    a.download = `export-${ruleEntity}-${safeName}.csv`;
                     document.body.appendChild(a);
                     a.click();
                     a.remove();
