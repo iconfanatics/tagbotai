@@ -235,6 +235,100 @@ export async function manageCustomerTags(
   return { success: true, tagsAdded: tagsToAdd, tagsRemoved: tagsToRemove };
 }
 
+export async function manageOrderTags(
+  admin: any,
+  storeId: string,
+  orderId: string,
+  customerId: string | null, // Optional, purely for logging
+  tagsToAdd: string[],
+  tagsToRemove: string[]
+) {
+  let allowedToTag = true;
+
+  const store = await db.store.findUnique({ where: { id: storeId } });
+
+  if (store) {
+    if (tagsToAdd.length > 0) {
+      let limit = 0;
+      const plan = store.planName.toLowerCase();
+      if (plan.includes("free") || plan === "") limit = 100;
+      else if (plan.includes("growth")) limit = 1000;
+      else limit = Infinity;
+
+      if (store.monthlyTagCount + tagsToAdd.length > limit) {
+        console.log(`Store ${store.shop} hit tag limit (${limit}). Skipping ${tagsToAdd.length} order tag add.`);
+        allowedToTag = false;
+        tagsToAdd = [];
+      } else {
+        await db.store.update({
+          where: { id: storeId },
+          data: { monthlyTagCount: { increment: tagsToAdd.length } }
+        });
+      }
+    }
+  }
+
+  // 1. Add Tags
+  if (tagsToAdd.length > 0 && allowedToTag) {
+    const addResponse = await admin.graphql(
+      `#graphql
+        mutation tagsAdd($id: ID!, $tags: [String!]!) {
+          tagsAdd(id: $id, tags: $tags) {
+            node {
+              id
+            }
+            userErrors {
+              field
+              message
+            }
+          }
+        }
+      `,
+      {
+        variables: {
+          id: `gid://shopify/Order/${orderId}`,
+          tags: tagsToAdd,
+        },
+      }
+    );
+    const addData = await addResponse.json();
+    if (addData.data?.tagsAdd?.userErrors?.length > 0) {
+      console.error("[TAG_SERVICE] Error adding order tags:", addData.data.tagsAdd.userErrors);
+    }
+  }
+
+  // 2. Remove Tags
+  if (tagsToRemove.length > 0) {
+    const removeResponse = await admin.graphql(
+      `#graphql
+        mutation tagsRemove($id: ID!, $tags: [String!]!) {
+          tagsRemove(id: $id, tags: $tags) {
+            node {
+              id
+            }
+            userErrors {
+              field
+              message
+            }
+          }
+        }
+      `,
+      {
+        variables: {
+          id: `gid://shopify/Order/${orderId}`,
+          tags: tagsToRemove,
+        },
+      }
+    );
+    const removeData = await removeResponse.json();
+    if (removeData.data?.tagsRemove?.userErrors?.length > 0) {
+      console.error("[TAG_SERVICE] Error removing order tags:", removeData.data.tagsRemove.userErrors);
+    }
+  }
+
+  return { success: true, tagsAdded: tagsToAdd, tagsRemoved: tagsToRemove };
+}
+
 export async function sendVipDiscount(admin: any, storeId: string, customerId: string, email: string) {
   try {
     const store = await db.store.findUnique({ where: { id: storeId } });

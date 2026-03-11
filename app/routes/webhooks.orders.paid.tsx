@@ -2,7 +2,7 @@ import type { ActionFunctionArgs } from "react-router";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { calculateCustomerTags } from "../services/rule.server";
-import { manageCustomerTags, sendVipDiscount } from "../services/tags.server";
+import { manageCustomerTags, manageOrderTags, sendVipDiscount } from "../services/tags.server";
 import { getCachedStore } from "../services/cache.server";
 import { analyzeSentiment } from "../services/ai.server";
 import { evaluateOrderRules } from "../services/order-rules.server";
@@ -66,10 +66,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         where: { storeId: store.id, isActive: true }
     });
 
-    let addTagNames: string[] = [];
+    let addTagNames: string[] = []; // For customer specifically
     let removeTagNames: string[] = [];
-    let tagsToAddLog: { tag: string, reason: string }[] = [];
-    let tagsToRemoveLog: { tag: string, reason: string }[] = [];
+    let tagsToAddLog: { tag: string, reason: string, targetEntity?: string }[] = [];
+    let tagsToRemoveLog: { tag: string, reason: string, targetEntity?: string }[] = [];
 
     if (customer && activeRules.length > 0) {
         const standardRules = activeRules.filter(r => !r.collectionId);
@@ -136,8 +136,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
                         if (purchasedCollectionIds.has(targetCollectionGid)) {
                             if (!existingTags.includes(rule.targetTag) && !addTagNames.includes(rule.targetTag)) {
-                                addTagNames.push(rule.targetTag);
-                                tagsToAddLog.push({ tag: rule.targetTag, reason: `Purchased from Collection "${rule.collectionName}"` });
+                                if (rule.targetEntity === "order") {
+                                    tagsToAddLog.push({ tag: rule.targetTag, reason: `Purchased from Collection "${rule.collectionName}"`, targetEntity: "order" });
+                                } else {
+                                    addTagNames.push(rule.targetTag);
+                                    tagsToAddLog.push({ tag: rule.targetTag, reason: `Purchased from Collection "${rule.collectionName}"`, targetEntity: "customer" });
+                                }
                             }
                         }
                     }
@@ -158,7 +162,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
                     if (!normalizedExisting.includes(targetTagLower) && !normalizedAdd.includes(targetTagLower)) {
                         addTagNames.push(sentimentTag);
-                        tagsToAddLog.push({ tag: sentimentTag, reason: `AI Detected intent from note: "${order.note.substring(0, 30)}..."` });
+                        tagsToAddLog.push({ tag: sentimentTag, reason: `AI Detected intent from note: "${order.note.substring(0, 30)}..."`, targetEntity: "customer" });
                     }
                 }
             } catch (err) {
@@ -171,18 +175,31 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             const existingPlusNewTags = [...existingTags, ...addTagNames];
             const orderTagResults = evaluateOrderRules(order, customer, activeRules, existingPlusNewTags);
             for (const item of orderTagResults) {
-                if (!addTagNames.includes(item.tag)) {
-                    addTagNames.push(item.tag);
-                    tagsToAddLog.push(item);
+                if (item.targetEntity === "order") {
+                    tagsToAddLog.push({ tag: item.tag, reason: item.reason, targetEntity: "order" });
+                } else {
+                    if (!addTagNames.includes(item.tag)) {
+                        addTagNames.push(item.tag);
+                        tagsToAddLog.push({ tag: item.tag, reason: item.reason, targetEntity: "customer" });
+                    }
                 }
             }
         } catch (err) {
             console.error("[ORDER_RULES] Failed to evaluate order rules:", err);
         }
 
-        if (addTagNames.length > 0 || removeTagNames.length > 0) {
+        // Separate what goes to customer vs what goes to order
+        const actualOrderTagsToAdd = tagsToAddLog.filter(t => t.targetEntity === "order").map(t => t.tag);
+
+        if (addTagNames.length > 0 || removeTagNames.length > 0 || actualOrderTagsToAdd.length > 0) {
             try {
-                await manageCustomerTags(admin, store.id, customerId, addTagNames, removeTagNames);
+                if (addTagNames.length > 0 || removeTagNames.length > 0) {
+                    await manageCustomerTags(admin, store.id, customerId, addTagNames, removeTagNames);
+                }
+                
+                if (actualOrderTagsToAdd.length > 0) {
+                    await manageOrderTags(admin, store.id, order.admin_graphql_api_id.split('/').pop() || order.id.toString(), customerId, actualOrderTagsToAdd, []);
+                }
 
                 // IMPORTANT: Manually update the local Prisma customer cache with the order-based tags
                 // so the Rules Dashboard "Matching Customers" count updates instantly.

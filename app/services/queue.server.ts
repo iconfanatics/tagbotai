@@ -1,7 +1,7 @@
 import { unauthenticated } from "../shopify.server";
 import db from "../db.server";
 import { calculateCustomerTags } from "./rule.server";
-import { manageCustomerTags, sendVipDiscount } from "./tags.server";
+import { manageCustomerTags, manageOrderTags, sendVipDiscount } from "./tags.server";
 
 interface SyncJobPayload {
     shop: string;
@@ -79,8 +79,8 @@ export async function processOneCustomer(
         const { tagsToAdd, tagsToRemove } = await calculateCustomerTags(upsertedCustomer, activeRules);
         let addTagNames = tagsToAdd.map(t => t.tag);
         let removeTagNames = tagsToRemove.map(t => t.tag);
-        const tagsToAddLog = [...tagsToAdd];
-        const tagsToRemoveLog = [...tagsToRemove];
+        const tagsToAddLog: { tag: string, reason: string, targetEntity?: string, orderId?: string }[] = [...tagsToAdd];
+        const tagsToRemoveLog: { tag: string, reason: string, targetEntity?: string, orderId?: string }[] = [...tagsToRemove];
 
         // 2. Evaluate order-based rules (if any exist)
         const hasOrderRules = activeRules.some(r => {
@@ -96,6 +96,7 @@ export async function processOneCustomer(
                         orders(first: 50, sortKey: CREATED_AT, reverse: true) {
                             edges {
                                 node {
+                                    id
                                     createdAt
                                     subtotalPriceSet { shopMoney { amount } }
                                     totalDiscountsSet { shopMoney { amount } }
@@ -144,18 +145,46 @@ export async function processOneCustomer(
 
                 const orderTagResults = evaluateOrderRules(mappedOrder, upsertedCustomer, activeRules, existingTags);
                 for (const item of orderTagResults) {
-                    if (!addTagNames.includes(item.tag)) {
-                        addTagNames.push(item.tag);
-                        tagsToAddLog.push(item);
-                        existingTags.push(item.tag);
+                    if (item.targetEntity === "order") {
+                        // Tagging an order is unique to the order itself, no need to deduplicate against the customer's history
+                        tagsToAddLog.push({ tag: item.tag, reason: item.reason, targetEntity: "order", orderId: o.id });
+                    } else {
+                        if (!addTagNames.includes(item.tag)) {
+                            addTagNames.push(item.tag);
+                            tagsToAddLog.push({ ...item, targetEntity: "customer" });
+                            existingTags.push(item.tag);
+                        }
                     }
                 }
             }
         }
 
         // 3. Apply the combined results
-        if (addTagNames.length > 0 || removeTagNames.length > 0) {
-            await manageCustomerTags(admin, storeId, customerId, addTagNames, removeTagNames);
+        const actualOrderTagsToAdd = tagsToAddLog.filter(t => t.targetEntity === "order");
+
+        if (addTagNames.length > 0 || removeTagNames.length > 0 || actualOrderTagsToAdd.length > 0) {
+            
+            if (addTagNames.length > 0 || removeTagNames.length > 0) {
+                await manageCustomerTags(admin, storeId, customerId, addTagNames, removeTagNames);
+            }
+
+            // Sync tags exactly to their historical orders individually
+            if (actualOrderTagsToAdd.length > 0) {
+                // Group by order ID to avoid spamming Shopify API for multi-rule matches on the same order
+                const tagsByOrder: Record<string, string[]> = {};
+                for (const item of actualOrderTagsToAdd as any[]) {
+                    if (!tagsByOrder[item.orderId]) tagsByOrder[item.orderId] = [];
+                    tagsByOrder[item.orderId].push(item.tag);
+                }
+
+                for (const [orderGid, tags] of Object.entries(tagsByOrder)) {
+                    // Extract ID number from gid://shopify/Order/12345
+                    const cleanOrderId = orderGid.split('/').pop() || "";
+                    if (cleanOrderId) {
+                        await manageOrderTags(admin, storeId, cleanOrderId, customerId, tags, []);
+                    }
+                }
+            }
 
             for (const item of tagsToAddLog) {
                 const normalizedTag = item.tag.toLowerCase();

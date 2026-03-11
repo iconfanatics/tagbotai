@@ -49,6 +49,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     // ── Save Rule ────────────────────────────────────────────────
     const name = fd.get("name") as string;
     const targetTag = fd.get("targetTag") as string;
+    const targetEntity = (fd.get("targetEntity") as string) || "customer";
     const matchType = (fd.get("matchType") as string) || "ALL";
     const conditionsJson = fd.get("conditionsJson") as string;
 
@@ -73,7 +74,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     await db.rule.create({
         data: {
             storeId: store.id, name, description,
-            conditions: JSON.stringify(conditions), targetTag,
+            conditions: JSON.stringify(conditions), targetTag, targetEntity,
             matchType, isActive: true
         }
     });
@@ -118,6 +119,7 @@ type Template = {
     orderOperator?: string;
     orderValue?: string;
     tag: string;
+    targetEntity?: "customer" | "order";
 };
 
 // ─── Config ───────────────────────────────────────────────────────────────────
@@ -161,7 +163,7 @@ const TEMPLATES: Template[] = [
         category: "customer", icon: CashDollarIcon,
         description: "Total spent ≥ $1,000",
         longDescription: "When customer has total spent greater than or equal to $1,000, automatically add tag Gold-VIP to customer.",
-        ruleType: "metric", field: "totalSpent", operator: "greaterThan", value: "1000", tag: "Gold-VIP",
+        ruleType: "metric", field: "totalSpent", operator: "greaterThan", value: "1000", tag: "Gold-VIP", targetEntity: "customer",
     },
     {
         key: "medium_spend", label: "Medium Spend Customers", popular: true,
@@ -196,8 +198,8 @@ const TEMPLATES: Template[] = [
         key: "facebook_buyer", label: "Facebook Campaign Orders", popular: true,
         category: "order", icon: OrderIcon,
         description: "Traffic source contains Facebook",
-        longDescription: "When orders are created and traffic source contains facebook, automatically add tag Facebook to customer.",
-        ruleType: "order", orderField: "order_source", orderOperator: "contains", orderValue: "facebook", tag: "Social-FB",
+        longDescription: "When orders are created and traffic source contains facebook, automatically add tag Facebook to order.",
+        ruleType: "order", orderField: "order_source", orderOperator: "contains", orderValue: "facebook", tag: "Social-FB", targetEntity: "order",
     },
     {
         key: "tiktok_buyer", label: "TikTok Campaign Orders",
@@ -338,6 +340,7 @@ export default function NewRule() {
     // Form state
     const [name, setName] = useState("");
     const [targetTag, setTargetTag] = useState("");
+    const [targetEntity, setTargetEntity] = useState("customer");
     const [matchType, setMatchType] = useState("ALL");
     const [conditions, setConditions] = useState<any[]>([{ ruleCategory: "metric", field: "totalSpent", operator: "greaterThan", value: "" }]);
 
@@ -348,6 +351,7 @@ export default function NewRule() {
         setSelectedTemplate(null);
         setName(gen.name || aiPrompt);
         setTargetTag(gen.targetTag || "");
+        setTargetEntity(gen.targetEntity || "customer");
         setMatchType(gen.matchType || "ALL");
 
         let newConditions = [];
@@ -384,6 +388,7 @@ export default function NewRule() {
         setSelectedTemplate(t);
         setName(t.label);
         setTargetTag(t.tag);
+        setTargetEntity(t.targetEntity || "customer");
         setMatchType("ALL");
 
         // Helper: compute a date string N days in the past
@@ -423,7 +428,7 @@ export default function NewRule() {
 
     const openBlank = () => {
         setSelectedTemplate(null);
-        setName(""); setTargetTag(""); setMatchType("ALL");
+        setName(""); setTargetTag(""); setTargetEntity("customer"); setMatchType("ALL");
         setConditions([{ ruleCategory: "metric", field: "totalSpent", operator: "greaterThan", value: "" }]);
         setIsModalOpen(true);
     };
@@ -455,7 +460,7 @@ export default function NewRule() {
     };
 
     const handleSubmit = () => {
-        submit({ name, targetTag, matchType, conditionsJson: JSON.stringify(conditions) }, { method: "post" });
+        submit({ name, targetTag, targetEntity, matchType, conditionsJson: JSON.stringify(conditions) }, { method: "post" });
     };
 
     const metricFieldOptions = [
@@ -567,8 +572,18 @@ export default function NewRule() {
                             value={targetTag}
                             onChange={setTargetTag}
                             placeholder="e.g. VIP, Loyal-Customer"
-                            helpText="This tag will be added to the customer in Shopify."
+                            helpText={`This tag will be added to the ${targetEntity === "order" ? "Order" : "Customer"} in Shopify.`}
                             autoComplete="off"
+                        />
+                        <Select
+                            label="Tag Target"
+                            options={[
+                                { label: "Shopify Customer Profile", value: "customer" },
+                                { label: "Shopify Order", value: "order" },
+                            ]}
+                            value={targetEntity}
+                            onChange={setTargetEntity}
+                            helpText={targetEntity === "order" ? "The tag will appear on the individual Shopify Order." : "The tag will appear on the Customer's profile in Shopify."}
                         />
                     </FormLayout>
                 </Modal.Section>

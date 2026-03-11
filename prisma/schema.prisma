@@ -74,6 +74,7 @@ model Rule {
   conditions     String        // Stored as JSON string
   matchType      String        @default("ALL") // "ALL" or "ANY"
   targetTag      String
+  targetEntity   String        @default("customer") // "customer" or "order"
   collectionId   String?       // Targeting specific Shopify collections
   collectionName String?
   isActive       Boolean       @default(true)

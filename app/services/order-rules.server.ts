@@ -137,8 +137,8 @@ export function evaluateOrderRules(
     customer: any,
     rules: Rule[],
     existingCustomerTags: string[]
-): { tag: string; reason: string }[] {
-    const results: { tag: string; reason: string }[] = [];
+): { tag: string; reason: string; targetEntity: string }[] {
+    const results: { tag: string; reason: string; targetEntity: string }[] = [];
     const orderData = extractOrderData(order);
 
 
@@ -182,7 +182,8 @@ export function evaluateOrderRules(
             const joinWord = rule.matchType === "ANY" ? " OR " : " AND ";
             results.push({
                 tag: rule.targetTag,
-                reason: `Rule "${rule.name}" matched (${reasons.join(joinWord)})`
+                reason: `Rule "${rule.name}" matched (${reasons.join(joinWord)})`,
+                targetEntity: rule.targetEntity
             });
         }
     }
