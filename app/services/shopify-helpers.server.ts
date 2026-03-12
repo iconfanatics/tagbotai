@@ -102,7 +102,7 @@ export async function fetchAllOrders(admin: any, maxOrders = 5000): Promise<any[
         try {
             const res = await admin.graphql(`#graphql
                 query FetchAllOrders($first: Int!, $after: String) {
-                    orders(first: $first, after: $after, query: "financial_status:paid") {
+                    orders(first: $first, after: $after) {
                         edges {
                             node {
                                 id
