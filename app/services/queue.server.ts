@@ -187,7 +187,7 @@ export async function processOneCustomer(
         if (addTagNames.length > 0 || removeTagNames.length > 0 || actualOrderTagsToAdd.length > 0) {
             
             if (addTagNames.length > 0 || removeTagNames.length > 0) {
-                await manageCustomerTags(admin, storeId, customerId, addTagNames, removeTagNames);
+                await manageCustomerTags(admin, storeId, customerId, addTagNames, removeTagNames, true);
             }
 
             // Sync tags exactly to their historical orders individually
@@ -203,7 +203,7 @@ export async function processOneCustomer(
                     // Extract ID number from gid://shopify/Order/12345
                     const cleanOrderId = orderGid.split('/').pop() || "";
                     if (cleanOrderId) {
-                        await manageOrderTags(admin, storeId, cleanOrderId, customerId, tags, []);
+                        await manageOrderTags(admin, storeId, cleanOrderId, customerId, tags, [], true);
                     }
                 }
             }
@@ -359,7 +359,7 @@ async function processSyncJob(payload: SyncJobPayload) {
                     if (!cleanOrderId) continue;
 
                     // Apply tag to the order in Shopify
-                    await manageOrderTags(admin, storeId, cleanOrderId, customerData.id !== "guest" ? customerData.id : null, tagsToApply, []);
+                    await manageOrderTags(admin, storeId, cleanOrderId, customerData.id !== "guest" ? customerData.id : null, tagsToApply, [], true);
                     ordersTagged++;
 
                     // Log in ActivityLog if customer is known

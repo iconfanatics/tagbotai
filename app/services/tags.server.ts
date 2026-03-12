@@ -8,7 +8,8 @@ export async function manageCustomerTags(
   storeId: string,
   customerId: string,
   tagsToAdd: string[],
-  tagsToRemove: string[]
+  tagsToRemove: string[],
+  isHistoricalSync = false // Historical syncs don't count against the monthly limit
 ) {
   // Limit Check for tagging
   let allowedToTag = true;
@@ -29,7 +30,7 @@ export async function manageCustomerTags(
     mailchimpListId = store.mailchimpListId;
     isElitePlan = store.planName === "Elite Plan";
 
-    if (tagsToAdd.length > 0) {
+    if (!isHistoricalSync && tagsToAdd.length > 0) {
       let limit = 0;
       const plan = store.planName.toLowerCase();
       if (plan.includes("free") || plan === "") limit = 100;
@@ -241,14 +242,15 @@ export async function manageOrderTags(
   orderId: string,
   customerId: string | null, // Optional, purely for logging
   tagsToAdd: string[],
-  tagsToRemove: string[]
+  tagsToRemove: string[],
+  isHistoricalSync = false // Historical syncs don't count against the monthly limit
 ) {
   let allowedToTag = true;
 
   const store = await db.store.findUnique({ where: { id: storeId } });
 
   if (store) {
-    if (tagsToAdd.length > 0) {
+    if (!isHistoricalSync && tagsToAdd.length > 0) {
       let limit = 0;
       const plan = store.planName.toLowerCase();
       if (plan.includes("free") || plan === "") limit = 100;
