@@ -313,34 +313,42 @@ async function processSyncJob(payload: SyncJobPayload) {
         }
 
         // ─── Phase 2: Order Rules ────────────────────────────────────────────────
-        // Fetch ALL orders directly from Shopify — this catches guest checkouts
-        // and orders belonging to customers that were never in the customer list.
+        // Fetch ALL orders directly from Shopify and tag every qualifying one.
         if (orderRules.length > 0) {
-            console.log(`[QUEUE_WORKER] Starting order-first scan for ${orderRules.length} order rule(s)...`);
+            console.log(`[ORDER_SYNC] Starting order scan. ${orderRules.length} order rule(s) active.`);
             const allOrders = await fetchAllOrders(admin);
+            console.log(`[ORDER_SYNC] Fetched ${allOrders.length} total orders from Shopify.`);
+
+            let ordersEvaluated = 0;
+            let ordersAlreadyTagged = 0;
+            let ordersQualified = 0;
             let ordersTagged = 0;
+            let ordersFailed = 0;
 
             for (const orderEdge of allOrders) {
                 const o = orderEdge.node;
+                ordersEvaluated++;
 
                 try {
+                    const subtotal = parseFloat(o.subtotalPriceSet?.shopMoney?.amount || "0");
+                    const existingOrderTags: string[] = o.tags || [];
+
                     const mappedOrder = {
-                        subtotal_price: o.subtotalPriceSet?.shopMoney?.amount || "0",
+                        subtotal_price: String(subtotal),
                         total_discounts: o.totalDiscountsSet?.shopMoney?.amount || "0",
                         discount_codes: o.discountCodes ? o.discountCodes.map((c: string) => ({ code: c })) : [],
-                        payment_gateway_names: o.paymentGatewayNames,
-                        source_name: o.channel?.name || o.sourceIdentifier,
+                        payment_gateway_names: o.paymentGatewayNames || [],
+                        source_name: o.channel?.name || o.sourceIdentifier || "",
                         referring_site: "",
                         landing_site: "",
                         shipping_address: { city: o.shippingAddress?.city, country_code: o.shippingAddress?.countryCode },
-                        tags: o.tags || [],
+                        tags: existingOrderTags,
                         line_items: (o.lineItems?.edges || []).map((le: any) => ({
                             quantity: le.node.quantity,
                             properties: le.node.customAttributes ? le.node.customAttributes.map((ca: any) => ({ name: ca.key, value: ca.value })) : []
                         }))
                     };
 
-                    // Build a minimal customer object for mixed rules
                     const customerData = {
                         id: o.customer?.id?.split("/").pop() || "guest",
                         totalSpent: parseFloat(o.customer?.amountSpent?.amount || "0"),
@@ -350,54 +358,85 @@ async function processSyncJob(payload: SyncJobPayload) {
 
                     const results = evaluateOrderRules(mappedOrder, customerData, orderRules, []);
                     const orderTagResults = results.filter(r => r.targetEntity === "order");
+                    const tagsToApply = orderTagResults.map(r => r.tag).filter(tag => !existingOrderTags.includes(tag));
 
-                    // Group tags to add for this specific order
-                    const tagsToApply = orderTagResults.map(r => r.tag);
+                    if (orderTagResults.length > 0 && tagsToApply.length === 0) {
+                        // Qualified but already tagged
+                        ordersAlreadyTagged++;
+                        console.log(`[ORDER_SYNC] Order ${o.id} SKIPPED (already has tags: ${orderTagResults.map(r => r.tag).join(", ")})`);
+                        continue;
+                    }
+
                     if (tagsToApply.length === 0) continue;
 
-                    const cleanOrderId = o.id.split("/").pop() || "";
-                    if (!cleanOrderId) continue;
+                    ordersQualified++;
+                    console.log(`[ORDER_SYNC] Order ${o.id} QUALIFIES. subtotal=${subtotal}. Tags to apply: ${tagsToApply.join(", ")}`);
 
-                    // Apply tag to the order in Shopify
-                    await manageOrderTags(admin, storeId, cleanOrderId, customerData.id !== "guest" ? customerData.id : null, tagsToApply, [], true);
-                    ordersTagged++;
+                    // Apply tags directly via Shopify GraphQL
+                    const tagRes = await admin.graphql(`#graphql
+                        mutation tagsAdd($id: ID!, $tags: [String!]!) {
+                            tagsAdd(id: $id, tags: $tags) {
+                                node { id }
+                                userErrors { field message }
+                            }
+                        }
+                    `, { variables: { id: o.id, tags: tagsToApply } });
 
-                    // Log in ActivityLog if customer is known
-                    if (customerData.id !== "guest") {
-                        // Ensure customer record exists so ActivityLog FK constraint is satisfied
-                        await db.customer.upsert({
-                            where: { id_storeId: { id: customerData.id, storeId } },
-                            create: {
-                                id: customerData.id,
-                                storeId,
-                                email: o.customer?.email || null,
-                                totalSpent: customerData.totalSpent,
-                                orderCount: customerData.orderCount,
-                                tags: customerData.tags || null,
-                            },
-                            update: {}
-                        });
+                    const tagData = await tagRes.json();
+                    const userErrors = tagData.data?.tagsAdd?.userErrors || [];
 
-                        for (const result of orderTagResults) {
-                            const rule = await db.rule.findFirst({ where: { storeId, targetTag: result.tag, targetEntity: "order" } });
-                            await db.activityLog.create({
-                                data: {
+                    if (userErrors.length > 0) {
+                        ordersFailed++;
+                        console.error(`[ORDER_SYNC] FAILED to tag order ${o.id}:`, JSON.stringify(userErrors));
+                    } else {
+                        ordersTagged++;
+                        console.log(`[ORDER_SYNC] ✓ Tagged order ${o.id} with ${tagsToApply.join(", ")}`);
+
+                        // Log to ActivityLog (only for non-guest customers)
+                        if (customerData.id !== "guest") {
+                            await db.customer.upsert({
+                                where: { id_storeId: { id: customerData.id, storeId } },
+                                create: {
+                                    id: customerData.id,
                                     storeId,
-                                    customerId: customerData.id,
-                                    action: "TAG_ADDED",
-                                    tagContext: result.tag,
-                                    reason: `[Order Sync] ${result.reason}`,
-                                    ruleId: rule?.id
-                                }
+                                    email: o.customer?.email || null,
+                                    totalSpent: customerData.totalSpent,
+                                    orderCount: customerData.orderCount,
+                                    tags: customerData.tags || null,
+                                },
+                                update: {}
                             });
+
+                            for (const result of orderTagResults) {
+                                if (!tagsToApply.includes(result.tag)) continue;
+                                const rule = await db.rule.findFirst({ where: { storeId, targetTag: result.tag, targetEntity: "order" } });
+                                await db.activityLog.create({
+                                    data: {
+                                        storeId,
+                                        customerId: customerData.id,
+                                        action: "TAG_ADDED",
+                                        tagContext: result.tag,
+                                        reason: `[Order Sync] ${result.reason}`,
+                                        ruleId: rule?.id
+                                    }
+                                });
+                            }
                         }
                     }
                 } catch (err: any) {
-                    console.error(`[QUEUE_WORKER] Error processing order ${o.id}:`, err.message);
+                    ordersFailed++;
+                    console.error(`[ORDER_SYNC] Exception on order ${o.id}:`, err.message);
                 }
             }
 
-            console.log(`[QUEUE_WORKER] Order scan complete. Tagged ${ordersTagged}/${allOrders.length} orders.`);
+            console.log(`[ORDER_SYNC] ════════════════════════════════════════`);
+            console.log(`[ORDER_SYNC] Total orders fetched  : ${allOrders.length}`);
+            console.log(`[ORDER_SYNC] Evaluated             : ${ordersEvaluated}`);
+            console.log(`[ORDER_SYNC] Qualified (new)       : ${ordersQualified}`);
+            console.log(`[ORDER_SYNC] Already tagged (skip) : ${ordersAlreadyTagged}`);
+            console.log(`[ORDER_SYNC] Successfully tagged   : ${ordersTagged}`);
+            console.log(`[ORDER_SYNC] Failed                : ${ordersFailed}`);
+            console.log(`[ORDER_SYNC] ════════════════════════════════════════`);
 
             completed++;
             await db.store.update({ where: { id: storeId }, data: { syncCompleted: completed } });
