@@ -64,9 +64,28 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         };
 
         for (const rule of rulesToScan) {
-            const allResults = evaluateOrderRules(mappedOrder, customerData, [rule], []);
-            const matched = allResults.filter((r: any) => r.targetEntity === "order");
             const hasTag = existingTags.includes(rule.targetTag);
+
+            if (hasTag) {
+                // Already tagged — don't bother evaluating conditions
+                results.push({
+                    orderId: o.id.split("/").pop(),
+                    orderGid: o.id,
+                    subtotal,
+                    existingTags,
+                    tag: rule.targetTag,
+                    ruleName: rule.name,
+                    qualifies: true,
+                    status: "already_tagged",
+                    skipReason: "",
+                });
+                continue;
+            }
+
+            // Build a version of the order WITHOUT the tag so evaluateOrderRules doesn't skip it
+            const mappedOrderForEval = { ...mappedOrder, tags: [] };
+            const allResults = evaluateOrderRules(mappedOrderForEval, customerData, [rule], []);
+            const matched = allResults.filter((r: any) => r.targetEntity === "order");
             const qualifies = matched.length > 0;
 
             let status: string;
@@ -74,7 +93,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
             if (!qualifies) {
                 status = "no_match";
-                // Build human-readable reason
                 try {
                     const conditions = JSON.parse(rule.conditions);
                     skipReason = conditions.map((c: any) => {
@@ -82,8 +100,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                         return `${c.field} ${c.operator} ${c.value} (actual: ${actualVal})`;
                     }).join(" AND ");
                 } catch { skipReason = "Could not parse conditions"; }
-            } else if (hasTag) {
-                status = "already_tagged";
             } else {
                 status = "needs_tag";
             }
