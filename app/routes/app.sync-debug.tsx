@@ -2,18 +2,21 @@ import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
 import { useLoaderData, useActionData, useNavigation, Form } from "react-router";
 import {
     Page, Layout, Card, Text, BlockStack, InlineStack, Badge, Button,
-    Box, Banner, DataTable, Spinner, EmptyState
+    Box, Banner, DataTable, Select, Divider
 } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { getCachedStore } from "../services/cache.server";
-import { enqueueSyncJob } from "../services/queue.server";
 import { fetchAllOrders } from "../services/shopify-helpers.server";
 import { evaluateOrderRules } from "../services/order-rules.server";
+import { useState } from "react";
 
-// ─── Action: Run the diagnostic scan ─────────────────────────────────────────
+// ─── Action: Run diagnostic scan for a specific tag ──────────────────────────
 export const action = async ({ request }: ActionFunctionArgs) => {
     const { session, admin } = await authenticate.admin(request);
+    const formData = await request.formData();
+    const selectedTag = formData.get("selectedTag") as string;
+
     const store = await getCachedStore(session.shop);
     if (!store) return { error: "Store not found" };
 
@@ -23,7 +26,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         catch { return false; }
     });
 
-    if (orderRules.length === 0) return { error: "No active order rules found." };
+    // Filter to only the rule for the selected tag (if provided)
+    const rulesToScan = selectedTag
+        ? orderRules.filter(r => r.targetTag === selectedTag)
+        : orderRules;
+
+    if (rulesToScan.length === 0) return { error: `No active order rule found for tag: ${selectedTag || "(any)"}` };
 
     const allOrders = await fetchAllOrders(admin);
     const results: any[] = [];
@@ -55,36 +63,63 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             tags: (o.customer?.tags || []).join(", "),
         };
 
-        const evalResults = evaluateOrderRules(mappedOrder, customerData, orderRules, []);
-        const orderTagResults = evalResults.filter((r: any) => r.targetEntity === "order");
-        const newTags = orderTagResults.map((r: any) => r.tag).filter((t: string) => !existingTags.includes(t));
-        const alreadyTagged = orderTagResults.map((r: any) => r.tag).filter((t: string) => existingTags.includes(t));
+        for (const rule of rulesToScan) {
+            const allResults = evaluateOrderRules(mappedOrder, customerData, [rule], []);
+            const matched = allResults.filter((r: any) => r.targetEntity === "order");
+            const hasTag = existingTags.includes(rule.targetTag);
+            const qualifies = matched.length > 0;
 
-        results.push({
-            orderId: o.id.split("/").pop(),
-            name: o.name || `#${o.id.split("/").pop()}`,
-            subtotal,
-            existingTags,
-            qualifies: orderTagResults.length > 0,
-            newTags,
-            alreadyTagged,
-            status: orderTagResults.length === 0
-                ? "no_match"
-                : newTags.length > 0
-                    ? "needs_tag"
-                    : "already_tagged"
-        });
+            let status: string;
+            let skipReason = "";
+
+            if (!qualifies) {
+                status = "no_match";
+                // Build human-readable reason
+                try {
+                    const conditions = JSON.parse(rule.conditions);
+                    skipReason = conditions.map((c: any) => {
+                        const actualVal = c.field === "order_subtotal" ? subtotal : "?";
+                        return `${c.field} ${c.operator} ${c.value} (actual: ${actualVal})`;
+                    }).join(" AND ");
+                } catch { skipReason = "Could not parse conditions"; }
+            } else if (hasTag) {
+                status = "already_tagged";
+            } else {
+                status = "needs_tag";
+            }
+
+            results.push({
+                orderId: o.id.split("/").pop(),
+                orderGid: o.id,
+                subtotal,
+                existingTags,
+                tag: rule.targetTag,
+                ruleName: rule.name,
+                qualifies,
+                status,
+                skipReason,
+            });
+        }
     }
 
-    const summary = {
-        total: results.length,
-        qualifies: results.filter(r => r.qualifies).length,
-        needsTag: results.filter(r => r.status === "needs_tag").length,
-        alreadyTagged: results.filter(r => r.status === "already_tagged").length,
-        noMatch: results.filter(r => r.status === "no_match").length,
-    };
+    const byTag: Record<string, any[]> = {};
+    for (const r of results) {
+        if (!byTag[r.tag]) byTag[r.tag] = [];
+        byTag[r.tag].push(r);
+    }
 
-    return { results, summary, orderRulesCount: orderRules.length };
+    const summaryByTag: Record<string, any> = {};
+    for (const [tag, rows] of Object.entries(byTag)) {
+        summaryByTag[tag] = {
+            total: allOrders.length,
+            qualifies: rows.filter(r => r.qualifies).length,
+            needsTag: rows.filter(r => r.status === "needs_tag").length,
+            alreadyTagged: rows.filter(r => r.status === "already_tagged").length,
+            noMatch: rows.filter(r => r.status === "no_match").length,
+        };
+    }
+
+    return { results, byTag, summaryByTag, totalOrders: allOrders.length };
 };
 
 // ─── Loader ───────────────────────────────────────────────────────────────────
@@ -93,140 +128,164 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     const store = await getCachedStore(session.shop);
     if (!store) throw new Error("Store not found");
 
+    const orderRules = await db.rule.findMany({
+        where: { storeId: store.id, isActive: true },
+    });
+    const orderOnlyRules = orderRules.filter(r => {
+        try { return JSON.parse(r.conditions).some((c: any) => c.ruleCategory === "order"); }
+        catch { return false; }
+    });
+
     const recentLogs = await db.activityLog.findMany({
         where: { storeId: store.id, action: "TAG_ADDED", reason: { contains: "[Order Sync]" } },
         orderBy: { createdAt: "desc" },
-        take: 100,
+        take: 50,
         include: { rule: { select: { name: true, targetTag: true } } }
     });
 
-    return { recentLogs };
+    return { orderRules: orderOnlyRules, recentLogs };
 };
+
+// ─── Status badge helper ──────────────────────────────────────────────────────
+function StatusBadge({ status }: { status: string }) {
+    if (status === "needs_tag") return <Badge tone="warning">Needs Tag</Badge>;
+    if (status === "already_tagged") return <Badge tone="success">Already Tagged ✓</Badge>;
+    return <Badge>No Match</Badge>;
+}
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function SyncDebugPage() {
-    const { recentLogs } = useLoaderData<typeof loader>();
+    const { orderRules, recentLogs } = useLoaderData<typeof loader>();
     const actionData = useActionData<typeof action>();
     const nav = useNavigation();
     const isScanning = nav.state === "submitting";
 
-    const scanResults = actionData?.results;
-    const summary = actionData?.summary;
-    const scanError = actionData?.error;
+    const [selectedTag, setSelectedTag] = useState<string>("__all__");
 
-    const statusBadge = (status: string) => {
-        if (status === "needs_tag") return <Badge tone="warning">Needs Tag</Badge>;
-        if (status === "already_tagged") return <Badge tone="success">Already Tagged</Badge>;
-        return <Badge>No Match</Badge>;
-    };
+    const tagOptions = [
+        { label: "All Order Rules", value: "__all__" },
+        ...orderRules.map(r => ({ label: `${r.targetTag}  (${r.name})`, value: r.targetTag }))
+    ];
+
+    const scanError = (actionData as any)?.error;
+    const summaryByTag = (actionData as any)?.summaryByTag || {};
+    const byTag = (actionData as any)?.byTag || {};
+    const totalOrders = (actionData as any)?.totalOrders || 0;
+
+    // Which tags to show after scan
+    const tagsToShow = selectedTag === "__all__" ? Object.keys(byTag) : (byTag[selectedTag] ? [selectedTag] : []);
 
     return (
         <Page
-            title="Order Sync Diagnostics"
-            subtitle="Scan all your Shopify orders against active order rules to see which qualify and why."
+            title="Sync Diagnostics"
+            subtitle="Select a tag to scan all orders and see exactly which qualify, which are already tagged, and which don't match."
             backAction={{ url: "/app/rules", content: "Rules" }}
         >
             <Layout>
-                {/* ── Scan trigger ── */}
+                {/* ── Scan form ── */}
                 <Layout.Section>
                     <Card>
-                        <BlockStack gap="400">
-                            <Text as="h2" variant="headingMd">Run Diagnostic Scan</Text>
-                            <Text as="p" variant="bodyMd" tone="subdued">
-                                This will fetch every order from your Shopify store, evaluate it against your active order rules,
-                                and show you exactly which ones qualify, which are already tagged, and which don't match.
-                                No tags will be applied — this is read-only.
-                            </Text>
-                            <Form method="post">
-                                <Button submit loading={isScanning} variant="primary" size="large">
-                                    {isScanning ? "Scanning orders..." : "🔍 Run Diagnostic Scan"}
-                                </Button>
-                            </Form>
-                        </BlockStack>
+                        <Form method="post">
+                            <BlockStack gap="400">
+                                <Text as="h2" variant="headingMd">Diagnostic Scan</Text>
+                                <Select
+                                    label="Tag / Rule to scan"
+                                    options={tagOptions}
+                                    value={selectedTag}
+                                    onChange={val => setSelectedTag(val)}
+                                    name="selectedTag"
+                                />
+                                <input type="hidden" name="selectedTag" value={selectedTag === "__all__" ? "" : selectedTag} />
+                                <InlineStack>
+                                    <Button submit loading={isScanning} variant="primary">
+                                        {isScanning ? "Scanning all orders…" : "🔍 Run Diagnostic Scan"}
+                                    </Button>
+                                </InlineStack>
+                                <Text as="p" variant="bodySm" tone="subdued">
+                                    Read-only — no tags will be applied. Fetches every order from Shopify and evaluates conditions.
+                                </Text>
+                            </BlockStack>
+                        </Form>
                     </Card>
                 </Layout.Section>
 
-                {/* ── Error ── */}
                 {scanError && (
                     <Layout.Section>
                         <Banner tone="critical">{scanError}</Banner>
                     </Layout.Section>
                 )}
 
-                {/* ── Summary ── */}
-                {summary && (
-                    <Layout.Section>
-                        <Card>
-                            <BlockStack gap="400">
-                                <Text as="h2" variant="headingMd">Scan Summary</Text>
-                                <InlineStack gap="600" wrap>
-                                    <BlockStack gap="100">
-                                        <Text as="p" variant="headingXl">{summary.total}</Text>
-                                        <Text as="p" variant="bodySm" tone="subdued">Total Orders</Text>
-                                    </BlockStack>
-                                    <BlockStack gap="100">
-                                        <Text as="p" variant="headingXl">{summary.qualifies}</Text>
-                                        <Text as="p" variant="bodySm" tone="subdued">Qualify for Rule</Text>
-                                    </BlockStack>
-                                    <BlockStack gap="100">
-                                        <Text as="p" variant="headingXl">{summary.needsTag}</Text>
-                                        <Text as="p" variant="bodySm" tone="subdued">Need Tagging Now</Text>
-                                    </BlockStack>
-                                    <BlockStack gap="100">
-                                        <Text as="p" variant="headingXl">{summary.alreadyTagged}</Text>
-                                        <Text as="p" variant="bodySm" tone="subdued">Already Tagged ✓</Text>
-                                    </BlockStack>
-                                    <BlockStack gap="100">
-                                        <Text as="p" variant="headingXl">{summary.noMatch}</Text>
-                                        <Text as="p" variant="bodySm" tone="subdued">Don't Qualify</Text>
-                                    </BlockStack>
-                                </InlineStack>
-                                {summary.needsTag > 0 && (
-                                    <Banner tone="warning">
-                                        {summary.needsTag} orders need tagging. Go to <strong>Active Rules → Sync</strong> to apply them.
-                                    </Banner>
-                                )}
-                                {summary.needsTag === 0 && summary.qualifies > 0 && (
-                                    <Banner tone="success">
-                                        All {summary.qualifies} qualifying orders are already tagged! ✅
-                                    </Banner>
-                                )}
-                            </BlockStack>
-                        </Card>
-                    </Layout.Section>
-                )}
+                {/* ── Results per tag ── */}
+                {tagsToShow.map(tag => {
+                    const summary = summaryByTag[tag];
+                    const rows: any[] = byTag[tag] || [];
+                    return (
+                        <Layout.Section key={tag}>
+                            <Card>
+                                <BlockStack gap="500">
+                                    {/* Summary row */}
+                                    <InlineStack align="space-between" blockAlign="center">
+                                        <Text as="h2" variant="headingMd">Tag: <strong>{tag}</strong></Text>
+                                        <Badge tone={summary.needsTag > 0 ? "warning" : "success"}>
+                                            {summary.needsTag > 0 ? `${summary.needsTag} need tagging` : "All caught up ✓"}
+                                        </Badge>
+                                    </InlineStack>
 
-                {/* ── Per-order results ── */}
-                {scanResults && scanResults.length > 0 && (
-                    <Layout.Section>
-                        <Card>
-                            <BlockStack gap="400">
-                                <Text as="h2" variant="headingMd">Order Details</Text>
-                                <DataTable
-                                    columnContentTypes={["text", "numeric", "text", "text", "text"]}
-                                    headings={["Order ID", "Subtotal (USD)", "Status", "Tag to Apply", "Already Has Tags"]}
-                                    rows={scanResults.map((r: any) => [
-                                        `#${r.orderId}`,
-                                        `$${r.subtotal.toFixed(2)}`,
-                                        statusBadge(r.status),
-                                        r.newTags.join(", ") || "—",
-                                        r.alreadyTagged.join(", ") || "—",
-                                    ])}
-                                />
-                            </BlockStack>
-                        </Card>
-                    </Layout.Section>
-                )}
+                                    <InlineStack gap="600" wrap>
+                                        {[
+                                            { label: "Total Orders", val: totalOrders },
+                                            { label: "Qualify for Rule", val: summary.qualifies },
+                                            { label: "Need Tag NOW", val: summary.needsTag },
+                                            { label: "Already Tagged", val: summary.alreadyTagged },
+                                            { label: "Don't Qualify", val: summary.noMatch },
+                                        ].map(({ label, val }) => (
+                                            <BlockStack gap="100" key={label}>
+                                                <Text as="p" variant="headingLg">{val}</Text>
+                                                <Text as="p" variant="bodySm" tone="subdued">{label}</Text>
+                                            </BlockStack>
+                                        ))}
+                                    </InlineStack>
+
+                                    {summary.needsTag > 0 && (
+                                        <Banner tone="warning">
+                                            {summary.needsTag} order(s) qualify but don't have the tag yet. Go to <strong>Active Rules → Sync</strong> to apply them.
+                                        </Banner>
+                                    )}
+                                    {summary.needsTag === 0 && summary.qualifies > 0 && (
+                                        <Banner tone="success">All {summary.qualifies} qualifying orders already have this tag! ✅</Banner>
+                                    )}
+
+                                    <Divider />
+
+                                    {/* Per-order table */}
+                                    <DataTable
+                                        columnContentTypes={["text", "numeric", "text", "text"]}
+                                        headings={["Order #", "Subtotal (USD)", "Status", "Notes"]}
+                                        rows={rows.map((r: any) => [
+                                            `#${r.orderId}`,
+                                            `$${r.subtotal.toFixed(2)}`,
+                                            <StatusBadge status={r.status} key={r.orderId} />,
+                                            r.status === "no_match"
+                                                ? `Didn't match: ${r.skipReason}`
+                                                : r.status === "already_tagged"
+                                                    ? `Has tags: ${r.existingTags.join(", ")}`
+                                                    : `Will be tagged: ${r.tag}`
+                                        ])}
+                                    />
+                                </BlockStack>
+                            </Card>
+                        </Layout.Section>
+                    );
+                })}
 
                 {/* ── Recent sync log ── */}
                 <Layout.Section>
                     <Card>
                         <BlockStack gap="400">
                             <Text as="h2" variant="headingMd">Recent Order Sync History</Text>
-                            <Text as="p" variant="bodyMd" tone="subdued">Orders tagged by the sync engine (from ActivityLog).</Text>
                             {recentLogs.length === 0 ? (
                                 <Box padding="400">
-                                    <Text as="p" tone="subdued">No order sync activity recorded yet. Run a sync from Active Rules first.</Text>
+                                    <Text as="p" tone="subdued">No order sync activity yet. Run a sync from Active Rules first.</Text>
                                 </Box>
                             ) : (
                                 <DataTable
