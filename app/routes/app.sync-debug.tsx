@@ -1,5 +1,5 @@
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
-import { useLoaderData, useNavigation, Form } from "react-router";
+import { useLoaderData, useActionData, useNavigation, Form } from "react-router";
 import {
     Page, Layout, Card, Text, BlockStack, InlineStack, Badge, Button,
     Box, Banner, DataTable, Spinner, EmptyState
@@ -106,14 +106,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function SyncDebugPage() {
     const { recentLogs } = useLoaderData<typeof loader>();
-    const actionData = useLoaderData<any>();
+    const actionData = useActionData<typeof action>();
     const nav = useNavigation();
     const isScanning = nav.state === "submitting";
 
-    // The action data comes from Form submission
-    const scanResults = (actionData as any)?.results;
-    const summary = (actionData as any)?.summary;
-    const scanError = (actionData as any)?.error;
+    const scanResults = actionData?.results;
+    const summary = actionData?.summary;
+    const scanError = actionData?.error;
 
     const statusBadge = (status: string) => {
         if (status === "needs_tag") return <Badge tone="warning">Needs Tag</Badge>;
@@ -232,7 +231,7 @@ export default function SyncDebugPage() {
                             ) : (
                                 <DataTable
                                     columnContentTypes={["text", "text", "text", "text"]}
-                                    headings={["Customer", "Tag Applied", "Rule", "When"]}
+                                    headings={["Order Owner (Customer ID)", "Tag Applied", "Rule", "When"]}
                                     rows={recentLogs.map((log: any) => [
                                         log.customerId,
                                         log.tagContext,
