@@ -14,7 +14,7 @@ interface SyncJobPayload {
 }
 
 import { evaluateOrderRules } from "./order-rules.server";
-import { fetchAllCustomers } from "./shopify-helpers.server";
+import { fetchAllCustomers, fetchAllOrders } from "./shopify-helpers.server";
 
 const BATCH_SIZE = 5;  // Process 5 customers in parallel at a time
 
@@ -253,7 +253,6 @@ async function processSyncJob(payload: SyncJobPayload) {
     try {
         const { admin } = await unauthenticated.admin(shop);
 
-        // Fetch customers in the background to unblock UI
         const store = await db.store.findUnique({ where: { id: storeId } });
         const isFree = store?.planName === "Free" || store?.planName === "";
 
@@ -266,38 +265,145 @@ async function processSyncJob(payload: SyncJobPayload) {
             where: { storeId, isActive: true }
         });
 
+        // Separate customer rules from order rules
+        const orderRules = activeRules.filter(r => {
+            try { return JSON.parse(r.conditions).some((c: any) => c.ruleCategory === "order"); }
+            catch { return false; }
+        });
+        const customerOnlyRules = activeRules.filter(r => {
+            try { return !JSON.parse(r.conditions).some((c: any) => c.ruleCategory === "order"); }
+            catch { return false; }
+        });
+
+        const totalWork = customersToSync.length + (orderRules.length > 0 ? 1 : 0);
+
         await db.store.update({
             where: { id: storeId },
             data: {
                 isSyncing: true,
-                syncTarget: customersToSync.length,
+                syncTarget: totalWork,
                 syncCompleted: 0,
-                syncMessage: payload.syncMessage || "Evaluating customers against active rules…"
+                syncMessage: payload.syncMessage || "Evaluating customers and orders against active rules…"
             }
         });
 
         let completed = 0;
 
-        // Process in parallel batches for speed
-        for (let i = 0; i < customersToSync.length; i += BATCH_SIZE) {
-            const batch = customersToSync.slice(i, i + BATCH_SIZE);
+        // ─── Phase 1: Customer Rules ────────────────────────────────────────────
+        // Use the original per-customer processing for customer-based rules
+        if (customerOnlyRules.length > 0 || activeRules.length === 0) {
+            for (let i = 0; i < customersToSync.length; i += BATCH_SIZE) {
+                const batch = customersToSync.slice(i, i + BATCH_SIZE);
 
-            await Promise.all(
-                batch.map(edge =>
-                    processOneCustomer(admin, storeId, edge, activeRules, payload)
-                        .catch(err => console.error(`[QUEUE_WORKER] Error processing customer:`, err.message))
-                )
-            );
+                await Promise.all(
+                    batch.map(edge =>
+                        processOneCustomer(admin, storeId, edge, customerOnlyRules.length > 0 ? customerOnlyRules : activeRules, payload)
+                            .catch(err => console.error(`[QUEUE_WORKER] Error processing customer:`, err.message))
+                    )
+                );
 
-            completed += batch.length;
-            // Update progress after each batch
-            await db.store.update({
-                where: { id: storeId },
-                data: { syncCompleted: completed }
-            });
+                completed += batch.length;
+                await db.store.update({
+                    where: { id: storeId },
+                    data: { syncCompleted: completed }
+                });
+            }
+        } else {
+            completed += customersToSync.length;
         }
 
-        console.log(`[QUEUE_WORKER] Finished processing ${customersToSync.length} customers for shop: ${shop}`);
+        // ─── Phase 2: Order Rules ────────────────────────────────────────────────
+        // Fetch ALL orders directly from Shopify — this catches guest checkouts
+        // and orders belonging to customers that were never in the customer list.
+        if (orderRules.length > 0) {
+            console.log(`[QUEUE_WORKER] Starting order-first scan for ${orderRules.length} order rule(s)...`);
+            const allOrders = await fetchAllOrders(admin);
+            let ordersTagged = 0;
+
+            for (const orderEdge of allOrders) {
+                const o = orderEdge.node;
+
+                try {
+                    const mappedOrder = {
+                        subtotal_price: o.subtotalPriceSet?.shopMoney?.amount || "0",
+                        total_discounts: o.totalDiscountsSet?.shopMoney?.amount || "0",
+                        discount_codes: o.discountCodes ? o.discountCodes.map((c: string) => ({ code: c })) : [],
+                        payment_gateway_names: o.paymentGatewayNames,
+                        source_name: o.channel?.name || o.sourceIdentifier,
+                        referring_site: "",
+                        landing_site: "",
+                        shipping_address: { city: o.shippingAddress?.city, country_code: o.shippingAddress?.countryCode },
+                        tags: o.tags || [],
+                        line_items: (o.lineItems?.edges || []).map((le: any) => ({
+                            quantity: le.node.quantity,
+                            properties: le.node.customAttributes ? le.node.customAttributes.map((ca: any) => ({ name: ca.key, value: ca.value })) : []
+                        }))
+                    };
+
+                    // Build a minimal customer object for mixed rules
+                    const customerData = {
+                        id: o.customer?.id?.split("/").pop() || "guest",
+                        totalSpent: parseFloat(o.customer?.amountSpent?.amount || "0"),
+                        orderCount: parseInt(o.customer?.numberOfOrders || "0"),
+                        tags: (o.customer?.tags || []).join(", "),
+                    };
+
+                    const results = evaluateOrderRules(mappedOrder, customerData, orderRules, []);
+                    const orderTagResults = results.filter(r => r.targetEntity === "order");
+
+                    // Group tags to add for this specific order
+                    const tagsToApply = orderTagResults.map(r => r.tag);
+                    if (tagsToApply.length === 0) continue;
+
+                    const cleanOrderId = o.id.split("/").pop() || "";
+                    if (!cleanOrderId) continue;
+
+                    // Apply tag to the order in Shopify
+                    await manageOrderTags(admin, storeId, cleanOrderId, customerData.id !== "guest" ? customerData.id : null, tagsToApply, []);
+                    ordersTagged++;
+
+                    // Log in ActivityLog if customer is known
+                    if (customerData.id !== "guest") {
+                        // Ensure customer record exists so ActivityLog FK constraint is satisfied
+                        await db.customer.upsert({
+                            where: { id_storeId: { id: customerData.id, storeId } },
+                            create: {
+                                id: customerData.id,
+                                storeId,
+                                email: o.customer?.email || null,
+                                totalSpent: customerData.totalSpent,
+                                orderCount: customerData.orderCount,
+                                tags: customerData.tags || null,
+                            },
+                            update: {}
+                        });
+
+                        for (const result of orderTagResults) {
+                            const rule = await db.rule.findFirst({ where: { storeId, targetTag: result.tag, targetEntity: "order" } });
+                            await db.activityLog.create({
+                                data: {
+                                    storeId,
+                                    customerId: customerData.id,
+                                    action: "TAG_ADDED",
+                                    tagContext: result.tag,
+                                    reason: `[Order Sync] ${result.reason}`,
+                                    ruleId: rule?.id
+                                }
+                            });
+                        }
+                    }
+                } catch (err: any) {
+                    console.error(`[QUEUE_WORKER] Error processing order ${o.id}:`, err.message);
+                }
+            }
+
+            console.log(`[QUEUE_WORKER] Order scan complete. Tagged ${ordersTagged}/${allOrders.length} orders.`);
+
+            completed++;
+            await db.store.update({ where: { id: storeId }, data: { syncCompleted: completed } });
+        }
+
+        console.log(`[QUEUE_WORKER] Finished sync job for shop: ${shop}`);
     } catch (err: any) {
         console.error(`[QUEUE_WORKER] Failed to process sync job for ${shop}:`, err.message);
     } finally {
@@ -311,3 +417,4 @@ async function processSyncJob(payload: SyncJobPayload) {
         }
     }
 }
+
