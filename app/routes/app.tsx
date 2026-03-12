@@ -58,6 +58,7 @@ export default function App() {
           <Link to="/app/workflows">Workflows</Link>
           <Link to="/app/integrations">Integrations</Link>
           <Link to="/app/cleanup">Cleanup</Link>
+          <Link to="/app/sync-debug">Sync Diagnostics</Link>
           <Link to="/app/settings">Settings</Link>
           <Link to="/app/pricing">Pricing Plans</Link>
           <Link to="/app/email-setup">Email Setup</Link>
