@@ -449,7 +449,7 @@ async function processSyncJob(payload: SyncJobPayload) {
         try {
             await db.store.update({
                 where: { id: storeId },
-                data: { isSyncing: false, syncMessage: null }
+                data: { isSyncing: false, syncMessage: null, lastSyncCompletedAt: new Date() }
             });
         } catch (e) {
             console.error(`[QUEUE_WORKER] Failed to reset isSyncing flag:`, e);

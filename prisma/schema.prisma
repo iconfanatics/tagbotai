@@ -49,6 +49,7 @@ model Store {
   syncTarget            Int        @default(0)
   syncCompleted         Int        @default(0)
   syncMessage           String?
+  lastSyncCompletedAt   DateTime?
   klaviyoApiKey         String?
   mailchimpApiKey       String?
   mailchimpServerPrefix String?

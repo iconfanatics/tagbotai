@@ -31,6 +31,7 @@ CREATE TABLE "Store" (
     "syncTarget" INTEGER NOT NULL DEFAULT 0,
     "syncCompleted" INTEGER NOT NULL DEFAULT 0,
     "syncMessage" TEXT,
+    "lastSyncCompletedAt" DATETIME,
     "klaviyoApiKey" TEXT,
     "mailchimpApiKey" TEXT,
     "mailchimpServerPrefix" TEXT,

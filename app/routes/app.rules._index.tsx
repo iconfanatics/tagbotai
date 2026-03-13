@@ -67,7 +67,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     return {
         rules: rulesWithMetrics,
         currentPlanName: store.planName,
-        estimatedSyncMinutes: estimatedMinutes
+        estimatedSyncMinutes: estimatedMinutes,
+        isSyncing: store.isSyncing,
+        lastSyncCompletedAt: store.lastSyncCompletedAt
     };
 };
 
@@ -105,7 +107,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
 export default function RulesManagement() {
     const shopify = useAppBridge();
-    const { rules, currentPlanName, estimatedSyncMinutes } = useLoaderData<typeof loader>();
+    const { rules, currentPlanName, estimatedSyncMinutes, isSyncing, lastSyncCompletedAt } = useLoaderData<typeof loader>();
     const actionData = useActionData<typeof action>();
     const navigate = useNavigate();
     const submit = useSubmit();
@@ -322,8 +324,20 @@ export default function RulesManagement() {
                     <div className="premium-card">
                         <Box padding="400">
                             <BlockStack gap="200">
-                                <Text variant="headingMd" as="h3">Active Smart Rules</Text>
-                                <Text as="p" tone="subdued">Rules are evaluated automatically whenever a new customer is created or an order is paid.</Text>
+                                <InlineStack align="space-between" blockAlign="center">
+                                    <BlockStack gap="200">
+                                        <Text variant="headingMd" as="h3">Active Smart Rules</Text>
+                                        <Text as="p" tone="subdued">Rules are evaluated automatically whenever a new customer is created or an order is paid.</Text>
+                                    </BlockStack>
+                                    
+                                    {isSyncing ? (
+                                        <Badge tone="attention" progress="partiallyComplete">Historical Sync in Progress...</Badge>
+                                    ) : lastSyncCompletedAt ? (
+                                        <Text as="p" variant="bodySm" tone="subdued">
+                                            Last historical sync finished: {new Date(lastSyncCompletedAt).toLocaleString()}
+                                        </Text>
+                                    ) : null}
+                                </InlineStack>
                             </BlockStack>
                         </Box>
                         <IndexTable
