@@ -2,7 +2,7 @@ import type { ActionFunctionArgs } from "react-router";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { calculateCustomerTags } from "../services/rule.server";
-import { manageCustomerTags } from "../services/tags.server";
+import { manageCustomerTags, manageOrderTags } from "../services/tags.server";
 import { getCachedStore } from "../services/cache.server";
 import { evaluateOrderRules } from "../services/order-rules.server";
 
@@ -66,24 +66,37 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const existingTags = customer.tags ? customer.tags.split(",").map((t: string) => t.trim()) : [];
 
     let addTagNames: string[] = [];
-    let tagsToAddLog: { tag: string; reason: string }[] = [];
+    let tagsToAddLog: { tag: string; reason: string; targetEntity?: string }[] = [];
 
     // Evaluate Order-Based Rules only (not customer metric rules)
     try {
         const orderTagResults = evaluateOrderRules(order, customer, activeRules, existingTags);
         for (const item of orderTagResults) {
-            if (!addTagNames.includes(item.tag)) {
-                addTagNames.push(item.tag);
-                tagsToAddLog.push(item);
+            if (item.targetEntity === "order") {
+                tagsToAddLog.push({ tag: item.tag, reason: item.reason, targetEntity: "order" });
+            } else {
+                if (!addTagNames.includes(item.tag)) {
+                    addTagNames.push(item.tag);
+                    tagsToAddLog.push({ tag: item.tag, reason: item.reason, targetEntity: "customer" });
+                }
             }
         }
     } catch (err) {
         console.error("[ORDER_RULES] orders/create evaluation failed:", err);
     }
 
-    if (addTagNames.length > 0) {
+    const actualOrderTagsToAdd = tagsToAddLog.filter(t => t.targetEntity === "order").map(t => t.tag);
+
+    if (addTagNames.length > 0 || actualOrderTagsToAdd.length > 0) {
         try {
-            await manageCustomerTags(admin, store.id, customerId, addTagNames, []);
+            if (addTagNames.length > 0) {
+                await manageCustomerTags(admin, store.id, customerId, addTagNames, []);
+            }
+
+            if (actualOrderTagsToAdd.length > 0) {
+                const orderId = order.admin_graphql_api_id ? order.admin_graphql_api_id.split('/').pop() : order.id.toString();
+                await manageOrderTags(admin, store.id, orderId, customerId, actualOrderTagsToAdd, []);
+            }
 
             for (const item of tagsToAddLog) {
                 await db.activityLog.create({
@@ -112,7 +125,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                 });
             }
 
-            console.log(`[ORDER_RULES] Tagged customer ${customerId} with: ${addTagNames.join(", ")}`);
+            console.log(`[ORDER_RULES] orders/create triggers: Customer Tags (${addTagNames.join(", ")}) | Order Tags (${actualOrderTagsToAdd.join(", ")})`);
         } catch (err) {
             console.error("[ORDER_RULES] Failed to apply order-create tags:", err);
         }
