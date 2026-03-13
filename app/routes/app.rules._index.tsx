@@ -3,7 +3,7 @@ import { useLoaderData, useNavigate, useSubmit, useActionData, useNavigation } f
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { getCachedStore } from "../services/cache.server";
-import { Page, Layout, Card, Text, BlockStack, IndexTable, Badge, Button, EmptyState, InlineStack, Tooltip, Modal, Box } from "@shopify/polaris";
+import { Page, Layout, Card, Text, BlockStack, IndexTable, Badge, Button, EmptyState, InlineStack, Tooltip, Modal, Box, Banner } from "@shopify/polaris";
 import { DeleteIcon, AutomationIcon, ExportIcon, RefreshIcon } from "@shopify/polaris-icons";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { useState, useEffect } from "react";
@@ -58,9 +58,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         };
     });
 
+    // 3. Estimate sync time based on store size (~1 min per 1000 items)
+    const totalCustomers = await db.customer.count({ where: { storeId: store.id } });
+    const totalOrders = store.syncTarget || totalCustomers * 2.5; // rough estimate if syncTarget isn't set yet
+    let estimatedMinutes = Math.ceil((totalCustomers + totalOrders) / 1000);
+    if (estimatedMinutes < 1) estimatedMinutes = 1;
+
     return {
         rules: rulesWithMetrics,
-        currentPlanName: store.planName
+        currentPlanName: store.planName,
+        estimatedSyncMinutes: estimatedMinutes
     };
 };
 
@@ -98,7 +105,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
 export default function RulesManagement() {
     const shopify = useAppBridge();
-    const { rules, currentPlanName } = useLoaderData<typeof loader>();
+    const { rules, currentPlanName, estimatedSyncMinutes } = useLoaderData<typeof loader>();
     const actionData = useActionData<typeof action>();
     const navigate = useNavigate();
     const submit = useSubmit();
@@ -295,6 +302,14 @@ export default function RulesManagement() {
                 </Modal>
 
                 <Layout.Section>
+                    <Box paddingBlockEnd="400">
+                        <Banner title="Historical Sync" tone="info">
+                            <p>
+                                Syncing historical data scans your entire Shopify order and customer history in the background. 
+                                Based on your store size, a full sync is estimated to take <strong>~{estimatedSyncMinutes} minute{estimatedSyncMinutes === 1 ? '' : 's'}</strong> to complete.
+                            </p>
+                        </Banner>
+                    </Box>
                     <div className="premium-card">
                         <Box padding="400">
                             <BlockStack gap="200">

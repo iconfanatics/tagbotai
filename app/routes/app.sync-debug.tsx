@@ -95,10 +95,21 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                 status = "no_match";
                 try {
                     const conditions = JSON.parse(rule.conditions);
-                    skipReason = conditions.map((c: any) => {
-                        const actualVal = c.field === "order_subtotal" ? subtotal : "?";
-                        return `${c.field} ${c.operator} ${c.value} (actual: ${actualVal})`;
-                    }).join(" AND ");
+                    // Build a lookup of actual values from the mapped order for human-readable skip reasons
+                    const actualValues: Record<string, any> = {
+                        order_subtotal: subtotal,
+                        payment_method: Array.isArray(o.paymentGatewayNames) ? o.paymentGatewayNames.join(", ") || "(none)" : "(none)",
+                        order_source: o.channel?.name || o.sourceIdentifier || "(none)",
+                        shipping_city: o.shippingAddress?.city || "(none)",
+                        shipping_country: o.shippingAddress?.countryCode || "(none)",
+                        discount_code_used: (o.discountCodes && o.discountCodes.length > 0) ? "true" : "false",
+                    };
+                    skipReason = conditions
+                        .filter((c: any) => c.ruleCategory === "order")
+                        .map((c: any) => {
+                            const actualVal = actualValues[c.field] ?? "?";
+                            return `${c.field} ${c.operator} "${c.value}" (actual: "${actualVal}")`;
+                        }).join(" AND ");
                 } catch { skipReason = "Could not parse conditions"; }
             } else {
                 status = "needs_tag";

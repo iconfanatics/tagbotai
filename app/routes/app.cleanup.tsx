@@ -258,7 +258,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                     data: { tags: newTags.join(",") }
                 });
 
-                // Log it
+                // Delete TAG_ADDED logs so "Times Fired" on rules page resets correctly
+                await db.activityLog.deleteMany({
+                    where: { storeId: store.id, action: "TAG_ADDED", tagContext: targetTag, customerId: customer.id }
+                });
+
+                // Log the removal
                 await db.activityLog.create({
                     data: {
                         storeId: store.id,
