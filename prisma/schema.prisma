@@ -79,6 +79,7 @@ model Rule {
   collectionId   String?       // Targeting specific Shopify collections
   collectionName String?
   isActive       Boolean       @default(true)
+  lastSyncCompletedAt DateTime?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
   activityLogs   ActivityLog[]

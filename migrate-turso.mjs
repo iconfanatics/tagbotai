@@ -29,7 +29,7 @@ async function run() {
             },
             body: JSON.stringify({
                 requests: [
-                    { type: "execute", stmt: { sql: "ALTER TABLE Store ADD COLUMN lastSyncCompletedAt DATETIME;" } },
+                    { type: "execute", stmt: { sql: "ALTER TABLE Rule ADD COLUMN lastSyncCompletedAt DATETIME;" } },
                     { type: "close" }
                 ]
             })

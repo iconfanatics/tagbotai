@@ -447,9 +447,15 @@ async function processSyncJob(payload: SyncJobPayload) {
         console.error(`[QUEUE_WORKER] Failed to process sync job for ${shop}:`, err.message);
     } finally {
         try {
+            // Update timestamp on all active rules to signify this sync finished
+            await db.rule.updateMany({
+                where: { storeId },
+                data: { lastSyncCompletedAt: new Date() }
+            });
+
             await db.store.update({
                 where: { id: storeId },
-                data: { isSyncing: false, syncMessage: null, lastSyncCompletedAt: new Date() }
+                data: { isSyncing: false, syncMessage: null }
             });
         } catch (e) {
             console.error(`[QUEUE_WORKER] Failed to reset isSyncing flag:`, e);

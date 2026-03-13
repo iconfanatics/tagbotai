@@ -68,8 +68,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         rules: rulesWithMetrics,
         currentPlanName: store.planName,
         estimatedSyncMinutes: estimatedMinutes,
-        isSyncing: store.isSyncing,
-        lastSyncCompletedAt: store.lastSyncCompletedAt
+        isSyncing: store.isSyncing
     };
 };
 
@@ -107,7 +106,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
 export default function RulesManagement() {
     const shopify = useAppBridge();
-    const { rules, currentPlanName, estimatedSyncMinutes, isSyncing, lastSyncCompletedAt } = useLoaderData<typeof loader>();
+    const { rules, currentPlanName, estimatedSyncMinutes, isSyncing } = useLoaderData<typeof loader>();
     const actionData = useActionData<typeof action>();
     const navigate = useNavigate();
     const submit = useSubmit();
@@ -236,7 +235,14 @@ export default function RulesManagement() {
                         </Text>
                     </IndexTable.Cell>
                     <IndexTable.Cell>
-                        {rule.isActive ? <Badge tone="success">Active</Badge> : <Badge tone="critical">Inactive</Badge>}
+                        <BlockStack gap="100">
+                            {rule.isActive ? <Badge tone="success">Active</Badge> : <Badge tone="critical">Inactive</Badge>}
+                            {rule.lastSyncCompletedAt && !isSyncing ? (
+                                <Tooltip content={`Finished at ${new Date(rule.lastSyncCompletedAt).toLocaleString()}`}>
+                                    <Badge tone="success" progress="complete">✓ Sync Done</Badge>
+                                </Tooltip>
+                            ) : null}
+                        </BlockStack>
                     </IndexTable.Cell>
                     <IndexTable.Cell>
                         <InlineStack wrap={false} gap="200" align="end">
@@ -332,10 +338,6 @@ export default function RulesManagement() {
                                     
                                     {isSyncing ? (
                                         <Badge tone="attention" progress="partiallyComplete">Historical Sync in Progress...</Badge>
-                                    ) : lastSyncCompletedAt ? (
-                                        <Text as="p" variant="bodySm" tone="subdued">
-                                            Last historical sync finished: {new Date(lastSyncCompletedAt).toLocaleString()}
-                                        </Text>
                                     ) : null}
                                 </InlineStack>
                             </BlockStack>
@@ -349,7 +351,7 @@ export default function RulesManagement() {
                                 { title: 'Target Tag' },
                                 { title: 'Current Matches (Customer)' },
                                 { title: 'Total Tag Events (DB)' },
-                                { title: 'Status' },
+                                { title: 'Status & Sync' },
                                 { title: '' }, // Actions
                             ]}
                             selectable={false}

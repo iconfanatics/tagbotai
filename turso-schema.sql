@@ -52,6 +52,7 @@ CREATE TABLE "Rule" (
     "collectionId" TEXT,
     "collectionName" TEXT,
     "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "lastSyncCompletedAt" DATETIME,
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" DATETIME NOT NULL,
     CONSTRAINT "Rule_storeId_fkey" FOREIGN KEY ("storeId") REFERENCES "Store" ("id") ON DELETE CASCADE ON UPDATE CASCADE
