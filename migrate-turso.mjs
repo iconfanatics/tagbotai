@@ -7,6 +7,11 @@ async function run() {
     const rawUrl = process.env.PRISMA_DB_URL;
     if (!rawUrl) throw new Error("PRISMA_DB_URL not set");
     
+    if (rawUrl.startsWith("file:") || rawUrl.startsWith("sqlite:")) {
+        console.log("⏭️  Local SQLite database detected. Skipping Turso remote migration script.");
+        return;
+    }
+    
     // Convert libsql://... to https://...
     const httpsUrl = rawUrl.replace(/^libsql:\/\//, "https://");
     const [baseUrl, query] = httpsUrl.split("?");
