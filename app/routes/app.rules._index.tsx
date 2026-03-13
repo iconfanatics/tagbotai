@@ -4,7 +4,7 @@ import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { getCachedStore } from "../services/cache.server";
 import { Page, Layout, Card, Text, BlockStack, IndexTable, Badge, Button, EmptyState, InlineStack, Tooltip, Modal, Box, Banner } from "@shopify/polaris";
-import { DeleteIcon, AutomationIcon, ExportIcon, RefreshIcon } from "@shopify/polaris-icons";
+import { DeleteIcon, AutomationIcon, ExportIcon, RefreshIcon, SearchIcon } from "@shopify/polaris-icons";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { useState, useEffect } from "react";
 import { enqueueSyncJob } from "../services/queue.server";
@@ -238,6 +238,15 @@ export default function RulesManagement() {
                     </IndexTable.Cell>
                     <IndexTable.Cell>
                         <InlineStack wrap={false} gap="200" align="end">
+                            {rule.targetEntity === 'order' && (
+                                <Tooltip content="View Sync Progress & Qualify Diagnostics">
+                                    <Button
+                                        icon={SearchIcon}
+                                        onClick={() => navigate(`/app/sync-debug?tag=${encodeURIComponent(rule.targetTag)}`)}
+                                        accessibilityLabel="View Sync Progress"
+                                    />
+                                </Tooltip>
+                            )}
                             <Tooltip content={`Export ${rule.targetEntity === 'order' ? 'Orders' : 'Customers'} CSV (Pro)`}>
                                 <Button
                                     icon={ExportIcon}
@@ -324,8 +333,8 @@ export default function RulesManagement() {
                                 { title: 'Rule Name' },
                                 { title: 'Condition Logic' },
                                 { title: 'Target Tag' },
-                                { title: 'Matching Customers' },
-                                { title: 'Times Fired' },
+                                { title: 'Current Matches (Customer)' },
+                                { title: 'Total Tag Events (DB)' },
                                 { title: 'Status' },
                                 { title: '' }, // Actions
                             ]}
