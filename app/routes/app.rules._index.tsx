@@ -58,11 +58,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         };
     });
 
-    // 3. Estimate sync time based on store size (~1 min per 1000 items)
+    // 3. Estimate sync time based on store size and Shopify API rate limits
+    // Base time of 3 mins (for fetching/queue overhead) + ~1 min per 500 total items
     const totalCustomers = await db.customer.count({ where: { storeId: store.id } });
-    const totalOrders = store.syncTarget || totalCustomers * 2.5; // rough estimate if syncTarget isn't set yet
-    let estimatedMinutes = Math.ceil((totalCustomers + totalOrders) / 1000);
-    if (estimatedMinutes < 1) estimatedMinutes = 1;
+    const totalOrders = store.syncTarget || totalCustomers * 2.5; 
+    let estimatedMinutes = 3 + Math.ceil((totalCustomers + totalOrders) / 500);
 
     return {
         rules: rulesWithMetrics,
