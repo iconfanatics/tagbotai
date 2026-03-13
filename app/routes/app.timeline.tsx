@@ -9,7 +9,7 @@ import {
   TextField, Button, Icon, Box, Divider, EmptyState, Avatar
 } from "@shopify/polaris";
 import {
-  SearchIcon, EmailIcon, ChartVerticalIcon, HashtagIcon, CheckIcon, XIcon
+  SearchIcon, EmailIcon, ChartVerticalIcon, HashtagIcon, CheckIcon, XIcon, AppsIcon
 } from "@shopify/polaris-icons";
 import { useState } from "react";
 
@@ -87,6 +87,7 @@ export default function Timeline() {
     if (action === "TAG_ADDED") return { icon: CheckIcon, tone: "success", color: "#10b981", bg: "#d1fae5" };
     if (action === "TAG_REMOVED") return { icon: XIcon, tone: "critical", color: "#ef4444", bg: "#fee2e2" };
     if (action === "EMAIL_SENT") return { icon: EmailIcon, tone: "magic", color: "#8b5cf6", bg: "#ede9fe" };
+    if (action === "MARKETING_SYNC") return { icon: AppsIcon, tone: "info", color: "#005bd3", bg: "#ebf5ff" };
     return { icon: ChartVerticalIcon, tone: "base", color: "#6b7280", bg: "#f3f4f6" };
   };
 
@@ -231,8 +232,8 @@ export default function Timeline() {
                               <BlockStack gap="200">
                                 <InlineStack align="space-between" blockAlign="center">
                                   <InlineStack gap="200" blockAlign="center">
-                                    <Badge tone={isAdded ? "success" : "critical"}>
-                                      {isAdded ? "Tag Added" : log.action === "TAG_REMOVED" ? "Tag Removed" : "Event"}
+                                    <Badge tone={isAdded ? "success" : log.action === "TAG_REMOVED" ? "critical" : log.action === "MARKETING_SYNC" ? "info" : "attention"}>
+                                      {isAdded ? "Tag Added" : log.action === "TAG_REMOVED" ? "Tag Removed" : log.action === "MARKETING_SYNC" ? "CRM Sync" : "Event"}
                                     </Badge>
                                     <Badge tone="magic">{log.tagContext}</Badge>
                                   </InlineStack>
