@@ -5,6 +5,7 @@ import { Page, Layout, Card, BlockStack, Text, InlineStack, Banner, Button, Box,
 import { AppsIcon, CheckCircleIcon, XSmallIcon, SaveIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
+import { enqueueMarketingBulkSyncJob } from "../services/queue.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
     const { session } = await authenticate.admin(request);
@@ -16,12 +17,27 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         throw new Response("Store not found", { status: 404 });
     }
 
+    const klaviyoRules = await db.rule.findMany({
+        where: { storeId: store.id, isActive: true, syncToKlaviyo: true },
+        select: { id: true, name: true, targetTag: true }
+    });
+
+    const mailchimpRules = await db.rule.findMany({
+        where: { storeId: store.id, isActive: true, syncToMailchimp: true },
+        select: { id: true, name: true, targetTag: true }
+    });
+
     return {
+        storeId: store.id,
         klaviyoApiKey: store.klaviyoApiKey || "",
         mailchimpApiKey: store.mailchimpApiKey || "",
         mailchimpServerPrefix: store.mailchimpServerPrefix || "",
         mailchimpListId: store.mailchimpListId || "",
-        currentPlanName: store.planName
+        currentPlanName: store.planName,
+        klaviyoSyncInProgress: store.klaviyoSyncInProgress,
+        mailchimpSyncInProgress: store.mailchimpSyncInProgress,
+        klaviyoRules,
+        mailchimpRules
     };
 };
 
@@ -57,16 +73,35 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         return { success: true, message: "Mailchimp settings saved." };
     }
 
+    if (actionType === "bulk_sync_klaviyo") {
+        const storeId = formData.get("storeId") as string;
+        await db.store.update({ where: { shop }, data: { klaviyoSyncInProgress: true } });
+        await enqueueMarketingBulkSyncJob({ shop, storeId, platform: "klaviyo" });
+        return { success: true, message: "Klaviyo Bulk Sync Started. This runs in the background." };
+    }
+
+    if (actionType === "bulk_sync_mailchimp") {
+        const storeId = formData.get("storeId") as string;
+        await db.store.update({ where: { shop }, data: { mailchimpSyncInProgress: true } });
+        await enqueueMarketingBulkSyncJob({ shop, storeId, platform: "mailchimp" });
+        return { success: true, message: "Mailchimp Bulk Sync Started. This runs in the background." };
+    }
+
     return { success: false, message: "Unknown action" };
 };
 
 export default function Integrations() {
     const {
+        storeId,
         klaviyoApiKey: initialKlaviyo,
         mailchimpApiKey: initialMailchimp,
         mailchimpServerPrefix: initialServer,
         mailchimpListId: initialListId,
-        currentPlanName
+        currentPlanName,
+        klaviyoSyncInProgress,
+        mailchimpSyncInProgress,
+        klaviyoRules,
+        mailchimpRules
     } = useLoaderData<typeof loader>();
 
     const actionData = useActionData<typeof action>();
@@ -96,6 +131,10 @@ export default function Integrations() {
             mailchimpServerPrefix,
             mailchimpListId
         }, { method: "post" });
+    };
+
+    const triggerBulkSync = (platform: "klaviyo" | "mailchimp") => {
+        submit({ action: platform === "klaviyo" ? "bulk_sync_klaviyo" : "bulk_sync_mailchimp", storeId }, { method: "post" });
     };
 
     return (
@@ -187,13 +226,30 @@ export default function Integrations() {
                                     />
                                 </div>
 
+                                {klaviyoRules.length > 0 && initialKlaviyo && (
+                                    <Box paddingBlockStart="200">
+                                        <Text variant="headingSm" as="h4">Active Synced Segments</Text>
+                                        <Text as="p" tone="subdued">The following Tags are currently configured to push to Klaviyo. Use the Bulk Sync button to push all existing historical customers that match these tags.</Text>
+                                        <div style={{ marginTop: "10px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                                            {klaviyoRules.map(r => (
+                                                <Badge key={r.id} tone="info">{`${r.name} (${r.targetTag})`}</Badge>
+                                            ))}
+                                        </div>
+                                    </Box>
+                                )}
+
                                 <Box paddingBlockStart="200">
-                                    <InlineStack align="start">
+                                    <InlineStack align="start" gap="300">
                                         <div className="btn-premium">
                                             <Button disabled={!isElitePlan} loading={isSaving} icon={SaveIcon} onClick={handleSaveKlaviyo}>
                                                 Save Klaviyo Settings
                                             </Button>
                                         </div>
+                                        {initialKlaviyo && klaviyoRules.length > 0 && (
+                                            <Button disabled={!isElitePlan || klaviyoSyncInProgress} loading={klaviyoSyncInProgress} onClick={() => triggerBulkSync("klaviyo")}>
+                                                {klaviyoSyncInProgress ? "Syncing..." : "Bulk Sync Historical Data"}
+                                            </Button>
+                                        )}
                                     </InlineStack>
                                 </Box>
                             </BlockStack>
@@ -247,27 +303,44 @@ export default function Integrations() {
                                             helpText="The final segment of your API key (e.g. if key is xxx-us14, prefix is us14)."
                                             disabled={!isElitePlan}
                                         />
-                                        <TextField
-                                            label="Audience List ID"
-                                            value={mailchimpListId}
-                                            onChange={setMailchimpListId}
-                                            autoComplete="off"
-                                            placeholder="e.g. 8d3a1fb"
-                                            helpText="The specific Audience ID to sync to. Found in Mailchimp Audience Settings."
-                                            disabled={!isElitePlan}
-                                        />
-                                    </BlockStack>
-                                </div>
+                                            <TextField
+                                                label="Audience List ID"
+                                                value={mailchimpListId}
+                                                onChange={setMailchimpListId}
+                                                autoComplete="off"
+                                                placeholder="e.g. 8d3a1fb"
+                                                helpText="The specific Audience ID to sync to. Found in Mailchimp Audience Settings."
+                                                disabled={!isElitePlan}
+                                            />
+                                        </BlockStack>
+                                    </div>
 
-                                <Box paddingBlockStart="200">
-                                    <InlineStack align="start">
-                                        <div className="btn-premium">
-                                            <Button disabled={!isElitePlan} loading={isSaving} icon={SaveIcon} onClick={handleSaveMailchimp}>
-                                                Save Mailchimp Settings
-                                            </Button>
-                                        </div>
-                                    </InlineStack>
-                                </Box>
+                                    {mailchimpRules.length > 0 && initialMailchimp && (
+                                        <Box paddingBlockStart="200">
+                                            <Text variant="headingSm" as="h4">Active Synced Segments</Text>
+                                            <Text as="p" tone="subdued">The following Tags are currently configured to push to Mailchimp. Use the Bulk Sync button to push all existing historical customers that match these tags.</Text>
+                                            <div style={{ marginTop: "10px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                                                {mailchimpRules.map(r => (
+                                                    <Badge key={r.id} tone="info">{`${r.name} (${r.targetTag})`}</Badge>
+                                                ))}
+                                            </div>
+                                        </Box>
+                                    )}
+
+                                    <Box paddingBlockStart="200">
+                                        <InlineStack align="start" gap="300">
+                                            <div className="btn-premium">
+                                                <Button disabled={!isElitePlan} loading={isSaving} icon={SaveIcon} onClick={handleSaveMailchimp}>
+                                                    Save Mailchimp Settings
+                                                </Button>
+                                            </div>
+                                            {initialMailchimp && mailchimpRules.length > 0 && (
+                                                <Button disabled={!isElitePlan || mailchimpSyncInProgress} loading={mailchimpSyncInProgress} onClick={() => triggerBulkSync("mailchimp")}>
+                                                    {mailchimpSyncInProgress ? "Syncing..." : "Bulk Sync Historical Data"}
+                                                </Button>
+                                            )}
+                                        </InlineStack>
+                                    </Box>
                             </BlockStack>
                         </Box>
                     </div>

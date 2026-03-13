@@ -463,3 +463,84 @@ async function processSyncJob(payload: SyncJobPayload) {
     }
 }
 
+export async function enqueueMarketingBulkSyncJob(payload: { shop: string, storeId: string, platform: "klaviyo" | "mailchimp" }) {
+    processMarketingBulkSyncJob(payload).catch(err => {
+        console.error(`[QUEUE_WORKER] Unhandled error during ${payload.platform} sync job:`, err);
+    });
+}
+
+async function processMarketingBulkSyncJob(payload: { shop: string, storeId: string, platform: "klaviyo" | "mailchimp" }) {
+    const { shop, storeId, platform } = payload;
+    console.log(`[QUEUE_WORKER] Started ${platform} bulk sync job for shop: ${shop}`);
+
+    try {
+        const store = await db.store.findUnique({ where: { id: storeId } });
+        if (!store) throw new Error("Store not found");
+
+        const isKlaviyo = platform === "klaviyo";
+        const isMailchimp = platform === "mailchimp";
+
+        const syncedRules = await db.rule.findMany({
+            where: { storeId, isActive: true, ...(isKlaviyo ? { syncToKlaviyo: true } : { syncToMailchimp: true }) },
+            select: { targetTag: true }
+        });
+
+        const targetTags = syncedRules.map(r => r.targetTag);
+
+        if (targetTags.length === 0) {
+            console.log(`[QUEUE_WORKER] No active synced segments for ${platform}, aborting.`);
+            return;
+        }
+
+        const validCustomers = await db.customer.findMany({
+            where: {
+                storeId,
+                email: { not: null }
+            },
+            select: { id: true, email: true, tags: true }
+        });
+
+        let syncCount = 0;
+        
+        // Dynamically import API functions to avoid circular dependencies
+        const { syncTagsToKlaviyo } = await import("./klaviyo.server");
+        const { syncTagsToMailchimp } = await import("./mailchimp.server");
+
+        for (const c of validCustomers) {
+            if (!c.email) continue;
+            
+            const currentTags = c.tags ? c.tags.split(",").map(t => t.trim()) : [];
+            const overlappingTags = targetTags.filter(t => currentTags.includes(t));
+
+            if (overlappingTags.length > 0) {
+                try {
+                    if (isKlaviyo && store.klaviyoApiKey) {
+                        await syncTagsToKlaviyo(store.klaviyoApiKey, c.email, overlappingTags);
+                    } else if (isMailchimp && store.mailchimpApiKey && store.mailchimpServerPrefix && store.mailchimpListId) {
+                        await syncTagsToMailchimp(store.mailchimpApiKey, store.mailchimpServerPrefix, store.mailchimpListId, c.email, overlappingTags);
+                    }
+                    syncCount++;
+                    // Basic rate limit respect (approx 6/sec)
+                    await new Promise(r => setTimeout(r, 150)); 
+                } catch (apiErr) {
+                    console.error(`[QUEUE_WORKER] Bulk sync API fail for ${c.email}:`, apiErr);
+                }
+            }
+        }
+
+        console.log(`[QUEUE_WORKER] Finished ${platform} bulk sync for ${syncCount} customers.`);
+    } catch (err: any) {
+        console.error(`[QUEUE_WORKER] Failed to process ${platform} bulk sync for ${shop}:`, err.message);
+    } finally {
+        try {
+            const isKlaviyo = platform === "klaviyo";
+            await db.store.update({
+                where: { id: storeId },
+                data: isKlaviyo ? { klaviyoSyncInProgress: false } : { mailchimpSyncInProgress: false }
+            });
+        } catch (e) {
+            console.error(`[QUEUE_WORKER] Failed to reset sync flag:`, e);
+        }
+    }
+}
+

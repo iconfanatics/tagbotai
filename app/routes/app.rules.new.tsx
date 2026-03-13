@@ -7,7 +7,7 @@ import { useLoaderData, useSubmit, useActionData, useNavigation, useNavigate, us
 import { useAppBridge } from "@shopify/app-bridge-react";
 import {
     Page, Layout, Card, FormLayout, TextField, Select, Button, Banner,
-    BlockStack, Text, InlineStack, Box, Icon, Badge, Modal, Spinner
+    BlockStack, Text, InlineStack, Box, Icon, Badge, Modal, Spinner, Checkbox, Tooltip
 } from "@shopify/polaris";
 import {
     CashDollarIcon, PersonIcon, ClockIcon, SearchIcon, MagicIcon,
@@ -19,7 +19,12 @@ import {
 export const loader = async ({ request }: LoaderFunctionArgs) => {
     const { session } = await authenticate.admin(request);
     const store = await getCachedStore(session.shop);
-    return { planName: store?.planName || "Free" };
+    
+    return { 
+        planName: store?.planName || "Free",
+        klaviyoConnected: !!store?.klaviyoApiKey,
+        mailchimpConnected: !!store?.mailchimpApiKey
+    };
 };
 
 // ─── Action ───────────────────────────────────────────────────────────────────
@@ -71,11 +76,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     const description = `${conditions.length} condition(s) specified.`;
 
+    const syncToKlaviyo = fd.get("syncToKlaviyo") === "true";
+    const syncToMailchimp = fd.get("syncToMailchimp") === "true";
+
     await db.rule.create({
         data: {
             storeId: store.id, name, description,
             conditions: JSON.stringify(conditions), targetTag, targetEntity,
-            matchType, isActive: true
+            matchType, isActive: true,
+            syncToKlaviyo, syncToMailchimp
         }
     });
 
@@ -317,7 +326,7 @@ const CATEGORIES: { label: string; value: Category }[] = [
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function NewRule() {
-    const { planName } = useLoaderData<typeof loader>();
+    const { planName, klaviyoConnected, mailchimpConnected } = useLoaderData<typeof loader>();
     const actionData = useActionData<typeof action>();
     const submit = useSubmit();
     const navigation = useNavigation();
@@ -342,6 +351,8 @@ export default function NewRule() {
     const [targetTag, setTargetTag] = useState("");
     const [targetEntity, setTargetEntity] = useState("customer");
     const [matchType, setMatchType] = useState("ALL");
+    const [syncToKlaviyo, setSyncToKlaviyo] = useState(false);
+    const [syncToMailchimp, setSyncToMailchimp] = useState(false);
     const [conditions, setConditions] = useState<any[]>([{ ruleCategory: "metric", field: "totalSpent", operator: "greaterThan", value: "" }]);
 
     // Auto-populate form when AI returns a result
@@ -390,6 +401,8 @@ export default function NewRule() {
         setTargetTag(t.tag);
         setTargetEntity(t.targetEntity || "customer");
         setMatchType("ALL");
+        setSyncToKlaviyo(false);
+        setSyncToMailchimp(false);
 
         // Helper: compute a date string N days in the past
         const daysAgo = (n: number) => {
@@ -429,6 +442,7 @@ export default function NewRule() {
     const openBlank = () => {
         setSelectedTemplate(null);
         setName(""); setTargetTag(""); setTargetEntity("customer"); setMatchType("ALL");
+        setSyncToKlaviyo(false); setSyncToMailchimp(false);
         setConditions([{ ruleCategory: "metric", field: "totalSpent", operator: "greaterThan", value: "" }]);
         setIsModalOpen(true);
     };
@@ -460,7 +474,15 @@ export default function NewRule() {
     };
 
     const handleSubmit = () => {
-        submit({ name, targetTag, targetEntity, matchType, conditionsJson: JSON.stringify(conditions) }, { method: "post" });
+        const fd = new FormData();
+        fd.append("name", name);
+        fd.append("targetTag", targetTag.trim());
+        fd.append("targetEntity", targetEntity);
+        fd.append("matchType", matchType);
+        fd.append("conditionsJson", JSON.stringify(conditions));
+        fd.append("syncToKlaviyo", syncToKlaviyo.toString());
+        fd.append("syncToMailchimp", syncToMailchimp.toString());
+        submit(fd, { method: "post" });
     };
 
     const metricFieldOptions = [
@@ -585,6 +607,38 @@ export default function NewRule() {
                             onChange={setTargetEntity}
                             helpText={targetEntity === "order" ? "The tag will appear on the individual Shopify Order." : "The tag will appear on the Customer's profile in Shopify."}
                         />
+
+                        {targetEntity === "customer" && (
+                            <Box paddingBlockStart="200">
+                                <BlockStack gap="200">
+                                    <Text variant="headingSm" as="h3">Marketing Integrations</Text>
+                                    
+                                    <Tooltip content={!klaviyoConnected ? "Connect Klaviyo on the Integrations page to enable." : "Push all matching customer profiles to Klaviyo."}>
+                                        <Checkbox
+                                            label="Sync segment to Klaviyo"
+                                            checked={syncToKlaviyo}
+                                            onChange={setSyncToKlaviyo}
+                                            disabled={!klaviyoConnected}
+                                        />
+                                    </Tooltip>
+
+                                    <Tooltip content={!mailchimpConnected ? "Connect Mailchimp on the Integrations page to enable." : "Push all matching customer profiles to Mailchimp."}>
+                                        <Checkbox
+                                            label="Sync segment to Mailchimp"
+                                            checked={syncToMailchimp}
+                                            onChange={setSyncToMailchimp}
+                                            disabled={!mailchimpConnected}
+                                        />
+                                    </Tooltip>
+
+                                    {(!klaviyoConnected || !mailchimpConnected) && (
+                                        <Text as="p" variant="bodySm" tone="subdued">
+                                            Visit the Integrations page to activate external syncing functionality.
+                                        </Text>
+                                    )}
+                                </BlockStack>
+                            </Box>
+                        )}
                     </FormLayout>
                 </Modal.Section>
             </Modal>

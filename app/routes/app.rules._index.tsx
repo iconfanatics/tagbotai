@@ -212,9 +212,21 @@ export default function RulesManagement() {
                     position={index}
                 >
                     <IndexTable.Cell>
-                        <Text variant="bodyMd" fontWeight="bold" as="span">
-                            {rule.name}
-                        </Text>
+                        <InlineStack gap="200" blockAlign="center">
+                            <Text variant="bodyMd" fontWeight="bold" as="span">
+                                {rule.name}
+                            </Text>
+                            {rule.syncToKlaviyo && (
+                                <Tooltip content="Synced to Klaviyo">
+                                    <Badge tone="info" size="small">K</Badge>
+                                </Tooltip>
+                            )}
+                            {rule.syncToMailchimp && (
+                                <Tooltip content="Synced to Mailchimp">
+                                    <Badge tone="info" size="small">M</Badge>
+                                </Tooltip>
+                            )}
+                        </InlineStack>
                     </IndexTable.Cell>
                     <IndexTable.Cell>
                         <Box paddingBlockStart="100" paddingBlockEnd="100">

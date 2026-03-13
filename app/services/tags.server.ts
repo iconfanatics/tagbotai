@@ -175,29 +175,41 @@ export async function manageCustomerTags(
       });
 
       if (customer && customer.email) {
-        if (klaviyoApiKey) {
-          console.log(`[MARKETING SYNC] Dispatching tags [${tagsToAdd.join(", ")}] for ${customer.email} to Klaviyo...`);
+        // Query the active rules to figure out which exact tags should be synced
+        const syncedRules = await db.rule.findMany({
+          where: { storeId, isActive: true, targetTag: { in: tagsToAdd } },
+          select: { targetTag: true, syncToKlaviyo: true, syncToMailchimp: true }
+        });
+
+        const klaviyoTags = syncedRules.filter(r => r.syncToKlaviyo).map(r => r.targetTag);
+        const mailchimpTags = syncedRules.filter(r => r.syncToMailchimp).map(r => r.targetTag);
+
+        if (klaviyoApiKey && klaviyoTags.length > 0) {
+          console.log(`[MARKETING SYNC] Dispatching tags [${klaviyoTags.join(", ")}] for ${customer.email} to Klaviyo...`);
           // Dispatch asynchronously so we don't block the Shopify webhook return
-          syncTagsToKlaviyo(klaviyoApiKey, customer.email, tagsToAdd)
+          syncTagsToKlaviyo(klaviyoApiKey, customer.email, klaviyoTags)
             .catch(err => console.error("Unhandled Klaviyo Async Error", err));
         }
 
-        if (mailchimpApiKey && mailchimpServerPrefix && mailchimpListId) {
-          console.log(`[MARKETING SYNC] Dispatching tags [${tagsToAdd.join(", ")}] for ${customer.email} to Mailchimp...`);
-          syncTagsToMailchimp(mailchimpApiKey, mailchimpServerPrefix, mailchimpListId, customer.email, tagsToAdd)
+        if (mailchimpApiKey && mailchimpServerPrefix && mailchimpListId && mailchimpTags.length > 0) {
+          console.log(`[MARKETING SYNC] Dispatching tags [${mailchimpTags.join(", ")}] for ${customer.email} to Mailchimp...`);
+          syncTagsToMailchimp(mailchimpApiKey, mailchimpServerPrefix, mailchimpListId, customer.email, mailchimpTags)
             .catch(err => console.error("Unhandled Mailchimp Async Error", err));
         }
 
         // Log the dispatch event
-        await db.activityLog.create({
-          data: {
-            storeId,
-            customerId,
-            action: "MARKETING_SYNC",
-            tagContext: "Outbound",
-            reason: `Dispatched sync tags: ${tagsToAdd.join(", ")}`
-          }
-        });
+        if (klaviyoTags.length > 0 || mailchimpTags.length > 0) {
+          const allDispatched = Array.from(new Set([...klaviyoTags, ...mailchimpTags]));
+          await db.activityLog.create({
+            data: {
+              storeId,
+              customerId,
+              action: "MARKETING_SYNC",
+              tagContext: "Outbound",
+              reason: `Dispatched sync tags: ${allDispatched.join(", ")}`
+            }
+          });
+        }
       }
     }
   }

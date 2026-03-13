@@ -56,6 +56,8 @@ model Store {
   mailchimpListId       String?
   welcomeEmailSent      Boolean       @default(false)
   hasSeenTour           Boolean       @default(false)
+  klaviyoSyncInProgress Boolean       @default(false)
+  mailchimpSyncInProgress Boolean     @default(false)
   createdAt             DateTime   @default(now())
   updatedAt             DateTime   @updatedAt
   rules                 Rule[]
@@ -79,6 +81,8 @@ model Rule {
   collectionId   String?       // Targeting specific Shopify collections
   collectionName String?
   isActive       Boolean       @default(true)
+  syncToKlaviyo  Boolean       @default(false)
+  syncToMailchimp Boolean      @default(false)
   lastSyncCompletedAt DateTime?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt

@@ -37,6 +37,9 @@ CREATE TABLE "Store" (
     "mailchimpServerPrefix" TEXT,
     "mailchimpListId" TEXT,
     "welcomeEmailSent" BOOLEAN NOT NULL DEFAULT false,
+    "hasSeenTour" BOOLEAN NOT NULL DEFAULT false,
+    "klaviyoSyncInProgress" BOOLEAN NOT NULL DEFAULT false,
+    "mailchimpSyncInProgress" BOOLEAN NOT NULL DEFAULT false,
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" DATETIME NOT NULL
 );
@@ -52,6 +55,8 @@ CREATE TABLE "Rule" (
     "collectionId" TEXT,
     "collectionName" TEXT,
     "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "syncToKlaviyo" BOOLEAN NOT NULL DEFAULT false,
+    "syncToMailchimp" BOOLEAN NOT NULL DEFAULT false,
     "lastSyncCompletedAt" DATETIME,
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" DATETIME NOT NULL,

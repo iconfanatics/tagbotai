@@ -79,6 +79,9 @@ type Pages = {
   "/app/additional": {
     params: {};
   };
+  "/app/sync-debug": {
+    params: {};
+  };
   "/app/rules/new": {
     params: {};
   };
@@ -123,7 +126,7 @@ type Pages = {
 type RouteFiles = {
   "root.tsx": {
     id: "root";
-    page: "/" | "/webhooks/customers/data_request" | "/webhooks/app/scopes_update" | "/webhooks/customers/create" | "/webhooks/customers/redact" | "/webhooks/app/uninstalled" | "/webhooks/orders/create" | "/api/webhooks/welcome" | "/webhooks/orders/paid" | "/webhooks/shop/redact" | "/api/cron/emails" | "/super-admin" | "/super-admin/login" | "/auth/login" | "/privacy" | "/auth/*" | "/terms" | "/app" | "/app/integrations" | "/app/rules" | "/app/email-setup" | "/app/additional" | "/app/rules/new" | "/app/workflows" | "/app/segments" | "/app/settings" | "/app/timeline" | "/app/ai/rule" | "/app/cleanup" | "/app/predict" | "/app/pricing" | "/app/support" | "/app/export" | "/app/guide" | "/app/roi";
+    page: "/" | "/webhooks/customers/data_request" | "/webhooks/app/scopes_update" | "/webhooks/customers/create" | "/webhooks/customers/redact" | "/webhooks/app/uninstalled" | "/webhooks/orders/create" | "/api/webhooks/welcome" | "/webhooks/orders/paid" | "/webhooks/shop/redact" | "/api/cron/emails" | "/super-admin" | "/super-admin/login" | "/auth/login" | "/privacy" | "/auth/*" | "/terms" | "/app" | "/app/integrations" | "/app/rules" | "/app/email-setup" | "/app/additional" | "/app/sync-debug" | "/app/rules/new" | "/app/workflows" | "/app/segments" | "/app/settings" | "/app/timeline" | "/app/ai/rule" | "/app/cleanup" | "/app/predict" | "/app/pricing" | "/app/support" | "/app/export" | "/app/guide" | "/app/roi";
   };
   "routes/webhooks.customers.data_request.tsx": {
     id: "routes/webhooks.customers.data_request";
@@ -199,7 +202,7 @@ type RouteFiles = {
   };
   "routes/app.tsx": {
     id: "routes/app";
-    page: "/app" | "/app/integrations" | "/app/rules" | "/app/email-setup" | "/app/additional" | "/app/rules/new" | "/app/workflows" | "/app/segments" | "/app/settings" | "/app/timeline" | "/app/ai/rule" | "/app/cleanup" | "/app/predict" | "/app/pricing" | "/app/support" | "/app/export" | "/app/guide" | "/app/roi";
+    page: "/app" | "/app/integrations" | "/app/rules" | "/app/email-setup" | "/app/additional" | "/app/sync-debug" | "/app/rules/new" | "/app/workflows" | "/app/segments" | "/app/settings" | "/app/timeline" | "/app/ai/rule" | "/app/cleanup" | "/app/predict" | "/app/pricing" | "/app/support" | "/app/export" | "/app/guide" | "/app/roi";
   };
   "routes/app.integrations.tsx": {
     id: "routes/app.integrations";
@@ -216,6 +219,10 @@ type RouteFiles = {
   "routes/app.additional.tsx": {
     id: "routes/app.additional";
     page: "/app/additional";
+  };
+  "routes/app.sync-debug.tsx": {
+    id: "routes/app.sync-debug";
+    page: "/app/sync-debug";
   };
   "routes/app.rules.new.tsx": {
     id: "routes/app.rules.new";
@@ -300,6 +307,7 @@ type RouteModules = {
   "routes/app.rules._index": typeof import("./app/routes/app.rules._index.tsx");
   "routes/app.email-setup": typeof import("./app/routes/app.email-setup.tsx");
   "routes/app.additional": typeof import("./app/routes/app.additional.tsx");
+  "routes/app.sync-debug": typeof import("./app/routes/app.sync-debug.tsx");
   "routes/app.rules.new": typeof import("./app/routes/app.rules.new.tsx");
   "routes/app.workflows": typeof import("./app/routes/app.workflows.tsx");
   "routes/app.segments": typeof import("./app/routes/app.segments.tsx");
