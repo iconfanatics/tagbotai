@@ -73,8 +73,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         console.log(`[KLAVIYO CALLBACK] Successfully connected Klaviyo for ${shop}`);
 
         // 6. Cleanup session and redirect back through the Shopify Auth entry point
-        // This is the most reliable way to re-enter the Shopify Admin frame
-        // and re-establish the session without landing on a login page.
         const returnUrl = `/auth?shop=${shop}&return_to=/app/integrations?success=Klaviyo+Connected`;
         
         return redirect(returnUrl, {
@@ -85,7 +83,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
     } catch (err: any) {
         console.error("[KLAVIYO CALLBACK] Exception:", err);
-        // If we have no shop, we can't redirect back to admin, so we go to login
-        return redirect("/app/integrations?error=" + encodeURIComponent(err.message));
+        
+        let errorMessage = err.message;
+        if (errorMessage.includes("invalid_client")) {
+            errorMessage = "Klaviyo rejected your Client ID or Secret. Please double check your OAuth settings in Klaviyo.";
+        } else if (errorMessage.includes("Missing Klaviyo Client")) {
+            errorMessage = "Klaviyo credentials not found in environment variables.";
+        }
+
+        // Redirect back to integrations with a clean error message
+        return redirect(`/app/integrations?error=${encodeURIComponent(errorMessage)}`);
     }
 };

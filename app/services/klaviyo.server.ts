@@ -101,9 +101,15 @@ export async function exchangeKlaviyoCodeForToken(clientId: string, clientSecret
         redirect_uri: redirectUri
     });
 
+    const authHeader = `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}`;
+
     const response = await fetch("https://a.klaviyo.com/oauth/token", {
         method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        headers: { 
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Authorization": authHeader,
+            "Accept": "application/json"
+        },
         body: params.toString()
     });
 
@@ -123,9 +129,15 @@ export async function refreshKlaviyoToken(clientId: string, clientSecret: string
         client_secret: clientSecret
     });
 
+    const authHeader = `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}`;
+
     const response = await fetch("https://a.klaviyo.com/oauth/token", {
         method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        headers: { 
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Authorization": authHeader,
+            "Accept": "application/json"
+        },
         body: params.toString()
     });
 
