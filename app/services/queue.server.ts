@@ -514,14 +514,22 @@ async function processMarketingBulkSyncJob(payload: { shop: string, storeId: str
 
             if (overlappingTags.length > 0) {
                 try {
-                    if (isKlaviyo && store.klaviyoApiKey) {
-                        await syncTagsToKlaviyo(store.klaviyoApiKey, c.email, overlappingTags);
+                    if (isKlaviyo) {
+                        const tokenToUse = store.klaviyoAccessToken || store.klaviyoApiKey;
+                        const canSync = store.klaviyoAccessToken ? store.klaviyoIsActive : !!store.klaviyoApiKey;
+
+                        if (tokenToUse && canSync) {
+                            await syncTagsToKlaviyo(tokenToUse, c.email, overlappingTags);
+                            syncCount++;
+                            // Basic rate limit respect (approx 6/sec)
+                            await new Promise(r => setTimeout(r, 150)); 
+                        }
                     } else if (isMailchimp && store.mailchimpApiKey && store.mailchimpServerPrefix && store.mailchimpListId) {
                         await syncTagsToMailchimp(store.mailchimpApiKey, store.mailchimpServerPrefix, store.mailchimpListId, c.email, overlappingTags);
+                        syncCount++;
+                        // Basic rate limit respect (approx 6/sec)
+                        await new Promise(r => setTimeout(r, 150)); 
                     }
-                    syncCount++;
-                    // Basic rate limit respect (approx 6/sec)
-                    await new Promise(r => setTimeout(r, 150)); 
                 } catch (apiErr) {
                     console.error(`[QUEUE_WORKER] Bulk sync API fail for ${c.email}:`, apiErr);
                 }

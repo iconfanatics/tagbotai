@@ -51,6 +51,9 @@ model Store {
   syncMessage           String?
   lastSyncCompletedAt   DateTime?
   klaviyoApiKey         String?
+  klaviyoAccessToken    String?
+  klaviyoRefreshToken   String?
+  klaviyoIsActive       Boolean       @default(false)
   mailchimpApiKey       String?
   mailchimpServerPrefix String?
   mailchimpListId       String?

@@ -15,6 +15,8 @@ export async function manageCustomerTags(
   let allowedToTag = true;
   let syncTagsToNotes = false;
   let klaviyoApiKey: string | null = null;
+  let klaviyoAccessToken: string | null = null;
+  let klaviyoIsActive = false;
   let mailchimpApiKey: string | null = null;
   let mailchimpServerPrefix: string | null = null;
   let mailchimpListId: string | null = null;
@@ -25,6 +27,8 @@ export async function manageCustomerTags(
   if (store) {
     syncTagsToNotes = store.syncTagsToNotes;
     klaviyoApiKey = store.klaviyoApiKey;
+    klaviyoAccessToken = store.klaviyoAccessToken;
+    klaviyoIsActive = store.klaviyoIsActive;
     mailchimpApiKey = store.mailchimpApiKey;
     mailchimpServerPrefix = store.mailchimpServerPrefix;
     mailchimpListId = store.mailchimpListId;
@@ -184,11 +188,16 @@ export async function manageCustomerTags(
         const klaviyoTags = syncedRules.filter(r => r.syncToKlaviyo).map(r => r.targetTag);
         const mailchimpTags = syncedRules.filter(r => r.syncToMailchimp).map(r => r.targetTag);
 
-        if (klaviyoApiKey && klaviyoTags.length > 0) {
-          console.log(`[MARKETING SYNC] Dispatching tags [${klaviyoTags.join(", ")}] for ${customer.email} to Klaviyo...`);
-          // Dispatch asynchronously so we don't block the Shopify webhook return
-          syncTagsToKlaviyo(klaviyoApiKey, customer.email, klaviyoTags)
-            .catch(err => console.error("Unhandled Klaviyo Async Error", err));
+        if ((klaviyoAccessToken || klaviyoApiKey) && klaviyoTags.length > 0) {
+          // If we have an OAuth token and it's active, OR we have a legacy API key, proceed
+          const canSync = klaviyoAccessToken ? klaviyoIsActive : !!klaviyoApiKey;
+          
+          if (canSync) {
+            console.log(`[MARKETING SYNC] Dispatching tags [${klaviyoTags.join(", ")}] for ${customer.email} to Klaviyo...`);
+            const tokenToUse = klaviyoAccessToken || (klaviyoApiKey as string);
+            syncTagsToKlaviyo(tokenToUse, customer.email, klaviyoTags)
+              .catch(err => console.error("Unhandled Klaviyo Async Error", err));
+          }
         }
 
         if (mailchimpApiKey && mailchimpServerPrefix && mailchimpListId && mailchimpTags.length > 0) {
