@@ -3,7 +3,7 @@ import { useLoaderData, useNavigate, useSubmit, useActionData, useNavigation } f
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { getCachedStore } from "../services/cache.server";
-import { Page, Layout, Card, Text, BlockStack, IndexTable, Badge, Button, EmptyState, InlineStack, Tooltip, Modal, Box, Banner } from "@shopify/polaris";
+import { Page, Layout, Card, Text, BlockStack, IndexTable, Badge, Button, EmptyState, InlineStack, Tooltip, Modal, Box, Banner, Divider } from "@shopify/polaris";
 import { DeleteIcon, AutomationIcon, ExportIcon, RefreshIcon, SearchIcon } from "@shopify/polaris-icons";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { useState, useEffect } from "react";
@@ -68,7 +68,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         rules: rulesWithMetrics,
         currentPlanName: store.planName,
         estimatedSyncMinutes: estimatedMinutes,
-        isSyncing: store.isSyncing
+        isSyncing: store.isSyncing,
+        klaviyoConnected: !!(store.klaviyoAccessToken || store.klaviyoApiKey),
+        mailchimpConnected: !!(store.mailchimpApiKey && store.mailchimpServerPrefix && store.mailchimpListId)
     };
 };
 
@@ -101,12 +103,27 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         return { success: true, message: "Started evaluating historical data. This runs in the background and may take a few minutes." };
     }
 
+    if ((actionType === "push_klaviyo" || actionType === "push_mailchimp") && ruleId) {
+        const store = await getCachedStore(session.shop);
+        if (store) {
+            const platform = actionType === "push_klaviyo" ? "klaviyo" : "mailchimp";
+            const { enqueueMarketingBulkSyncJob } = await import("../services/queue.server");
+            await enqueueMarketingBulkSyncJob({ 
+                shop: session.shop, 
+                storeId: store.id, 
+                platform, 
+                ruleId 
+            });
+            return { success: true, message: `Push to ${platform === 'klaviyo' ? 'Klaviyo' : 'Mailchimp'} started in the background.` };
+        }
+    }
+
     return null;
 }
 
 export default function RulesManagement() {
     const shopify = useAppBridge();
-    const { rules, currentPlanName, estimatedSyncMinutes, isSyncing } = useLoaderData<typeof loader>();
+    const { rules, currentPlanName, estimatedSyncMinutes, isSyncing, klaviyoConnected, mailchimpConnected } = useLoaderData<typeof loader>();
     const actionData = useActionData<typeof action>();
     const navigate = useNavigate();
     const submit = useSubmit();
@@ -258,6 +275,29 @@ export default function RulesManagement() {
                     </IndexTable.Cell>
                     <IndexTable.Cell>
                         <InlineStack wrap={false} gap="200" align="end">
+                            {klaviyoConnected && rule.syncToKlaviyo && (
+                                <Tooltip content="Push this segment to Klaviyo now">
+                                    <Button
+                                        size="slim"
+                                        onClick={() => submit({ action: "push_klaviyo", ruleId: rule.id }, { method: "post" })}
+                                        loading={navigation.state === "submitting" && navigation.formData?.get("action") === "push_klaviyo" && navigation.formData?.get("ruleId") === rule.id}
+                                    >
+                                        Push K
+                                    </Button>
+                                </Tooltip>
+                            )}
+                            {mailchimpConnected && rule.syncToMailchimp && (
+                                <Tooltip content="Push this segment to Mailchimp now">
+                                    <Button
+                                        size="slim"
+                                        onClick={() => submit({ action: "push_mailchimp", ruleId: rule.id }, { method: "post" })}
+                                        loading={navigation.state === "submitting" && navigation.formData?.get("action") === "push_mailchimp" && navigation.formData?.get("ruleId") === rule.id}
+                                    >
+                                        Push M
+                                    </Button>
+                                </Tooltip>
+                            )}
+                            <div style={{ width: '1px', alignSelf: 'stretch', backgroundColor: 'var(--p-color-border-subdued)' }} />
                             {rule.targetEntity === 'order' && (
                                 <Tooltip content="View Sync Progress & Qualify Diagnostics">
                                     <Button

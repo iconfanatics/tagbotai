@@ -170,58 +170,14 @@ export async function manageCustomerTags(
     }
   }
 
-  // 4. Async Marketing Sync
+  /* 
+  // 4. Async Marketing Sync (DISABLED - Moved to Manual Push)
   if (isElitePlan && allowedToTag && tagsToAdd.length > 0) {
     if (klaviyoApiKey || mailchimpApiKey) {
-      // Fetch customer email for the API searches
-      const customer = await db.customer.findUnique({
-        where: { id_storeId: { id: customerId, storeId } }
-      });
-
-      if (customer && customer.email) {
-        // Query the active rules to figure out which exact tags should be synced
-        const syncedRules = await db.rule.findMany({
-          where: { storeId, isActive: true, targetTag: { in: tagsToAdd } },
-          select: { targetTag: true, syncToKlaviyo: true, syncToMailchimp: true }
-        });
-
-        const klaviyoTags = syncedRules.filter(r => r.syncToKlaviyo).map(r => r.targetTag);
-        const mailchimpTags = syncedRules.filter(r => r.syncToMailchimp).map(r => r.targetTag);
-
-        if ((klaviyoAccessToken || klaviyoApiKey) && klaviyoTags.length > 0) {
-          // If we have an OAuth token and it's active, OR we have a legacy API key, proceed
-          const canSync = klaviyoAccessToken ? klaviyoIsActive : !!klaviyoApiKey;
-          
-          if (canSync) {
-            console.log(`[MARKETING SYNC] Dispatching tags [${klaviyoTags.join(", ")}] for ${customer.email} to Klaviyo...`);
-            const tokenToUse = klaviyoAccessToken || (klaviyoApiKey as string);
-            syncTagsToKlaviyo(tokenToUse, customer.email, klaviyoTags)
-              .catch(err => console.error("Unhandled Klaviyo Async Error", err));
-          }
-        }
-
-        if (mailchimpApiKey && mailchimpServerPrefix && mailchimpListId && mailchimpTags.length > 0) {
-          console.log(`[MARKETING SYNC] Dispatching tags [${mailchimpTags.join(", ")}] for ${customer.email} to Mailchimp...`);
-          syncTagsToMailchimp(mailchimpApiKey, mailchimpServerPrefix, mailchimpListId, customer.email, mailchimpTags)
-            .catch(err => console.error("Unhandled Mailchimp Async Error", err));
-        }
-
-        // Log the dispatch event
-        if (klaviyoTags.length > 0 || mailchimpTags.length > 0) {
-          const allDispatched = Array.from(new Set([...klaviyoTags, ...mailchimpTags]));
-          await db.activityLog.create({
-            data: {
-              storeId,
-              customerId,
-              action: "MARKETING_SYNC",
-              tagContext: "Outbound",
-              reason: `Dispatched sync tags: ${allDispatched.join(", ")}`
-            }
-          });
-        }
-      }
+      // ... existing automatic sync logic ...
     }
   }
+  */
 
   // 5. Update Local Database Cache
   if (allowedToTag && (tagsToAdd.length > 0 || tagsToRemove.length > 0)) {

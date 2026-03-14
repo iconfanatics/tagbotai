@@ -463,14 +463,14 @@ async function processSyncJob(payload: SyncJobPayload) {
     }
 }
 
-export async function enqueueMarketingBulkSyncJob(payload: { shop: string, storeId: string, platform: "klaviyo" | "mailchimp" }) {
+export async function enqueueMarketingBulkSyncJob(payload: { shop: string, storeId: string, platform: "klaviyo" | "mailchimp", ruleId?: string }) {
     processMarketingBulkSyncJob(payload).catch(err => {
         console.error(`[QUEUE_WORKER] Unhandled error during ${payload.platform} sync job:`, err);
     });
 }
 
-async function processMarketingBulkSyncJob(payload: { shop: string, storeId: string, platform: "klaviyo" | "mailchimp" }) {
-    const { shop, storeId, platform } = payload;
+async function processMarketingBulkSyncJob(payload: { shop: string, storeId: string, platform: "klaviyo" | "mailchimp", ruleId?: string }) {
+    const { shop, storeId, platform, ruleId } = payload;
     console.log(`[QUEUE_WORKER] Started ${platform} bulk sync job for shop: ${shop}`);
 
     try {
@@ -481,7 +481,12 @@ async function processMarketingBulkSyncJob(payload: { shop: string, storeId: str
         const isMailchimp = platform === "mailchimp";
 
         const syncedRules = await db.rule.findMany({
-            where: { storeId, isActive: true, ...(isKlaviyo ? { syncToKlaviyo: true } : { syncToMailchimp: true }) },
+            where: { 
+                storeId, 
+                isActive: true, 
+                ...(ruleId ? { id: ruleId } : {}),
+                ...(isKlaviyo ? { syncToKlaviyo: true } : { syncToMailchimp: true }) 
+            },
             select: { targetTag: true }
         });
 
@@ -495,7 +500,8 @@ async function processMarketingBulkSyncJob(payload: { shop: string, storeId: str
         const validCustomers = await db.customer.findMany({
             where: {
                 storeId,
-                email: { not: null }
+                email: { not: null },
+                ...(ruleId && targetTags.length > 0 ? { tags: { contains: targetTags[0] } } : {})
             },
             select: { id: true, email: true, tags: true }
         });

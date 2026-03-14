@@ -123,6 +123,18 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         return { success: true, message: "Klaviyo settings saved." };
     }
 
+    if (actionType === "disconnect_mailchimp") {
+        await db.store.update({
+            where: { shop },
+            data: {
+                mailchimpApiKey: null,
+                mailchimpServerPrefix: null,
+                mailchimpListId: null
+            }
+        });
+        return { success: true, message: "Mailchimp disconnected successfully." };
+    }
+
     if (actionType === "save_mailchimp") {
         const mailchimpApiKey = formData.get("mailchimpApiKey") as string;
         const mailchimpServerPrefix = formData.get("mailchimpServerPrefix") as string;
@@ -228,6 +240,12 @@ export default function Integrations() {
 
     const triggerBulkSync = (platform: "klaviyo" | "mailchimp") => {
         submit({ action: platform === "klaviyo" ? "bulk_sync_klaviyo" : "bulk_sync_mailchimp", storeId }, { method: "post" });
+    };
+
+    const handleDisconnectMailchimp = () => {
+        if (confirm("Are you sure you want to disconnect Mailchimp? This will clear your API key and Audience ID.")) {
+            submit({ action: "disconnect_mailchimp" }, { method: "post" });
+        }
     };
 
     const handleResetSync = (platform: "klaviyo" | "mailchimp") => {
@@ -370,8 +388,20 @@ export default function Integrations() {
                                             <Box paddingBlockStart="200">
                                                 <Divider />
                                                 <Box paddingBlock="200">
-                                                    <Text variant="headingSm" as="h4">Legacy Configuration Detected</Text>
-                                                    <Text as="p" tone="subdued">You are currently using a manual API key. We recommend switching to the "Connect Klaviyo" button above for a more secure connection.</Text>
+                                                    <BlockStack gap="200">
+                                                        <Text variant="headingSm" as="h4">Legacy Configuration Detected</Text>
+                                                        <Text as="p" tone="subdued">You are currently using a manual API key. We recommend switching to the "Connect Klaviyo" button above for a more secure connection.</Text>
+                                                        <div style={{ maxWidth: "200px" }}>
+                                                            <Button 
+                                                                tone="critical" 
+                                                                variant="secondary" 
+                                                                onClick={handleDisconnectKlaviyo}
+                                                                icon={XSmallIcon}
+                                                            >
+                                                                Disconnect Legacy API
+                                                            </Button>
+                                                        </div>
+                                                    </BlockStack>
                                                 </Box>
                                             </Box>
                                         )}
@@ -484,9 +514,16 @@ export default function Integrations() {
                                     <Box paddingBlockStart="200">
                                         <InlineStack align="start" gap="300">
                                             <div className="btn-premium">
-                                                <Button disabled={!isElitePlan} loading={isSaving} icon={SaveIcon} onClick={handleSaveMailchimp}>
-                                                    Save Mailchimp Settings
-                                                </Button>
+                                                <InlineStack gap="200">
+                                                    <Button disabled={!isElitePlan} loading={isSaving} icon={SaveIcon} onClick={handleSaveMailchimp} variant="primary">
+                                                        Save Settings
+                                                    </Button>
+                                                    {initialMailchimp && (
+                                                        <Button tone="critical" onClick={handleDisconnectMailchimp} variant="secondary">
+                                                            Disconnect
+                                                        </Button>
+                                                    )}
+                                                </InlineStack>
                                             </div>
                                             {initialMailchimp && mailchimpRules.length > 0 && (
                                                 <Button disabled={!isElitePlan || mailchimpSyncInProgress} loading={mailchimpSyncInProgress} onClick={() => triggerBulkSync("mailchimp")}>
