@@ -72,11 +72,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
         console.log(`[KLAVIYO CALLBACK] Successfully connected Klaviyo for ${shop}`);
 
-        // 6. Cleanup session and redirect back into the Shopify App
-        // Redirecting to a relative /app path with the shop parameter
-        // allows the Shopify Remix middleware to handle the frame-breaking
-        // and re-authentication automatically.
-        const returnUrl = `/app/integrations?success=Klaviyo+Connected&shop=${shop}`;
+        // 6. Cleanup session and redirect back through the Shopify Auth entry point
+        // This is the most reliable way to re-enter the Shopify Admin frame
+        // and re-establish the session without landing on a login page.
+        const returnUrl = `/auth?shop=${shop}&return_to=/app/integrations?success=Klaviyo+Connected`;
         
         return redirect(returnUrl, {
             headers: {
