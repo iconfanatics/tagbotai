@@ -97,6 +97,22 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         return { success: true, message: `Klaviyo integration ${!store?.klaviyoIsActive ? 'activated' : 'deactivated'}.` };
     }
 
+    if (actionType === "reset_sync_klaviyo") {
+        await db.store.update({
+            where: { shop },
+            data: { klaviyoSyncInProgress: false }
+        });
+        return { success: true, message: "Klaviyo sync status reset." };
+    }
+
+    if (actionType === "reset_sync_mailchimp") {
+        await db.store.update({
+            where: { shop },
+            data: { mailchimpSyncInProgress: false }
+        });
+        return { success: true, message: "Mailchimp sync status reset." };
+    }
+
     if (actionType === "save_klaviyo") {
         const klaviyoApiKey = formData.get("klaviyoApiKey") as string;
         await db.store.update({
@@ -213,6 +229,10 @@ export default function Integrations() {
         submit({ action: platform === "klaviyo" ? "bulk_sync_klaviyo" : "bulk_sync_mailchimp", storeId }, { method: "post" });
     };
 
+    const handleResetSync = (platform: "klaviyo" | "mailchimp") => {
+        submit({ action: platform === "klaviyo" ? "reset_sync_klaviyo" : "reset_sync_mailchimp" }, { method: "post" });
+    };
+
     return (
         <Page
             title="Marketing Integrations"
@@ -279,10 +299,14 @@ export default function Integrations() {
                                         <Text variant="headingMd" as="h3">Klaviyo Configuration</Text>
                                     </InlineStack>
                                     <Box>
-                                        {klaviyoIsActive && klaviyoAccessToken ? (
-                                            <Badge tone="success" icon={CheckCircleIcon}>Active</Badge>
-                                        ) : klaviyoAccessToken ? (
-                                            <Badge tone="attention">Paused</Badge>
+                                        {klaviyoAccessToken ? (
+                                            klaviyoIsActive ? (
+                                                <Badge tone="success" icon={CheckCircleIcon}>Active</Badge>
+                                            ) : (
+                                                <Badge tone="attention">Paused</Badge>
+                                            )
+                                        ) : initialKlaviyo ? (
+                                            <Badge tone="info">Connected (Legacy)</Badge>
                                         ) : (
                                             <Badge tone="critical" icon={XSmallIcon}>Not Connected</Badge>
                                         )}
@@ -296,7 +320,7 @@ export default function Integrations() {
                                         {!klaviyoAccessToken ? (
                                             <Box paddingBlock="200">
                                                 <BlockStack gap="300">
-                                                    <Text as="p">Connect your Klaviyo account to automatically push your AI segments and tags for real-time marketing.</Text>
+                                                    <Text as="p">Connect your Klaviyo account via OAuth for the best experience. Legacy API keys are still supported in the background if configured.</Text>
                                                     <div style={{ maxWidth: "200px" }}>
                                                         <Button 
                                                             variant="primary" 
@@ -340,20 +364,16 @@ export default function Integrations() {
                                             </Box>
                                         )}
                                         
-                                        <Divider />
-                                        
-                                        <Text variant="headingSm" as="h4">Legacy Configuration (API Key)</Text>
-                                        <TextField
-                                            label="Klaviyo Private API Key"
-                                            value={klaviyoApiKey}
-                                            onChange={setKlaviyoApiKey}
-                                            autoComplete="off"
-                                            placeholder="pk_..."
-                                            helpText="Only required if you prefer manual API keys over the one-click Connect button."
-                                            disabled={!isElitePlan}
-                                            type="password"
-                                            connectedRight={<Button onClick={handleSaveKlaviyo}>Save Key</Button>}
-                                        />
+                                        {/* Hidden Legacy Section - Only visible if merchant specifically has an API key but no OAuth */}
+                                        {initialKlaviyo && !klaviyoAccessToken && (
+                                            <Box paddingBlockStart="200">
+                                                <Divider />
+                                                <Box paddingBlock="200">
+                                                    <Text variant="headingSm" as="h4">Legacy Configuration Detected</Text>
+                                                    <Text as="p" tone="subdued">You are currently using a manual API key. We recommend switching to the "Connect Klaviyo" button above for a more secure connection.</Text>
+                                                </Box>
+                                            </Box>
+                                        )}
                                     </BlockStack>
                                 </div>
 
@@ -372,9 +392,16 @@ export default function Integrations() {
                                 <Box paddingBlockStart="200">
                                     <InlineStack align="start" gap="300">
                                         {(klaviyoAccessToken || initialKlaviyo) && klaviyoRules.length > 0 && (
-                                            <Button disabled={!isElitePlan || klaviyoSyncInProgress} loading={klaviyoSyncInProgress} onClick={() => triggerBulkSync("klaviyo")}>
-                                                {klaviyoSyncInProgress ? "Syncing..." : "Bulk Sync Historical Data"}
-                                            </Button>
+                                            <InlineStack gap="200">
+                                                <Button disabled={!isElitePlan || klaviyoSyncInProgress} loading={klaviyoSyncInProgress} onClick={() => triggerBulkSync("klaviyo")}>
+                                                    {klaviyoSyncInProgress ? "Syncing..." : "Bulk Sync Historical Data"}
+                                                </Button>
+                                                {klaviyoSyncInProgress && (
+                                                    <Button variant="tertiary" tone="critical" onClick={() => handleResetSync("klaviyo")}>
+                                                        Force Stop / Reset Status
+                                                    </Button>
+                                                )}
+                                            </InlineStack>
                                         )}
                                     </InlineStack>
                                 </Box>
