@@ -22,6 +22,11 @@ export default function KlaviyoInstructions() {
                         TagBot AI is an intelligent customer segmentation platform for Shopify. It uses AI to evaluate customer behavior and automatically organizes them into segments (like "Frequent Buyers," "High Spenders," or "Churn Risk"). These segments are then synchronized in real-time to Klaviyo profile properties, enabling highly targeted email and SMS campaigns.
                     </p>
 
+                    <h2 style={{ fontSize: "1.5rem", fontWeight: "bold", marginTop: "2rem", marginBottom: "1rem" }}>Company Overview</h2>
+                    <p>
+                        <strong>TagBot AI</strong> is developed by <strong>iConfanatics</strong>. We have been a dedicated <strong>Shopify Partner since 2017</strong>, specializing in high-performance app development, bespoke theme customization, and solving complex architectural challenges for large-scale Shopify merchants. Our decade-long expertise ensures that our integrations are robust, secure, and optimized for growth.
+                    </p>
+
                     <h2 style={{ fontSize: "1.5rem", fontWeight: "bold", marginTop: "2rem", marginBottom: "1rem" }}>Customer Workflow</h2>
                     <ol style={{ paddingLeft: "20px" }}>
                         <li><strong>Access the App:</strong> Open the TagBot AI app within the Shopify Admin.</li>
