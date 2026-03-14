@@ -57,7 +57,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         const { verifier, challenge } = generatePKCE();
         const state = crypto.randomUUID();
         const clientId = process.env.KLAVIYO_CLIENT_ID;
-        const redirectUri = `https://${new URL(request.url).host}/app/integrations/klaviyo/callback`;
+        const appUrl = process.env.SHOPIFY_APP_URL || `https://${new URL(request.url).host}`;
+        const redirectUri = `${appUrl}/app/integrations/klaviyo/callback`;
         const scope = "accounts:read profiles:read profiles:write";
 
         if (!clientId) return { success: false, message: "Klaviyo Client ID not configured in Vercel." };

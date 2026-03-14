@@ -34,7 +34,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     try {
         const clientId = process.env.KLAVIYO_CLIENT_ID;
         const clientSecret = process.env.KLAVIYO_CLIENT_SECRET;
-        const redirectUri = `https://${url.host}/app/integrations/klaviyo/callback`;
+        const appUrl = process.env.SHOPIFY_APP_URL || `https://${new URL(request.url).host}`;
+        const redirectUri = `${appUrl}/app/integrations/klaviyo/callback`;
 
         if (!clientId || !clientSecret) {
             throw new Error("Missing Klaviyo Client credentials in environment");
