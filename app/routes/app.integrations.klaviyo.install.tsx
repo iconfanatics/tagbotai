@@ -39,6 +39,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     const kSession = await klaviyoSessionStorage.getSession();
     kSession.set("state", state);
     kSession.set("verifier", verifier);
+    kSession.set("shop", shop);
 
     // 5. Redirect to Klaviyo Authorization
     return redirect(authUrl, {

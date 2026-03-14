@@ -68,6 +68,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         const kSession = await klaviyoSessionStorage.getSession();
         kSession.set("state", state);
         kSession.set("verifier", verifier);
+        kSession.set("shop", shop);
 
         return redirect(authUrl, {
             headers: {
