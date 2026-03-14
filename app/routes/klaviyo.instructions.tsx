@@ -59,7 +59,7 @@ export default function KlaviyoInstructions() {
                     </p>
                     <ul style={{ paddingLeft: "20px" }}>
                         <li><strong>Install URL:</strong> <code>https://tagbotai.vercel.app/app/integrations/klaviyo/install</code> (Starts the OAuth flow automatically)</li>
-                        <li><strong>Support:</strong> For help with the setup, please contact support@tagbot.ai.</li>
+                        <li><strong>Support:</strong> For help with the setup, please contact xhtmlcrew@gmail.com.</li>
                     </ul>
                 </div>
             </BlockStack>
