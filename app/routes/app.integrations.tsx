@@ -55,7 +55,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     if (actionType === "init_klaviyo_oauth") {
         const { verifier, challenge } = generatePKCE();
-        const state = crypto.randomUUID();
+        const state = `${shop}:${crypto.randomUUID()}`;
         const clientId = process.env.KLAVIYO_CLIENT_ID;
         const appUrl = process.env.SHOPIFY_APP_URL || `https://${new URL(request.url).host}`;
         const redirectUri = `${appUrl}/app/integrations/klaviyo/callback`;

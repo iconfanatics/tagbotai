@@ -20,7 +20,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
     // 2. Prepare OAuth Parameters
     const { verifier, challenge } = generatePKCE();
-    const state = crypto.randomUUID();
+    const state = `${shop}:${crypto.randomUUID()}`;
     const clientId = process.env.KLAVIYO_CLIENT_ID;
     
     // Standardize app URL

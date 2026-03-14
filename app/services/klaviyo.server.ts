@@ -10,7 +10,7 @@ export const klaviyoSessionStorage = createCookieSessionStorage({
         name: "klaviyo_oauth_session",
         secure: true,
         secrets: [SESSION_SECRET],
-        sameSite: "lax",
+        sameSite: "none", // Essential for survival during cross-site redirects in Shopify context
         path: "/",
         httpOnly: true,
         maxAge: 300, // 5 minutes

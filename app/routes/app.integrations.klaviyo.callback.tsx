@@ -10,18 +10,23 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     
     // We get the shop from our own session, not authenticate.admin(request)
     // because Klaviyo's redirect doesn't carry Shopify's session headers.
-    const shop = kSession.get("shop");
-
-    if (!shop) {
-        console.error("[KLAVIYO CALLBACK] Missing shop in kSession");
-        return redirect("/auth/login"); // Fallback if session is totally lost
-    }
+    let shop = kSession.get("shop");
 
     // 3. Extract parameters from URL
     const url = new URL(request.url);
     const code = url.searchParams.get("code");
     const state = url.searchParams.get("state");
     const error = url.searchParams.get("error");
+
+    // Fallback: If shop is missing from session, check if we encoded it in state (e.g. "shop.myshopify.com:nonce")
+    if (!shop && state && state.includes(":")) {
+        shop = state.split(":")[0];
+    }
+
+    if (!shop) {
+        console.error("[KLAVIYO CALLBACK] Missing shop in kSession and state");
+        return redirect("/auth/login"); // Fallback if session is totally lost
+    }
 
     const savedState = kSession.get("state");
     const verifier = kSession.get("verifier");
@@ -31,7 +36,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         return redirect("/app/integrations?error=Klaviyo+Authorization+Denied");
     }
 
-    if (!code || !state || state !== savedState || !verifier) {
+    if (!code || !state || (savedState && state !== savedState && !state.endsWith(savedState)) || !verifier) {
         console.error("[KLAVIYO CALLBACK] Security check failed or missing parameters");
         return redirect("/app/integrations?error=Security+Validation+Failed");
     }
@@ -68,11 +73,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         console.log(`[KLAVIYO CALLBACK] Successfully connected Klaviyo for ${shop}`);
 
         // 6. Cleanup session and redirect back into the Shopify App
-        // We redirect to a top-level route that will then trigger Shopify's authentication
-        // or re-entry via the app bridge.
-        const redirectUrl = `https://${shop}/admin/apps/tagbotai/app/integrations?success=Klaviyo+Connected`;
+        // Redirecting to a relative /app path with the shop parameter
+        // allows the Shopify Remix middleware to handle the frame-breaking
+        // and re-authentication automatically.
+        const returnUrl = `/app/integrations?success=Klaviyo+Connected&shop=${shop}`;
         
-        return redirect(redirectUrl, {
+        return redirect(returnUrl, {
             headers: {
                 "Set-Cookie": await klaviyoSessionStorage.destroySession(kSession)
             }
