@@ -37,7 +37,7 @@ export async function syncTagsToKlaviyo(accessToken: string, email: string, tags
                 attributes: {
                     email: email,
                     properties: {
-                        "TagBot_Segments": tagsToAdd.join(", ")
+                        "TagBot_Segments": tagsToAdd
                     }
                 }
             }

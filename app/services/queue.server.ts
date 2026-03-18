@@ -512,11 +512,14 @@ async function processMarketingBulkSyncJob(payload: { shop: string, storeId: str
         const { syncTagsToKlaviyo } = await import("./klaviyo.server");
         const { syncTagsToMailchimp } = await import("./mailchimp.server");
 
+        let authErrorCount = 0;
+        let lastErrorMsg = "";
+
         for (const c of validCustomers) {
             if (!c.email) continue;
             
-            const currentTags = c.tags ? c.tags.split(",").map(t => t.trim()) : [];
-            const overlappingTags = targetTags.filter(t => currentTags.includes(t));
+            const currentTags = c.tags ? c.tags.split(",").map(t => t.trim().toLowerCase()) : [];
+            const overlappingTags = targetTags.filter(t => currentTags.includes(t.toLowerCase()));
 
             if (overlappingTags.length > 0) {
                 try {
@@ -525,26 +528,55 @@ async function processMarketingBulkSyncJob(payload: { shop: string, storeId: str
                         const canSync = store.klaviyoAccessToken ? store.klaviyoIsActive : !!store.klaviyoApiKey;
 
                         if (tokenToUse && canSync) {
-                            await syncTagsToKlaviyo(tokenToUse, c.email, overlappingTags);
-                            syncCount++;
+                            const res = await syncTagsToKlaviyo(tokenToUse, c.email, overlappingTags);
+                            if (res.success) {
+                                syncCount++;
+                            } else {
+                                authErrorCount++;
+                                lastErrorMsg = res.message || "Unknown Error";
+                            }
                             // Basic rate limit respect (approx 6/sec)
                             await new Promise(r => setTimeout(r, 150)); 
                         }
                     } else if (isMailchimp && store.mailchimpApiKey && store.mailchimpServerPrefix && store.mailchimpListId) {
-                        await syncTagsToMailchimp(store.mailchimpApiKey, store.mailchimpServerPrefix, store.mailchimpListId, c.email, overlappingTags);
-                        syncCount++;
+                        const res = await syncTagsToMailchimp(store.mailchimpApiKey, store.mailchimpServerPrefix, store.mailchimpListId, c.email, overlappingTags);
+                        if (res.success) {
+                            syncCount++;
+                        } else {
+                            authErrorCount++;
+                            lastErrorMsg = res.message || "Unknown Error";
+                        }
                         // Basic rate limit respect (approx 6/sec)
                         await new Promise(r => setTimeout(r, 150)); 
                     }
-                } catch (apiErr) {
+                } catch (apiErr: any) {
                     console.error(`[QUEUE_WORKER] Bulk sync API fail for ${c.email}:`, apiErr);
+                    authErrorCount++;
+                    lastErrorMsg = apiErr.message;
                 }
             }
         }
 
-        console.log(`[QUEUE_WORKER] Finished ${platform} bulk sync for ${syncCount} customers.`);
+        let finalMessage = `Successfully pushed ${syncCount} qualifying profiles.`;
+        if (authErrorCount > 0) {
+            finalMessage = `Pushed ${syncCount} profiles. Failed ${authErrorCount} due to API errors (e.g., ${lastErrorMsg}). Check Integrations page.`;
+        }
+
+        console.log(`[QUEUE_WORKER] Finished ${platform} bulk sync. ` + finalMessage);
+        
+        await db.store.update({
+            where: { id: storeId },
+            data: { syncMessage: finalMessage }
+        });
+        
     } catch (err: any) {
         console.error(`[QUEUE_WORKER] Failed to process ${platform} bulk sync for ${shop}:`, err.message);
+        try {
+            await db.store.update({
+                where: { id: storeId },
+                data: { syncMessage: `Bulk Sync Failed: ${err.message}` }
+            });
+        } catch (dbErr) { /* ignore */ }
     } finally {
         try {
             const isKlaviyo = platform === "klaviyo";
