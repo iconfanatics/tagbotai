@@ -72,8 +72,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
         console.log(`[KLAVIYO CALLBACK] Successfully connected Klaviyo for ${shop}`);
 
-        // 6. Cleanup session and redirect back through the Shopify Auth entry point
-        const returnUrl = `/auth?shop=${shop}&return_to=/app/integrations?success=Klaviyo+Connected`;
+        // 6. Cleanup session and redirect back into the Shopify Admin iframe
+        const apiKey = process.env.SHOPIFY_API_KEY || "daf8769e4809a92375676ac29c2d54d6";
+        const shopHandle = shop.replace(".myshopify.com", "");
+        
+        // This is the official structure for returning a merchant from OAuth into your embedded app frame
+        const returnUrl = `https://admin.shopify.com/store/${shopHandle}/apps/${apiKey}/app/integrations?success=Klaviyo+Connected`;
         
         return redirect(returnUrl, {
             headers: {
