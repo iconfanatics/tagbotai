@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import crypto from "crypto";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
 import { useLoaderData, useSubmit, useActionData, useNavigation, useNavigate } from "react-router";
@@ -70,9 +70,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         kSession.set("verifier", verifier);
         kSession.set("shop", shop);
 
-        return redirect(authUrl, {
+        return new Response(JSON.stringify({ authUrl }), {
             headers: {
-                "Set-Cookie": await klaviyoSessionStorage.commitSession(kSession)
+                "Set-Cookie": await klaviyoSessionStorage.commitSession(kSession),
+                "Content-Type": "application/json"
             }
         });
     }
@@ -211,6 +212,13 @@ export default function Integrations() {
     const [isEliteModalOpen, setIsEliteModalOpen] = useState(false);
 
     const isElitePlan = currentPlanName === "Elite Plan";
+
+    // Handle Top-Level Redirect for OAuth out of the iframe
+    useEffect(() => {
+        if (actionData && "authUrl" in actionData && typeof actionData.authUrl === "string") {
+            window.open(actionData.authUrl, "_top");
+        }
+    }, [actionData]);
 
     const handleConnectKlaviyo = () => {
         submit({ action: "init_klaviyo_oauth" }, { method: "post" });
