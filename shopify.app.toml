@@ -11,6 +11,11 @@ automatically_update_urls_on_dev = true
 [webhooks]
 api_version = "2026-04"
 
+  [webhooks.privacy_compliance]
+  customer_deletion_url = "https://tagbotai.vercel.app/webhooks/customers/redact"
+  customer_data_request_url = "https://tagbotai.vercel.app/webhooks/customers/data_request"
+  shop_deletion_url = "https://tagbotai.vercel.app/webhooks/shop/redact"
+
   [[webhooks.subscriptions]]
   topics = [ "app/uninstalled" ]
   uri = "/webhooks/app/uninstalled"
