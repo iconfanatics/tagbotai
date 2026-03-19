@@ -476,89 +476,16 @@ export default function Integrations() {
                 >
                     <div className="premium-card">
                         <Box padding="500">
-                            <BlockStack gap="400">
-                                <InlineStack align="space-between" blockAlign="center">
-                                    <InlineStack gap="200" align="start" blockAlign="center">
-                                        <Icon source={AppsIcon} tone="base" />
-                                        <Text variant="headingMd" as="h3">Mailchimp Configuration</Text>
-                                    </InlineStack>
-                                    <Box>
-                                        {initialMailchimp ? (
-                                            <Badge tone="success" icon={CheckCircleIcon}>Connected</Badge>
-                                        ) : (
-                                            <Badge tone="critical" icon={XSmallIcon}>Disconnected</Badge>
-                                        )}
-                                    </Box>
-                                </InlineStack>
-
-                                <Divider />
-
-                                <div onClick={() => !isElitePlan && setIsEliteModalOpen(true)}>
-                                    <BlockStack gap="400">
-                                        <TextField
-                                            label="Mailchimp API Key"
-                                            value={mailchimpApiKey}
-                                            onChange={setMailchimpApiKey}
-                                            autoComplete="off"
-                                            placeholder="..."
-                                            helpText="Your Mailchimp API key, generated in Account Settings."
-                                            disabled={!isElitePlan}
-                                            type="password"
-                                        />
-                                        <TextField
-                                            label="Server Prefix (Data Center)"
-                                            value={mailchimpServerPrefix}
-                                            onChange={setMailchimpServerPrefix}
-                                            autoComplete="off"
-                                            placeholder="us14"
-                                            helpText="The final segment of your API key (e.g. if key is xxx-us14, prefix is us14)."
-                                            disabled={!isElitePlan}
-                                        />
-                                            <TextField
-                                                label="Audience List ID"
-                                                value={mailchimpListId}
-                                                onChange={setMailchimpListId}
-                                                autoComplete="off"
-                                                placeholder="e.g. 8d3a1fb"
-                                                helpText="The specific Audience ID to sync to. Found in Mailchimp Audience Settings."
-                                                disabled={!isElitePlan}
-                                            />
-                                        </BlockStack>
-                                    </div>
-
-                                    {mailchimpRules.length > 0 && initialMailchimp && (
-                                        <Box paddingBlockStart="200">
-                                            <Text variant="headingSm" as="h4">Active Synced Segments</Text>
-                                            <Text as="p" tone="subdued">The following Tags are currently configured to push to Mailchimp. Use the Bulk Sync button to push all existing historical customers that match these tags.</Text>
-                                            <div style={{ marginTop: "10px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                                                {mailchimpRules.map(r => (
-                                                    <Badge key={r.id} tone="info">{`${r.name} (${r.targetTag})`}</Badge>
-                                                ))}
-                                            </div>
-                                        </Box>
-                                    )}
-
-                                    <Box paddingBlockStart="200">
-                                        <InlineStack align="start" gap="300">
-                                            <div className="btn-premium">
-                                                <InlineStack gap="200">
-                                                    <Button disabled={!isElitePlan} loading={isSaving} icon={SaveIcon} onClick={handleSaveMailchimp} variant="primary">
-                                                        Save Settings
-                                                    </Button>
-                                                    {initialMailchimp && (
-                                                        <Button tone="critical" onClick={handleDisconnectMailchimp} variant="secondary">
-                                                            Disconnect
-                                                        </Button>
-                                                    )}
-                                                </InlineStack>
-                                            </div>
-                                            {initialMailchimp && mailchimpRules.length > 0 && (
-                                                <Button disabled={!isElitePlan || mailchimpSyncInProgress} loading={mailchimpSyncInProgress} onClick={() => triggerBulkSync("mailchimp")}>
-                                                    {mailchimpSyncInProgress ? "Syncing..." : "Bulk Sync Historical Data"}
-                                                </Button>
-                                            )}
-                                        </InlineStack>
-                                    </Box>
+                            <BlockStack gap="400" align="center" inlineAlign="center">
+                                <Box paddingBlock="800">
+                                    <BlockStack gap="200" align="center" inlineAlign="center">
+                                        <Icon source={AppsIcon} tone="magic" />
+                                        <Text variant="headingLg" as="h3" alignment="center">Coming Soon</Text>
+                                        <Text as="p" tone="subdued" alignment="center">
+                                            We are currently finalizing our direct Mailchimp integration. Soon you will be able to synchronize your TagBot segments directly into your selected Mailchimp Audiences automatically.
+                                        </Text>
+                                    </BlockStack>
+                                </Box>
                             </BlockStack>
                         </Box>
                     </div>
