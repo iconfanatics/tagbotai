@@ -464,9 +464,11 @@ async function processSyncJob(payload: SyncJobPayload) {
 }
 
 export async function enqueueMarketingBulkSyncJob(payload: { shop: string, storeId: string, platform: "klaviyo" | "mailchimp", ruleId?: string }) {
-    processMarketingBulkSyncJob(payload).catch(err => {
+    try {
+        await processMarketingBulkSyncJob(payload);
+    } catch (err) {
         console.error(`[QUEUE_WORKER] Unhandled error during ${payload.platform} sync job:`, err);
-    });
+    }
 }
 
 async function processMarketingBulkSyncJob(payload: { shop: string, storeId: string, platform: "klaviyo" | "mailchimp", ruleId?: string }) {
