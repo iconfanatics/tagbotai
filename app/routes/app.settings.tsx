@@ -33,15 +33,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     if (actionType === "save_settings") {
         const syncTagsToNotes = formData.get("syncTagsToNotes") === "true";
-        const enableSentimentAnalysis = formData.get("enableSentimentAnalysis") === "true"; // Added this line
-        const klaviyoApiKey = formData.get("klaviyoApiKey") as string;
+        const enableSentimentAnalysis = formData.get("enableSentimentAnalysis") === "true";
 
         await db.store.update({
             where: { shop },
             data: {
                 syncTagsToNotes,
-                enableSentimentAnalysis, // Added this line
-                klaviyoApiKey: klaviyoApiKey.trim() === "" ? null : klaviyoApiKey.trim()
+                enableSentimentAnalysis
             }
         });
 
