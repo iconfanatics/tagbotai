@@ -1,6 +1,6 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
-client_id = "daf8769e4809a92375676ac29c2d54d6"
+client_id = "85732d4588b1408f4ef4d9e6876d7ad1"
 name = "TagBot AI: Smart Segmentation"
 application_url = "https://tagbotai.vercel.app"
 embedded = true
