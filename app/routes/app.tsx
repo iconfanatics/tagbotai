@@ -61,7 +61,6 @@ export default function App() {
           <Link to="/app/sync-debug">Sync Diagnostics</Link>
           <Link to="/app/settings">Settings</Link>
           <Link to="/app/pricing">Pricing Plans</Link>
-          <Link to="/app/email-setup">Email Setup</Link>
           <Link to="/app/support">Support</Link>
         </ui-nav-menu>
         <Outlet />
