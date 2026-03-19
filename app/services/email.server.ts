@@ -40,7 +40,7 @@ export async function sendWelcomeEmail(shopName: string, recipientEmail: string)
 
     try {
         await resend.emails.send({
-            from: 'TagBot AI <hello@tagbot.ai>', // Replace with the verified domain once set up
+            from: 'TagBot AI <hello@tagbotai.iconfanatics.com>',
             to: recipientEmail,
             subject: "Welcome to TagBot AI! Let's boost your sales 🚀",
             html: htmlBody,
@@ -82,7 +82,7 @@ export async function sendUpgradePromptEmail(shopName: string, recipientEmail: s
 
     try {
         await resend.emails.send({
-            from: 'TagBot AI <hello@tagbot.ai>',
+            from: 'TagBot AI <hello@tagbotai.iconfanatics.com>',
             to: recipientEmail,
             subject: "Take your store segmentation to the next level 📈",
             html: htmlBody,
@@ -106,7 +106,7 @@ export async function sendEmail(to: string, subject: string, htmlBody: string) {
     try {
         // For general outbound support requests, the reply-to becomes the merchant.
         await resend.emails.send({
-            from: 'TagBot AI Support System <support@tagbot.ai>',
+            from: 'TagBot AI Support System <support@tagbotai.iconfanatics.com>',
             to: to,
             subject: subject,
             html: htmlBody,
