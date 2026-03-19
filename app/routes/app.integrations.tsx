@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import crypto from "crypto";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
 import { useLoaderData, useSubmit, useActionData, useNavigation, useNavigate } from "react-router";
-import { Page, Layout, Card, BlockStack, Text, InlineStack, Banner, Button, Box, Icon, Modal, TextField, Divider, Badge } from "@shopify/polaris";
+import { Page, Layout, Card, BlockStack, Text, InlineStack, Banner, Button, Box, Icon, Modal, TextField, Divider, Badge, List } from "@shopify/polaris";
 import { AppsIcon, CheckCircleIcon, XSmallIcon, SaveIcon, LinkIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
@@ -444,6 +444,24 @@ export default function Integrations() {
                                             </InlineStack>
                                         )}
                                     </InlineStack>
+                                </Box>
+                                
+                                {/* Tutorial Section */}
+                                <Box paddingBlockStart="400">
+                                    <Divider />
+                                    <Box paddingBlockStart="400">
+                                        <BlockStack gap="300">
+                                            <Text variant="headingSm" as="h4">How to Use TagBot Segments in Klaviyo</Text>
+                                            <Text as="p">TagBot AI pushes your tags into Klaviyo as a Custom Property called <Text as="span" fontWeight="bold">TagBot_Segments</Text>. Follow these steps to use them in your campaigns:</Text>
+                                            <List type="number">
+                                                <List.Item>In your Klaviyo dashboard, go to <b>Audience &gt; Lists &amp; Segments</b>.</List.Item>
+                                                <List.Item>Click <b>Create List / Segment</b> and choose <b>Segment</b>.</List.Item>
+                                                <List.Item>Select <b>Properties about someone</b>, choose <b>TagBot_Segments</b> as the Dimension, and set the condition to <b>contains</b>.</List.Item>
+                                                <List.Item>Type the exact name of the tag (e.g., <Text as="span" tone="subdued" fontWeight="bold">vip</Text>) and click <b>Create Segment</b>.</List.Item>
+                                            </List>
+                                            <Text as="p" tone="subdued">You can now use this dynamically updating Segment to select recipients for Campaigns or to trigger automated Flows!</Text>
+                                        </BlockStack>
+                                    </Box>
                                 </Box>
                             </BlockStack>
                         </Box>
