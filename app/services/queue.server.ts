@@ -501,7 +501,7 @@ async function processMarketingBulkSyncJob(payload: { shop: string, storeId: str
             where: {
                 storeId,
                 email: { not: null },
-                ...(ruleId && targetTags.length > 0 ? { tags: { contains: targetTags[0] } } : {})
+                tags: { not: null }
             },
             select: { id: true, email: true, tags: true }
         });
