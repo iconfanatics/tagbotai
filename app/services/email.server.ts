@@ -82,7 +82,7 @@ export async function sendUpgradePromptEmail(shopName: string, recipientEmail: s
 
     try {
         await resend.emails.send({
-            from: 'TagBot AI <hello@tagbotai.iconfanatics.com>',
+            from: 'TagBot AI <tagbotai@iconfanatics.com>',
             to: recipientEmail,
             subject: "Take your store segmentation to the next level 📈",
             html: htmlBody,
