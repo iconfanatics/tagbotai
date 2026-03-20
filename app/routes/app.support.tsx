@@ -164,7 +164,7 @@ export default function SupportPage() {
                                     </Box>
                                     <BlockStack gap="100">
                                         <Text as="p" fontWeight="bold">Live Chat</Text>
-                                        <Text as="p" tone="subdued">Available on tagbotai.com</Text>
+                                        <Text as="p" tone="subdued">Available on iconfanatics.com</Text>
                                     </BlockStack>
                                 </InlineStack>
                             </BlockStack>
