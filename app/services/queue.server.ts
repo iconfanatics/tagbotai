@@ -2,7 +2,7 @@ import { unauthenticated } from "../shopify.server";
 import db from "../db.server";
 import { calculateCustomerTags } from "./rule.server";
 import { getCachedStoreById } from "./cache.server";
-import { manageCustomerTags, manageOrderTags, sendVipDiscount } from "./tags.server";
+import { manageCustomerTags, manageOrderTags } from "./tags.server";
 
 interface SyncJobPayload {
     shop: string;
@@ -222,12 +222,6 @@ export async function processOneCustomer(
                 }
             }
 
-            for (const item of tagsToAddLog) {
-                const normalizedTag = item.tag.toLowerCase();
-                if (normalizedTag.includes("vip") || normalizedTag.includes("high spender")) {
-                    await sendVipDiscount(admin, storeId, customerId, upsertedCustomer.email || "");
-                }
-            }
 
             for (const item of tagsToAddLog) {
                 if (item.targetEntity === "order") continue; // Handled below

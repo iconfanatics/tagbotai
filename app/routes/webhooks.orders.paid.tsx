@@ -2,7 +2,7 @@ import type { ActionFunctionArgs } from "react-router";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { calculateCustomerTags } from "../services/rule.server";
-import { manageCustomerTags, manageOrderTags, sendVipDiscount } from "../services/tags.server";
+import { manageCustomerTags, manageOrderTags } from "../services/tags.server";
 import { getCachedStore } from "../services/cache.server";
 import { analyzeSentiment } from "../services/ai.server";
 import { evaluateOrderRules } from "../services/order-rules.server";
@@ -230,13 +230,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                     });
                 }
 
-                // Check for VIP Discount triggers
-                for (const item of tagsToAddLog) {
-                    const normalizedTag = item.tag.toLowerCase();
-                    if (normalizedTag.includes("vip") || normalizedTag.includes("high spender")) {
-                        await sendVipDiscount(admin, store.id, customerId, customer.email || "");
-                    }
-                }
 
                 // Log the actions for Customer tags
                 for (const item of tagsToAddLog) {
