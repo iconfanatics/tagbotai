@@ -91,6 +91,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                 klaviyoApiKey: null
             }
         });
+        await invalidateStoreCache(shop);
         return { success: true, message: "Klaviyo disconnected successfully." };
     }
 
@@ -100,6 +101,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             where: { shop },
             data: { klaviyoIsActive: !store?.klaviyoIsActive }
         });
+        await invalidateStoreCache(shop);
         return { success: true, message: `Klaviyo integration ${!store?.klaviyoIsActive ? 'activated' : 'deactivated'}.` };
     }
 
@@ -108,6 +110,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             where: { shop },
             data: { klaviyoSyncInProgress: false }
         });
+        await invalidateStoreCache(shop);
         return { success: true, message: "Klaviyo sync status reset." };
     }
 
@@ -116,6 +119,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             where: { shop },
             data: { mailchimpSyncInProgress: false }
         });
+        await invalidateStoreCache(shop);
         return { success: true, message: "Mailchimp sync status reset." };
     }
 
@@ -125,6 +129,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             where: { shop },
             data: { klaviyoApiKey: klaviyoApiKey.trim() === "" ? null : klaviyoApiKey.trim() }
         });
+        await invalidateStoreCache(shop);
         return { success: true, message: "Klaviyo settings saved." };
     }
 
@@ -137,6 +142,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                 mailchimpListId: null
             }
         });
+        await invalidateStoreCache(shop);
         return { success: true, message: "Mailchimp disconnected successfully." };
     }
 
@@ -153,6 +159,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                 mailchimpListId: mailchimpListId.trim() === "" ? null : mailchimpListId.trim()
             }
         });
+        await invalidateStoreCache(shop);
         return { success: true, message: "Mailchimp settings saved." };
     }
 
