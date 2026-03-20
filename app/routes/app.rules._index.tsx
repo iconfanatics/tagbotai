@@ -95,10 +95,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                 syncType: "RULES",
             });
             // Also reset DB syncing flags locally so they don't block old UI
-            await db.store.update({
-                where: { id: store.id },
-                data: { isSyncing: false, syncMessage: null }
-            });
+            try {
+                await db.store.update({
+                    where: { id: store.id },
+                    data: { isSyncing: false, syncMessage: null }
+                });
+            } catch (err: any) {
+                if (!err.message?.includes("no such column")) throw err;
+                console.error("[SYNC_SAFE] Skipping isSyncing reset due to missing DB columns.");
+            }
         }
         return { success: true, message: "Started evaluating historical data. This runs in the background and may take a few minutes." };
     }
