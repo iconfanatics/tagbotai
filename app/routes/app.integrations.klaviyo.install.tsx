@@ -23,8 +23,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     const state = `${shop}:${crypto.randomUUID()}`;
     const clientId = process.env.KLAVIYO_CLIENT_ID;
     
-    // Standardize app URL
-    const appUrl = process.env.SHOPIFY_APP_URL || `https://${new URL(request.url).host}`;
+    const rawAppUrl = process.env.SHOPIFY_APP_URL || `https://${new URL(request.url).host}`;
+    const appUrl = rawAppUrl.replace(/\/$/, "");
     const redirectUri = `${appUrl}/app/integrations/klaviyo/callback`;
     const scope = "accounts:read profiles:read profiles:write";
 

@@ -43,7 +43,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         klaviyoSyncInProgress: store.klaviyoSyncInProgress,
         mailchimpSyncInProgress: store.mailchimpSyncInProgress,
         klaviyoRules,
-        mailchimpRules
+        mailchimpRules,
+        urlError: new URL(request.url).searchParams.get("error"),
+        urlSuccess: new URL(request.url).searchParams.get("success")
     };
 };
 
@@ -195,7 +197,9 @@ export default function Integrations() {
         klaviyoSyncInProgress,
         mailchimpSyncInProgress,
         klaviyoRules,
-        mailchimpRules
+        mailchimpRules,
+        urlError,
+        urlSuccess
     } = useLoaderData<typeof loader>();
 
     const actionData = useActionData<typeof action>();
@@ -294,9 +298,16 @@ export default function Integrations() {
                 </Modal>
 
                 <Layout.Section>
-                    {actionData?.success && (
+                    {(actionData?.success || urlSuccess) && (
                         <Box paddingBlockEnd="400">
-                            <Banner tone="success" title={actionData.message} />
+                            <Banner tone="success" title={actionData?.message || urlSuccess || "Success"} />
+                        </Box>
+                    )}
+                    {urlError && (
+                        <Box paddingBlockEnd="400">
+                            <Banner tone="critical" title="Integration Error">
+                                <Text as="p">{urlError}</Text>
+                            </Banner>
                         </Box>
                     )}
 

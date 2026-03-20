@@ -44,7 +44,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     try {
         const clientId = process.env.KLAVIYO_CLIENT_ID;
         const clientSecret = process.env.KLAVIYO_CLIENT_SECRET;
-        const appUrl = process.env.SHOPIFY_APP_URL || `https://${new URL(request.url).host}`;
+        const rawAppUrl = process.env.SHOPIFY_APP_URL || `https://${new URL(request.url).host}`;
+        const appUrl = rawAppUrl.replace(/\/$/, "");
         const redirectUri = `${appUrl}/app/integrations/klaviyo/callback`;
 
         if (!clientId || !clientSecret) {
