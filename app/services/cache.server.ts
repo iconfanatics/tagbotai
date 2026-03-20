@@ -14,7 +14,7 @@ const REPAIR_COMMANDS = [
     `ALTER TABLE "Store" ADD COLUMN "monthlyCustomerTagCount" INTEGER DEFAULT 0`,
     `ALTER TABLE "Store" ADD COLUMN "monthlyOrderTagCount" INTEGER DEFAULT 0`,
     `ALTER TABLE "Store" ADD COLUMN "monthlyRemovalCount" INTEGER DEFAULT 0`,
-    `ALTER TABLE "Store" ADD COLUMN "usageResetDate" DATETIME DEFAULT CURRENT_TIMESTAMP`
+    `ALTER TABLE "Store" ADD COLUMN "usageResetDate" DATETIME DEFAULT NULL`
 ];
 
 async function attemptRepair() {
@@ -28,7 +28,7 @@ async function attemptRepair() {
             { name: "monthlyCustomerTagCount", sql: `ALTER TABLE "Store" ADD COLUMN "monthlyCustomerTagCount" INTEGER DEFAULT 0` },
             { name: "monthlyOrderTagCount", sql: `ALTER TABLE "Store" ADD COLUMN "monthlyOrderTagCount" INTEGER DEFAULT 0` },
             { name: "monthlyRemovalCount", sql: `ALTER TABLE "Store" ADD COLUMN "monthlyRemovalCount" INTEGER DEFAULT 0` },
-            { name: "usageResetDate", sql: `ALTER TABLE "Store" ADD COLUMN "usageResetDate" DATETIME DEFAULT CURRENT_TIMESTAMP` }
+            { name: "usageResetDate", sql: `ALTER TABLE "Store" ADD COLUMN "usageResetDate" DATETIME DEFAULT NULL` }
         ];
 
         for (const repair of repairs) {
@@ -37,6 +37,11 @@ async function attemptRepair() {
                     console.log(`[DB_REPAIR] Adding missing column: ${repair.name}`);
                     // @ts-ignore
                     await db.$executeRawUnsafe(repair.sql);
+                    // For usageResetDate, set NULL values to now since CURRENT_TIMESTAMP can't be a default
+                    if (repair.name === "usageResetDate") {
+                        // @ts-ignore
+                        await db.$executeRawUnsafe(`UPDATE "Store" SET "usageResetDate" = datetime('now') WHERE "usageResetDate" IS NULL`);
+                    }
                     console.log(`[DB_REPAIR] SUCCESS: ${repair.name}`);
                 } catch (e: any) {
                     console.error(`[DB_REPAIR] FAILED: ${repair.name} - ${e.message}`);
