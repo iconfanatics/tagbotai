@@ -24,7 +24,7 @@ export async function sendWelcomeEmail(shopName: string, recipientEmail: string)
                 <li><strong>Automate Your Workflows:</strong> Create rules to auto-tag Big Spenders, Loyalists, and Window Shoppers instantly when they buy.</li>
                 <li><strong>Export and Target:</strong> Push your segmented lists directly into your email platform for highly targeted campaigns.</li>
             </ul>
-            <p>Need help setting up your first rule? <a href="mailto:support@tagbotai.com" style="color: #00A0AC; font-weight: bold;">Reply to this email</a> and our human support team will jump in.</p>
+            <p>Need help setting up your first rule? <a href="mailto:tagbotai@iconfanatics.com" style="color: #00A0AC; font-weight: bold;">Reply to this email</a> and our human support team will jump in.</p>
             <br/>
             <p>To your growth,</p>
             <p><strong>The TagBot AI Team</strong></p>

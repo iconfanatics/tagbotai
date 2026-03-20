@@ -32,7 +32,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     try {
         // Send email using our existing Resend integration
         await sendEmail(
-            "support@tagbot.ai", // Sent TO the app owner
+            "tagbotai@iconfanatics.com", // Sent TO the app owner
             `[TagBot Support] ${subject} - ${session.shop}`,
             `
             <h2>New Support Request</h2>
@@ -46,7 +46,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         );
         return { success: true, message: "Your support request has been sent! We will get back to you shortly." };
     } catch (error) {
-        return { success: false, error: "Failed to send message. Please email support@tagbot.ai directly." };
+        return { success: false, error: "Failed to send message. Please email tagbotai@iconfanatics.com directly." };
     }
 };
 
@@ -154,7 +154,7 @@ export default function SupportPage() {
                                     </Box>
                                     <BlockStack gap="100">
                                         <Text as="p" fontWeight="bold">Email Support</Text>
-                                        <Text as="p" tone="subdued">support@tagbot.ai</Text>
+                                        <Text as="p" tone="subdued">tagbotai@iconfanatics.com</Text>
                                     </BlockStack>
                                 </InlineStack>
                                 

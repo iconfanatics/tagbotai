@@ -65,7 +65,7 @@ export default function PrivacyPolicy() {
                     <p>
                         If you have any questions about this Privacy Policy, please contact our support team at:
                         <br /><br />
-                        <strong>Email:</strong> support@tagbot.ai
+                        <strong>Email:</strong> tagbotai@iconfanatics.com
                     </p>
                 </div>
             </BlockStack>

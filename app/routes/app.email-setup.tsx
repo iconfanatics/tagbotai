@@ -23,7 +23,7 @@ export default function EmailSetupGuide() {
                                     <Box paddingBlockStart="200">
                                         <Text as="p" tone="subdued">
                                             When merchants install TagBot AI, building trust immediately is critical. 
-                                            By setting up <strong>Resend</strong> with your custom domain (e.g., <Text as="span" fontWeight="bold">hello@tagbot.ai</Text>), 
+                                            By setting up <strong>Resend</strong> with your custom domain (e.g., <Text as="span" fontWeight="bold">tagbotai@iconfanatics.com</Text>), 
                                             you can automatically dispatch professional welcome emails and automated upgrade sequences without them landing in the merchant's spam folder.
                                         </Text>
                                     </Box>

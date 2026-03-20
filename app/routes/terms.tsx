@@ -58,7 +58,7 @@ export default function TermsOfService() {
                     <p>
                         If you have any questions regarding these Terms of Service, please contact us at:
                         <br /><br />
-                        <strong>Email:</strong> support@tagbot.ai
+                        <strong>Email:</strong> tagbotai@iconfanatics.com
                     </p>
                 </div>
             </BlockStack>
