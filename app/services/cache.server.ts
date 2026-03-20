@@ -10,6 +10,26 @@ const CACHE_TTL = 10 * 60 * 1000; // 10 minutes
  * Why: High-frequency webhooks (orders/paid, customers/create) and loaders repetitively query 
  * the Store configs (like Billing Plan, API keys). Caching this reduces DB load significantly.
  */
+const REPAIR_COMMANDS = [
+    `ALTER TABLE "Store" ADD COLUMN "monthlyCustomerTagCount" INTEGER DEFAULT 0`,
+    `ALTER TABLE "Store" ADD COLUMN "monthlyOrderTagCount" INTEGER DEFAULT 0`,
+    `ALTER TABLE "Store" ADD COLUMN "monthlyRemovalCount" INTEGER DEFAULT 0`,
+    `ALTER TABLE "Store" ADD COLUMN "usageResetDate" DATETIME DEFAULT CURRENT_TIMESTAMP`
+];
+
+async function attemptRepair() {
+    console.log("[DB_REPAIR] Starting automatic schema repair...");
+    for (const cmd of REPAIR_COMMANDS) {
+        try {
+            // @ts-ignore
+            await db.$executeRawUnsafe(cmd);
+            console.log(`[DB_REPAIR] SUCCESS: ${cmd}`);
+        } catch (e: any) {
+            console.log(`[DB_REPAIR] SKIPPED/FAILED: ${cmd} - ${e.message}`);
+        }
+    }
+}
+
 export async function getCachedStore(shop: string): Promise<Store | null> {
     const now = Date.now();
     const cached = cacheByShop.get(shop);
@@ -22,14 +42,21 @@ export async function getCachedStore(shop: string): Promise<Store | null> {
     try {
         store = await db.store.findUnique({ where: { shop } });
     } catch (err: any) {
-        // If the DB is missing columns (drift), try a survival fetch
         if (err.message?.includes("no such column")) {
-            console.error(`[DB_DRIFT] Detected missing columns for shop ${shop}. Falling back to limited fetch.`);
-            // @ts-ignore - Fetching only core fields to avoid crash
-            store = await db.store.findUnique({
-                where: { shop },
-                select: { id: true, shop: true, isActive: true, planName: true, createdAt: true, updatedAt: true }
-            }) as any;
+            console.error(`[DB_DRIFT] Detected missing columns for shop ${shop}. Attempting auto-repair.`);
+            await attemptRepair();
+            
+            // Try one more time with full fetch
+            try {
+                store = await db.store.findUnique({ where: { shop } });
+            } catch (retryErr) {
+                // Last ditch: survival fetch
+                // @ts-ignore
+                store = await db.store.findUnique({
+                    where: { shop },
+                    select: { id: true, shop: true, isActive: true, planName: true, createdAt: true, updatedAt: true }
+                }) as any;
+            }
         } else {
             throw err;
         }
