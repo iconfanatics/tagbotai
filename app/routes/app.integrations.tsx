@@ -6,6 +6,7 @@ import { Page, Layout, Card, BlockStack, Text, InlineStack, Banner, Button, Box,
 import { AppsIcon, CheckCircleIcon, XSmallIcon, SaveIcon, LinkIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
+import { getCachedStore, invalidateStoreCache } from "../services/cache.server";
 import { enqueueMarketingBulkSyncJob } from "../services/queue.server";
 import { generatePKCE, getKlaviyoAuthUrl, klaviyoSessionStorage } from "../services/klaviyo.server";
 import { redirect } from "react-router";
@@ -14,7 +15,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     const { session } = await authenticate.admin(request);
     const shop = session.shop;
 
-    const store = await db.store.findUnique({ where: { shop } });
+    const store = await getCachedStore(shop);
 
     if (!store) {
         throw new Response("Store not found", { status: 404 });
@@ -92,7 +93,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
 
     if (actionType === "toggle_klaviyo") {
-        const store = await db.store.findUnique({ where: { shop } });
+        const store = await getCachedStore(shop);
         await db.store.update({
             where: { shop },
             data: { klaviyoIsActive: !store?.klaviyoIsActive }

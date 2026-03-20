@@ -1,6 +1,7 @@
 import { unauthenticated } from "../shopify.server";
 import db from "../db.server";
 import { calculateCustomerTags } from "./rule.server";
+import { getCachedStoreById } from "./cache.server";
 import { manageCustomerTags, manageOrderTags, sendVipDiscount } from "./tags.server";
 
 interface SyncJobPayload {
@@ -266,7 +267,7 @@ async function processSyncJob(payload: SyncJobPayload) {
     try {
         const { admin } = await unauthenticated.admin(shop);
 
-        const store = await db.store.findUnique({ where: { id: storeId } });
+        const store = await getCachedStoreById(storeId);
         const isFree = store?.planName === "Free" || store?.planName === "";
 
         let customersToSync = payload.customersToSync;
@@ -491,7 +492,7 @@ async function processMarketingBulkSyncJob(payload: { shop: string, storeId: str
     console.log(`[QUEUE_WORKER] Started ${platform} bulk sync job for shop: ${shop}`);
 
     try {
-        const store = await db.store.findUnique({ where: { id: storeId } });
+        const store = await getCachedStoreById(storeId);
         if (!store) throw new Error("Store not found");
 
         const isKlaviyo = platform === "klaviyo";
