@@ -143,7 +143,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
 
       const [
-        [tagsApplied, vips, atRisk, returning, newCust, total, recentLogs],
+        [tagsApplied, vips, atRisk, returning, newCust, total, recentLogs, totalOrdersAgg],
         churningCustomers,
         allRules,
       ] = await Promise.all([
@@ -164,6 +164,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           db.customer.count({ where: { storeId: store.id, orderCount: { lte: 1 }, NOT: { tags: { contains: "VIP" } } } }),
           db.customer.count({ where: { storeId: store.id } }),
           db.activityLog.findMany({ where: { storeId: store.id }, orderBy: { createdAt: "desc" }, take: 10, include: { customer: true, rule: true } }),
+          db.customer.aggregate({ _sum: { orderCount: true }, where: { storeId: store.id } }),
         ]),
         isProOrElite
           ? db.customer.findMany({ where: { storeId: store.id, orderCount: { gt: 3 }, lastOrderDate: { lt: sixtyDaysAgo } }, take: 5, orderBy: { lastOrderDate: "asc" } })
@@ -185,8 +186,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       }
       const topOrderTags = Object.entries(topOrderTagMap).map(([tag, count]) => ({ tag, count })).sort((a, b) => b.count - a.count).slice(0, 6);
 
+      const totalOrders = totalOrdersAgg?._sum?.orderCount || 0;
+
       return {
-        metrics: [tagsApplied, vips, atRisk, returning, newCust, total, recentLogs],
+        metrics: [tagsApplied, vips, atRisk, returning, newCust, total, recentLogs, totalOrders],
         churningCustomers,
         orderRuleCount: orderRules.length,
         orderTagsFired,
@@ -435,7 +438,7 @@ export default function Index() {
           <Await resolve={dashboardDataPromise} errorElement={<DashboardSkeleton />}>
             {(resolvedData) => {
               const { metrics, churningCustomers, orderRuleCount, orderTagsFired, topOrderTags } = resolvedData as any;
-              const [tagsAppliedCount, activeVipsCount, atRiskCount, returningCount, newCount, totalCustomers, recentLogs] = metrics;
+              const [tagsAppliedCount, activeVipsCount, atRiskCount, returningCount, newCount, totalCustomers, recentLogs, totalOrders] = metrics;
 
               // ── Chart data ────────────────────────────────────
               const segmentChartData = [
@@ -543,21 +546,7 @@ export default function Index() {
                         </Card>
                       </Grid.Cell>
                       <Grid.Cell columnSpan={{ xs: 6, sm: 3, md: 3, lg: 3, xl: 3 }}>
-                        <Card roundedAbove="sm">
-                          <Box padding="400">
-                            <BlockStack gap="200">
-                              <Text variant="bodySm" as="span" tone="subdued" fontWeight="medium">Quick Actions</Text>
-                              <InlineStack gap="200" wrap>
-                                <span className="tour-new-rule-btn">
-                                  <Button size="micro" icon={PlusIcon} onClick={() => navigate("/app/rules/new")}>New Order Rule</Button>
-                                </span>
-                                <span className="tour-view-rules-btn">
-                                  <Button size="micro" icon={ViewIcon} onClick={() => navigate("/app/rules")} variant="plain">View All</Button>
-                                </span>
-                              </InlineStack>
-                            </BlockStack>
-                          </Box>
-                        </Card>
+                        <KpiCard label="Total Orders" value={totalOrders} icon={OrderIcon} />
                       </Grid.Cell>
                     </Grid>
                   </Layout.Section>
