@@ -63,12 +63,18 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             try {
                 await manageCustomerTags(admin, store.id, customerId, addTagNames, removeTagNames);
 
+                const uniqueCustomerTags = new Set<string>();
                 for (const item of tagsToAdd) {
+                    if (uniqueCustomerTags.has(item.tag)) continue;
+                    uniqueCustomerTags.add(item.tag);
                     await db.activityLog.create({
                         data: { storeId: store.id, customerId, action: "TAG_ADDED", tagContext: item.tag, reason: item.reason }
                     });
                 }
+                const uniqueCustomerRemovals = new Set<string>();
                 for (const item of tagsToRemove) {
+                    if (uniqueCustomerRemovals.has(item.tag)) continue;
+                    uniqueCustomerRemovals.add(item.tag);
                     await db.activityLog.create({
                         data: { storeId: store.id, customerId, action: "TAG_REMOVED", tagContext: item.tag, reason: item.reason }
                     });

@@ -231,17 +231,23 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                 }
 
 
+                const uniqueCustomerTags = new Set<string>();
                 // Log the actions for Customer tags
                 for (const item of tagsToAddLog) {
                     if (item.targetEntity === "order") continue; // We handle orders separately below
+                    if (uniqueCustomerTags.has(item.tag)) continue;
+                    uniqueCustomerTags.add(item.tag);
                     await db.activityLog.create({
                         data: { storeId: store.id, customerId, action: "TAG_ADDED", tagContext: item.tag, reason: item.reason }
                     });
                 }
                 
+                const uniqueOrderTags = new Set<string>();
                 // Log the actions for Order tags
                 for (const item of tagsToAddLog) {
                     if (item.targetEntity !== "order") continue;
+                    if (uniqueOrderTags.has(item.tag)) continue;
+                    uniqueOrderTags.add(item.tag);
                     await db.activityLog.create({
                         data: { storeId: store.id, customerId, action: "TAG_ADDED", tagContext: item.tag, reason: item.reason }
                     });
