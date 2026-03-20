@@ -62,7 +62,7 @@ const DashboardSkeleton = () => (
 // ─── Loader ───────────────────────────────────────────────────────────────────
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { session, admin } = await authenticate.admin(request);
   const store = await getCachedStore(session.shop);
 
   if (!store) {
@@ -143,9 +143,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
 
       const [
-        [tagsApplied, vips, atRisk, returning, newCust, total, recentLogs, totalOrdersAgg],
+        [tagsApplied, vips, atRisk, returning, newCust, total, recentLogs],
         churningCustomers,
         allRules,
+        orderCountRes
       ] = await Promise.all([
         Promise.all([
           db.activityLog.count({
@@ -164,19 +165,19 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           db.customer.count({ where: { storeId: store.id, orderCount: { lte: 1 }, NOT: { tags: { contains: "VIP" } } } }),
           db.customer.count({ where: { storeId: store.id } }),
           db.activityLog.findMany({ where: { storeId: store.id }, orderBy: { createdAt: "desc" }, take: 10, include: { customer: true, rule: true } }),
-          db.customer.aggregate({ _sum: { orderCount: true }, where: { storeId: store.id } }),
         ]),
         isProOrElite
           ? db.customer.findMany({ where: { storeId: store.id, orderCount: { gt: 3 }, lastOrderDate: { lt: sixtyDaysAgo } }, take: 5, orderBy: { lastOrderDate: "asc" } })
           : Promise.resolve([]),
         db.rule.findMany({ where: { storeId: store.id } }),
+        (admin as any).rest.get({ path: 'orders/count.json', query: { status: 'any' } }).catch(() => null)
       ]);
 
-      const orderRules = allRules.filter(r => {
+      const orderRules = allRules.filter((r: any) => {
         try { return JSON.parse(r.conditions).some((c: any) => c.ruleCategory === "order"); }
         catch { return false; }
       });
-      const orderTagNames = orderRules.map(r => r.targetTag);
+      const orderTagNames = orderRules.map((r: any) => r.targetTag);
       let orderTagsFired = 0;
       const topOrderTagMap: Record<string, number> = {};
       if (orderTagNames.length > 0) {
@@ -186,7 +187,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       }
       const topOrderTags = Object.entries(topOrderTagMap).map(([tag, count]) => ({ tag, count })).sort((a, b) => b.count - a.count).slice(0, 6);
 
-      const totalOrders = totalOrdersAgg?._sum?.orderCount || 0;
+      let totalOrders = 0;
+      if (orderCountRes) {
+        const orderCountData = await orderCountRes.json();
+        totalOrders = orderCountData.count || 0;
+      }
 
       return {
         metrics: [tagsApplied, vips, atRisk, returning, newCust, total, recentLogs, totalOrders],
