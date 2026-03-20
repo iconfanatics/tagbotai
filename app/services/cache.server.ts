@@ -83,12 +83,18 @@ export async function getCachedStoreById(id: string): Promise<Store | null> {
         store = await db.store.findUnique({ where: { id } });
     } catch (err: any) {
         if (err.message?.includes("no such column")) {
-            console.error(`[DB_DRIFT] Detected missing columns for ID ${id}. Falling back to limited fetch.`);
-            // @ts-ignore
-            store = await db.store.findUnique({
-                where: { id },
-                select: { id: true, shop: true, isActive: true, planName: true, createdAt: true, updatedAt: true }
-            }) as any;
+            console.error(`[DB_DRIFT] Detected missing columns for ID ${id}. Attempting auto-repair.`);
+            await attemptRepair();
+            
+            try {
+                store = await db.store.findUnique({ where: { id } });
+            } catch (retryErr) {
+                // @ts-ignore
+                store = await db.store.findUnique({
+                    where: { id },
+                    select: { id: true, shop: true, isActive: true, planName: true, createdAt: true, updatedAt: true }
+                }) as any;
+            }
         } else {
             throw err;
         }
