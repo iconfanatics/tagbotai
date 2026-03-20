@@ -55,7 +55,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
             shop: store.shop,
             planName: store.planName || "Free",
             isActive: store.isActive,
-            monthlyTagCount: store.monthlyTagCount,
+            monthlyTagCount: store.monthlyCustomerTagCount,
             totalCustomers: totalCustomers,
             totalTagsApplied: totalTagsApplied,
             createdAt: new Date(store.createdAt).toLocaleDateString()
@@ -81,15 +81,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const intent = formData.get("intent") as string;
 
     if (storeId && intent === "upgrade_pro") {
-        await db.store.update({ where: { id: storeId }, data: { planName: "Pro Plan", monthlyTagCount: 0 } });
+        await db.store.update({ where: { id: storeId }, data: { planName: "Pro Plan", monthlyCustomerTagCount: 0, monthlyOrderTagCount: 0, monthlyRemovalCount: 0 } });
         return { success: true };
     }
     if (storeId && intent === "upgrade_elite") {
-        await db.store.update({ where: { id: storeId }, data: { planName: "Elite Plan", monthlyTagCount: 0 } });
+        await db.store.update({ where: { id: storeId }, data: { planName: "Elite Plan", monthlyCustomerTagCount: 0, monthlyOrderTagCount: 0, monthlyRemovalCount: 0 } });
         return { success: true };
     }
     if (storeId && intent === "downgrade_free") {
-        await db.store.update({ where: { id: storeId }, data: { planName: "Free", monthlyTagCount: 0 } });
+        await db.store.update({ where: { id: storeId }, data: { planName: "Free", monthlyCustomerTagCount: 0, monthlyOrderTagCount: 0, monthlyRemovalCount: 0 } });
         return { success: true };
     }
 

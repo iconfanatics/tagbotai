@@ -41,14 +41,14 @@ export async function manageCustomerTags(
       else if (plan.includes("growth")) limit = 1000;
       else limit = Infinity; // Pro, Elite
 
-      if (store.monthlyTagCount + tagsToAdd.length > limit) {
+      if (store.monthlyCustomerTagCount + tagsToAdd.length > limit) {
         console.log(`Store ${store.shop} hit tag limit (${limit}). Skipping ${tagsToAdd.length} tag add.`);
         allowedToTag = false;
         tagsToAdd = [];
       } else {
         await db.store.update({
           where: { id: storeId },
-          data: { monthlyTagCount: { increment: tagsToAdd.length } }
+          data: { monthlyCustomerTagCount: { increment: tagsToAdd.length } }
         });
       }
     }
@@ -234,14 +234,14 @@ export async function manageOrderTags(
       else if (plan.includes("growth")) limit = 1000;
       else limit = Infinity;
 
-      if (store.monthlyTagCount + tagsToAdd.length > limit) {
+      if (store.monthlyOrderTagCount + tagsToAdd.length > limit) {
         console.warn(`[LIMIT_HIT] Store ${store.shop} (Plan: ${store.planName}) reached tag limit of ${limit}. Cannot add tags: ${tagsToAdd.join(", ")} to order ${orderId}.`);
         allowedToTag = false;
         tagsToAdd = [];
       } else {
         await db.store.update({
           where: { id: storeId },
-          data: { monthlyTagCount: { increment: tagsToAdd.length } }
+          data: { monthlyOrderTagCount: { increment: tagsToAdd.length } }
         });
       }
     }

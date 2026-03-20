@@ -140,7 +140,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         let allOrderGids: string[] = [];
 
         // 0. Pre-check usage capacity
-        const affectedCount = parseInt(form.get("count") || "0"); // We'll pass the count from the UI or fetch first
+        const affectedCount = parseInt(String(form.get("count") || "0")); // We'll pass the count from the UI or fetch first
         // For simplicity and to avoid over-counting, we'll fetch and then check below.
 
         // 1. Fetch all orders with this tag
