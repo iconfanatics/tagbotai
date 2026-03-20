@@ -6,6 +6,7 @@ import { manageCustomerTags, manageOrderTags, sendVipDiscount } from "../service
 import { getCachedStore } from "../services/cache.server";
 import { analyzeSentiment } from "../services/ai.server";
 import { evaluateOrderRules } from "../services/order-rules.server";
+import { incrementUsage } from "../services/usage.server";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
     const { admin, shop, payload, topic } = await authenticate.webhook(request);
@@ -194,11 +195,23 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         if (addTagNames.length > 0 || removeTagNames.length > 0 || actualOrderTagsToAdd.length > 0) {
             try {
                 if (addTagNames.length > 0 || removeTagNames.length > 0) {
-                    await manageCustomerTags(admin, store.id, customerId, addTagNames, removeTagNames);
+                    // Check and increment usage for customer tags
+                    const allowedAdd = addTagNames.length > 0 ? await incrementUsage(store.shop, "customer_tag", addTagNames.length) : true;
+                    const allowedRemove = removeTagNames.length > 0 ? await incrementUsage(store.shop, "removal", removeTagNames.length) : true;
+
+                    if (allowedAdd || allowedRemove) {
+                        // If one fails but other succeeds, we proceed with both but technically 
+                        // the service handles the increment. If both fail, we skip.
+                        await manageCustomerTags(admin, store.id, customerId, allowedAdd ? addTagNames : [], allowedRemove ? removeTagNames : []);
+                    }
                 }
                 
                 if (actualOrderTagsToAdd.length > 0) {
-                    await manageOrderTags(admin, store.id, order.admin_graphql_api_id.split('/').pop() || order.id.toString(), customerId, actualOrderTagsToAdd, []);
+                    // Check and increment usage for order tags
+                    const allowedOrderTag = await incrementUsage(store.shop, "order_tag", actualOrderTagsToAdd.length);
+                    if (allowedOrderTag) {
+                        await manageOrderTags(admin, store.id, order.admin_graphql_api_id.split('/').pop() || order.id.toString(), customerId, actualOrderTagsToAdd, []);
+                    }
                 }
 
                 // IMPORTANT: Manually update the local Prisma customer cache with the order-based tags

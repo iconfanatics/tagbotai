@@ -15,6 +15,7 @@ interface SyncJobPayload {
 
 import { evaluateOrderRules } from "./order-rules.server";
 import { fetchAllCustomers, fetchAllOrders } from "./shopify-helpers.server";
+import { incrementUsage } from "./usage.server";
 
 const BATCH_SIZE = 5;  // Process 5 customers in parallel at a time
 
@@ -62,16 +63,21 @@ export async function processOneCustomer(
         const removeTagNames = payload.tagsToRemove || [];
 
         if (addTagNames.length > 0 || removeTagNames.length > 0) {
-            await manageCustomerTags(admin, storeId, customerId, addTagNames, removeTagNames);
-            for (const tag of addTagNames) {
-                await db.activityLog.create({
-                    data: { storeId, customerId, action: "TAG_ADDED", tagContext: tag, reason: "Manual Tag Cleanup (Merge)" }
-                });
-            }
-            for (const tag of removeTagNames) {
-                await db.activityLog.create({
-                    data: { storeId, customerId, action: "TAG_REMOVED", tagContext: tag, reason: "Manual Tag Cleanup" }
-                });
+            const allowedAdd = addTagNames.length > 0 ? await incrementUsage(payload.shop, "customer_tag", addTagNames.length) : true;
+            const allowedRemove = removeTagNames.length > 0 ? await incrementUsage(payload.shop, "removal", removeTagNames.length) : true;
+
+            if (allowedAdd || allowedRemove) {
+                await manageCustomerTags(admin, storeId, customerId, allowedAdd ? addTagNames : [], allowedRemove ? removeTagNames : []);
+                for (const tag of (allowedAdd ? addTagNames : [])) {
+                    await db.activityLog.create({
+                        data: { storeId, customerId, action: "TAG_ADDED", tagContext: tag, reason: "Manual Tag Cleanup (Merge)" }
+                    });
+                }
+                for (const tag of (allowedRemove ? removeTagNames : [])) {
+                    await db.activityLog.create({
+                        data: { storeId, customerId, action: "TAG_REMOVED", tagContext: tag, reason: "Manual Tag Cleanup" }
+                    });
+                }
             }
         }
     } else if (activeRules.length > 0) {
@@ -187,7 +193,12 @@ export async function processOneCustomer(
         if (addTagNames.length > 0 || removeTagNames.length > 0 || actualOrderTagsToAdd.length > 0) {
             
             if (addTagNames.length > 0 || removeTagNames.length > 0) {
-                await manageCustomerTags(admin, storeId, customerId, addTagNames, removeTagNames, true);
+                const allowedAdd = addTagNames.length > 0 ? await incrementUsage(payload.shop, "customer_tag", addTagNames.length) : true;
+                const allowedRemove = removeTagNames.length > 0 ? await incrementUsage(payload.shop, "removal", removeTagNames.length) : true;
+
+                if (allowedAdd || allowedRemove) {
+                    await manageCustomerTags(admin, storeId, customerId, allowedAdd ? addTagNames : [], allowedRemove ? removeTagNames : [], true);
+                }
             }
 
             // Sync tags exactly to their historical orders individually
@@ -200,10 +211,12 @@ export async function processOneCustomer(
                 }
 
                 for (const [orderGid, tags] of Object.entries(tagsByOrder)) {
-                    // Extract ID number from gid://shopify/Order/12345
                     const cleanOrderId = orderGid.split('/').pop() || "";
                     if (cleanOrderId) {
-                        await manageOrderTags(admin, storeId, cleanOrderId, customerId, tags, [], true);
+                        const allowed = await incrementUsage(payload.shop, "order_tag", tags.length);
+                        if (allowed) {
+                            await manageOrderTags(admin, storeId, cleanOrderId, customerId, tags, [], true);
+                        }
                     }
                 }
             }
@@ -389,6 +402,8 @@ async function processSyncJob(payload: SyncJobPayload) {
                         ordersFailed++;
                         console.error(`[ORDER_SYNC] FAILED to tag order ${o.id}:`, JSON.stringify(userErrors));
                     } else {
+                        // Increment usage for order tags
+                        await incrementUsage(shop, "order_tag", tagsToApply.length);
                         ordersTagged++;
                         console.log(`[ORDER_SYNC] ✓ Tagged order ${o.id} with ${tagsToApply.join(", ")}`);
 

@@ -8,6 +8,7 @@ import { MagicIcon, DeleteIcon, ReplaceIcon, OrderIcon, HashtagIcon } from "@sho
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { getCachedStore } from "../services/cache.server";
+import { incrementUsage, canPerformActions } from "../services/usage.server";
 import { useState } from "react";
 
 // ─── Loader ───────────────────────────────────────────────────────────────────
@@ -116,9 +117,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const store = await getCachedStore(session.shop);
     if (!store) return { success: false, message: "Store not found." };
 
-    if (store.planName === "Free") {
-        return { success: false, message: "Smart Cleanup requires a Growth, Pro, or Elite plan." };
-    }
+    // We no longer hard-gate Free users from the backend action, 
+    // as we now enforce granular usage limits below.
 
     const form = await request.formData();
     const intent = form.get("intent") as string;
@@ -138,6 +138,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         let hasNextPage = true;
         let cursor: string | null = null;
         let allOrderGids: string[] = [];
+
+        // 0. Pre-check usage capacity
+        const affectedCount = parseInt(form.get("count") || "0"); // We'll pass the count from the UI or fetch first
+        // For simplicity and to avoid over-counting, we'll fetch and then check below.
 
         // 1. Fetch all orders with this tag
         while (hasNextPage && allOrderGids.length < MAX_ORDERS) {
@@ -169,7 +173,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         // 2. Perform the mutations
         for (const orderGid of allOrderGids) {
             try {
-                // First remove the old tag
+                // First remove the old tag (Usage: removal)
+                const allowedRemove = await incrementUsage(store.shop, "removal", 1);
+                if (!allowedRemove) {
+                    return { success: false, message: `Action failed: Monthly removal limit reached. Please upgrade to a higher plan for more bulk actions.`, count: processedCount };
+                }
+
                 await admin.graphql(`
                     #graphql
                     mutation RemoveOrderTag($id: ID!, $tags: [String!]!) {
@@ -177,14 +186,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                     }
                 `, { variables: { id: orderGid, tags: [targetTag] } });
 
-                // If merging, add the new tag
+                // If merging, add the new tag (Usage: order_tag)
                 if (intent === "merge" && destinationTag) {
-                    await admin.graphql(`
-                        #graphql
-                        mutation AddOrderTag($id: ID!, $tags: [String!]!) {
-                            tagsAdd(id: $id, tags: $tags) { userErrors { field message } }
-                        }
-                    `, { variables: { id: orderGid, tags: [destinationTag] } });
+                    const allowedAdd = await incrementUsage(store.shop, "order_tag", 1);
+                    if (allowedAdd) {
+                        await admin.graphql(`
+                            #graphql
+                            mutation AddOrderTag($id: ID!, $tags: [String!]!) {
+                                tagsAdd(id: $id, tags: $tags) { userErrors { field message } }
+                            }
+                        `, { variables: { id: orderGid, tags: [destinationTag] } });
+                    }
                 }
 
                 // Delete the ActivityLog cache proxy for this so the UI updates
@@ -238,8 +250,19 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
                 // Compute new tag list
                 let newTags = currentTags.filter((t: string) => t !== targetTag);
+                
+                // Track removal usage
+                const allowedRemove = await incrementUsage(store.shop, "removal", 1);
+                if (!allowedRemove) {
+                    return { success: false, message: `Action failed: Monthly removal limit reached. Please upgrade to a higher plan for more bulk actions.`, count: processedCount };
+                }
+
                 if (intent === "merge" && destinationTag && !newTags.includes(destinationTag)) {
-                    newTags.push(destinationTag);
+                    // Track addition usage
+                    const allowedAdd = await incrementUsage(store.shop, "customer_tag", 1);
+                    if (allowedAdd) {
+                        newTags.push(destinationTag);
+                    }
                 }
 
                 // Push to Shopify
@@ -366,14 +389,11 @@ export default function SmartCleanup() {
             backAction={{ content: "Dashboard", url: "/app" }}
         >
             <Layout>
-                {/* Premium gate */}
+                {/* Usage Warning for Free Users */}
                 {isFree && (
                     <Layout.Section>
-                        <Banner tone="critical" title="Premium Feature">
-                            <BlockStack gap="200">
-                                <Text as="p">Smart Cleanup requires a Growth, Pro, or Elite plan.</Text>
-                                <Button tone="critical" onClick={() => navigate("/app/pricing")}>Upgrade</Button>
-                            </BlockStack>
+                        <Banner tone="info" title="Free Plan Usage">
+                            <Text as="p">On the Free plan, you can perform up to 100 tag removals per month. For unlimited bulk actions, please upgrade to Pro.</Text>
                         </Banner>
                     </Layout.Section>
                 )}

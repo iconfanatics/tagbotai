@@ -42,7 +42,10 @@ model Store {
   shop                  String        @unique
   isActive              Boolean       @default(true)
   planName              String        @default("Free") // Free, Growth, Pro, Elite
-  monthlyTagCount       Int           @default(0)
+  monthlyCustomerTagCount Int         @default(0)
+  monthlyOrderTagCount    Int         @default(0)
+  monthlyRemovalCount     Int         @default(0)
+  usageResetDate        DateTime      @default(now())
   syncTagsToNotes       Boolean       @default(false)
   enableSentimentAnalysis Boolean     @default(false)
   isSyncing             Boolean       @default(false)

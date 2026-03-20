@@ -5,6 +5,7 @@ import { calculateCustomerTags } from "../services/rule.server";
 import { manageCustomerTags, manageOrderTags } from "../services/tags.server";
 import { getCachedStore } from "../services/cache.server";
 import { evaluateOrderRules } from "../services/order-rules.server";
+import { incrementUsage } from "../services/usage.server";
 
 /**
  * orders/create webhook
@@ -90,12 +91,18 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     if (addTagNames.length > 0 || actualOrderTagsToAdd.length > 0) {
         try {
             if (addTagNames.length > 0) {
-                await manageCustomerTags(admin, store.id, customerId, addTagNames, []);
+                const allowedAdd = await incrementUsage(store.shop, "customer_tag", addTagNames.length);
+                if (allowedAdd) {
+                    await manageCustomerTags(admin, store.id, customerId, addTagNames, []);
+                }
             }
 
             if (actualOrderTagsToAdd.length > 0) {
-                const orderId = order.admin_graphql_api_id ? order.admin_graphql_api_id.split('/').pop() : order.id.toString();
-                await manageOrderTags(admin, store.id, orderId, customerId, actualOrderTagsToAdd, []);
+                const allowedOrderTag = await incrementUsage(store.shop, "order_tag", actualOrderTagsToAdd.length);
+                if (allowedOrderTag) {
+                    const orderId = order.admin_graphql_api_id ? order.admin_graphql_api_id.split('/').pop() : order.id.toString();
+                    await manageOrderTags(admin, store.id, orderId, customerId, actualOrderTagsToAdd, []);
+                }
             }
 
             for (const item of tagsToAddLog) {
