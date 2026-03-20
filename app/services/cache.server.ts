@@ -18,7 +18,22 @@ export async function getCachedStore(shop: string): Promise<Store | null> {
         return cached.data;
     }
 
-    const store = await db.store.findUnique({ where: { shop } });
+    let store: Store | null = null;
+    try {
+        store = await db.store.findUnique({ where: { shop } });
+    } catch (err: any) {
+        // If the DB is missing columns (drift), try a survival fetch
+        if (err.message?.includes("no such column")) {
+            console.error(`[DB_DRIFT] Detected missing columns for shop ${shop}. Falling back to limited fetch.`);
+            // @ts-ignore - Fetching only core fields to avoid crash
+            store = await db.store.findUnique({
+                where: { shop },
+                select: { id: true, shop: true, isActive: true, planName: true, createdAt: true, updatedAt: true }
+            }) as any;
+        } else {
+            throw err;
+        }
+    }
 
     if (store) {
         cacheByShop.set(shop, { data: store, expiry: now + CACHE_TTL });
@@ -36,7 +51,21 @@ export async function getCachedStoreById(id: string): Promise<Store | null> {
         return cached.data;
     }
 
-    const store = await db.store.findUnique({ where: { id } });
+    let store: Store | null = null;
+    try {
+        store = await db.store.findUnique({ where: { id } });
+    } catch (err: any) {
+        if (err.message?.includes("no such column")) {
+            console.error(`[DB_DRIFT] Detected missing columns for ID ${id}. Falling back to limited fetch.`);
+            // @ts-ignore
+            store = await db.store.findUnique({
+                where: { id },
+                select: { id: true, shop: true, isActive: true, planName: true, createdAt: true, updatedAt: true }
+            }) as any;
+        } else {
+            throw err;
+        }
+    }
 
     if (store) {
         cacheById.set(id, { data: store, expiry: now + CACHE_TTL });
