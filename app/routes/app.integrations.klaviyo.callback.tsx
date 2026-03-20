@@ -2,6 +2,7 @@ import { type LoaderFunctionArgs, redirect } from "react-router";
 import db from "../db.server";
 import { authenticate } from "../shopify.server";
 import { exchangeKlaviyoCodeForToken, klaviyoSessionStorage } from "../services/klaviyo.server";
+import { invalidateStoreCache } from "../services/cache.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
     // 2. Get Klaviyo OAuth Session
@@ -70,6 +71,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
                 klaviyoIsActive: true
             }
         });
+
+        await invalidateStoreCache(shop);
 
         console.log(`[KLAVIYO CALLBACK] Successfully connected Klaviyo for ${shop}`);
 
