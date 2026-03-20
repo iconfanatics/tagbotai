@@ -201,7 +201,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // Defer streams the promise so the HTML structure renders instantly
   return {
     currentPlanName: store.planName,
-    monthlyTagCount: store.monthlyTagCount,
+    monthlyTagCount: store.monthlyCustomerTagCount,
     hasSeenTour: store.hasSeenTour,
     dashboardDataPromise: getDashboardData()
   };

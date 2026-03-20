@@ -12,7 +12,7 @@ async function run() {
   }
   
   const accessToken = store.klaviyoAccessToken;
-  console.log("Found token:", accessToken.substring(0, 10) + "...");
+  console.log("Found token:", accessToken?.substring(0, 10) + "...");
   
   const email = "test@example.com";
   const tagsToAdd = ["TestTag"];

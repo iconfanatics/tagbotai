@@ -223,8 +223,11 @@ export async function processOneCustomer(
             }
 
 
+            const uniqueCustomerTags = new Set<string>();
             for (const item of tagsToAddLog) {
                 if (item.targetEntity === "order") continue; // Handled below
+                if (uniqueCustomerTags.has(item.tag)) continue;
+                uniqueCustomerTags.add(item.tag);
                 
                 // Fetch the rule ID to properly attribute the activity
                 const rule = await db.rule.findFirst({ where: { storeId, targetTag: item.tag } });
