@@ -128,11 +128,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
         for (const edge of allCustomers) {
             const c = edge.node;
-            const existingTags: string[] = c.tags ? c.tags.split(",").map((t: string) => t.trim()) : [];
+            const tagsArray = Array.isArray(c.tags) ? c.tags : (typeof c.tags === "string" ? c.tags.split(",") : []);
+            const existingTags: string[] = tagsArray.map((t: string) => t.trim());
 
             // Mock prisma customer shape expected by evaluateRule
             const customerMock: any = {
-                id: c.id.split("/").pop(), storeId: store.id, shop: session.shop, tags: c.tags || "", firstName: c.firstName, lastName: c.lastName, email: c.email,
+                id: c.id.split("/").pop(), storeId: store.id, shop: session.shop, tags: existingTags.join(", "), firstName: c.firstName, lastName: c.lastName, email: c.email,
                 totalSpent: parseFloat(c.amountSpent?.amount || "0"),
                 orderCount: parseInt(c.numberOfOrders || "0"),
                 lastOrderDate: new Date(), // Shopify Customers api doesn't directly expose last_order_date without orders nested
