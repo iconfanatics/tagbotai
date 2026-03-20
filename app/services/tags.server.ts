@@ -318,48 +318,7 @@ export async function sendVipDiscount(admin: any, storeId: string, customerId: s
 
     const discountCode = `VIP-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
 
-    // 1. Create a PriceRule first (Prerequisite for a discount code in Shopify API)
-    const priceRuleResponse = await admin.graphql(
-      `#graphql
-        mutation priceRuleCreate($priceRule: PriceRuleInput!) {
-          priceRuleCreate(priceRule: $priceRule) {
-            priceRule {
-              id
-            }
-            userErrors {
-              field
-              message
-            }
-          }
-        }
-      `,
-      {
-        variables: {
-          priceRule: {
-            title: `VIP Promo - ${customerId}`,
-            target: "LINE_ITEM",
-            targetSelection: "ALL",
-            allocationMethod: "ACROSS",
-            valueType: "PERCENTAGE",
-            value: "-20.0",
-            customerSelection: {
-              customerIdsToAdd: [`gid://shopify/Customer/${customerId}`]
-            },
-            startsAt: new Date().toISOString(),
-          }
-        },
-      }
-    );
-
-    const priceRuleData = await priceRuleResponse.json();
-    const priceRuleId = priceRuleData.data?.priceRuleCreate?.priceRule?.id;
-
-    if (!priceRuleId) {
-      console.error("[TAG_SERVICE] Failed to create price rule for VIP discount:", priceRuleData.data?.priceRuleCreate?.userErrors);
-      return false;
-    }
-
-    // 2. Create the actual Discount Code linked to the PriceRule
+    // 1. Create the Discount Code (this automatically creates the underlying rule logic in modern API)
     const discountResponse = await admin.graphql(
       `#graphql
         mutation discountCodeBasicCreate($basicCodeDiscount: DiscountCodeBasicInput!) {
@@ -416,10 +375,10 @@ export async function sendVipDiscount(admin: any, storeId: string, customerId: s
       return false;
     }
 
-    // 3. Simulate Email Delivery Notification
+    // 2. Simulate Email Delivery Notification
     console.log(`[EMAIL DISPATCH] Sending 20% VIP discount code ${discountCode} to ${email}`);
 
-    // 4. Log the action in our database
+    // 3. Log the action in our database
     await db.activityLog.create({
       data: {
         storeId,
