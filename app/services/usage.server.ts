@@ -29,27 +29,35 @@ export const PLAN_LIMITS: Record<string, { customer_tag: number; order_tag: numb
  * Resets the usage counters if more than 30 days have passed since the last reset.
  */
 export async function resetUsageIfMonthPassed(shop: string) {
-    const store = await db.store.findUnique({
-        where: { shop },
-        select: { id: true, usageResetDate: true }
-    });
-
-    if (!store) return;
-
-    const lastReset = new Date(store.usageResetDate);
-    const now = new Date();
-    const diffInDays = (now.getTime() - lastReset.getTime()) / (1000 * 3600 * 24);
-
-    if (diffInDays >= 30) {
-        await db.store.update({
+    try {
+        const store = await db.store.findUnique({
             where: { shop },
-            data: {
-                monthlyCustomerTagCount: 0,
-                monthlyOrderTagCount: 0,
-                monthlyRemovalCount: 0,
-                usageResetDate: now
-            }
+            select: { id: true, usageResetDate: true }
         });
+
+        if (!store) return;
+
+        const lastReset = new Date(store.usageResetDate);
+        const now = new Date();
+        const diffInDays = (now.getTime() - lastReset.getTime()) / (1000 * 3600 * 24);
+
+        if (diffInDays >= 30) {
+            await db.store.update({
+                where: { shop },
+                data: {
+                    monthlyCustomerTagCount: 0,
+                    monthlyOrderTagCount: 0,
+                    monthlyRemovalCount: 0,
+                    usageResetDate: now
+                }
+            });
+        }
+    } catch (err: any) {
+        if (err.message?.includes("no such column")) {
+            console.error("[USAGE_SAFE] Skipping resetUsageIfMonthPassed due to missing columns.");
+            return;
+        }
+        throw err;
     }
 }
 
@@ -59,91 +67,107 @@ export async function resetUsageIfMonthPassed(shop: string) {
  * If no, returns false.
  */
 export async function incrementUsage(shop: string, type: UsageType, amount: number = 1): Promise<boolean> {
-    await resetUsageIfMonthPassed(shop);
+    try {
+        await resetUsageIfMonthPassed(shop);
 
-    const store = await db.store.findUnique({
-        where: { shop },
-        select: { 
-            planName: true, 
-            monthlyCustomerTagCount: true, 
-            monthlyOrderTagCount: true, 
-            monthlyRemovalCount: true 
+        const store = await db.store.findUnique({
+            where: { shop },
+            select: { 
+                planName: true, 
+                monthlyCustomerTagCount: true, 
+                monthlyOrderTagCount: true, 
+                monthlyRemovalCount: true 
+            }
+        });
+
+        if (!store) return false;
+
+        const limits = PLAN_LIMITS[store.planName] || PLAN_LIMITS["Free"];
+        let currentCount = 0;
+        let limit = 0;
+        let field = "";
+
+        switch (type) {
+            case "customer_tag":
+                currentCount = store.monthlyCustomerTagCount;
+                limit = limits.customer_tag;
+                field = "monthlyCustomerTagCount";
+                break;
+            case "order_tag":
+                currentCount = store.monthlyOrderTagCount;
+                limit = limits.order_tag;
+                field = "monthlyOrderTagCount";
+                break;
+            case "removal":
+                currentCount = store.monthlyRemovalCount;
+                limit = limits.removal;
+                field = "monthlyRemovalCount";
+                break;
         }
-    });
 
-    if (!store) return false;
-
-    const limits = PLAN_LIMITS[store.planName] || PLAN_LIMITS["Free"];
-    let currentCount = 0;
-    let limit = 0;
-    let field = "";
-
-    switch (type) {
-        case "customer_tag":
-            currentCount = store.monthlyCustomerTagCount;
-            limit = limits.customer_tag;
-            field = "monthlyCustomerTagCount";
-            break;
-        case "order_tag":
-            currentCount = store.monthlyOrderTagCount;
-            limit = limits.order_tag;
-            field = "monthlyOrderTagCount";
-            break;
-        case "removal":
-            currentCount = store.monthlyRemovalCount;
-            limit = limits.removal;
-            field = "monthlyRemovalCount";
-            break;
-    }
-
-    if (currentCount + amount > limit) {
-        return false;
-    }
-
-    await db.store.update({
-        where: { shop },
-        data: {
-            [field]: { increment: amount }
+        if (currentCount + amount > limit) {
+            return false;
         }
-    });
 
-    return true;
+        await db.store.update({
+            where: { shop },
+            data: {
+                [field]: { increment: amount }
+            }
+        });
+
+        return true;
+    } catch (err: any) {
+        if (err.message?.includes("no such column")) {
+            console.error("[USAGE_SAFE] Skipping incrementUsage due to missing columns. Allowing action.");
+            return true; // Allow action if we can't track usage
+        }
+        throw err;
+    }
 }
 
 /**
  * Convenience helper to check if multiple actions can be performed.
  */
 export async function canPerformActions(shop: string, type: UsageType, count: number): Promise<boolean> {
-    const store = await db.store.findUnique({
-        where: { shop },
-        select: { 
-            planName: true, 
-            monthlyCustomerTagCount: true, 
-            monthlyOrderTagCount: true, 
-            monthlyRemovalCount: true 
+    try {
+        const store = await db.store.findUnique({
+            where: { shop },
+            select: { 
+                planName: true, 
+                monthlyCustomerTagCount: true, 
+                monthlyOrderTagCount: true, 
+                monthlyRemovalCount: true 
+            }
+        });
+
+        if (!store) return false;
+
+        const limits = PLAN_LIMITS[store.planName] || PLAN_LIMITS["Free"];
+        let currentCount = 0;
+        let limit = 0;
+
+        switch (type) {
+            case "customer_tag":
+                currentCount = store.monthlyCustomerTagCount;
+                limit = limits.customer_tag;
+                break;
+            case "order_tag":
+                currentCount = store.monthlyOrderTagCount;
+                limit = limits.order_tag;
+                break;
+            case "removal":
+                currentCount = store.monthlyRemovalCount;
+                limit = limits.removal;
+                break;
         }
-    });
 
-    if (!store) return false;
-
-    const limits = PLAN_LIMITS[store.planName] || PLAN_LIMITS["Free"];
-    let currentCount = 0;
-    let limit = 0;
-
-    switch (type) {
-        case "customer_tag":
-            currentCount = store.monthlyCustomerTagCount;
-            limit = limits.customer_tag;
-            break;
-        case "order_tag":
-            currentCount = store.monthlyOrderTagCount;
-            limit = limits.order_tag;
-            break;
-        case "removal":
-            currentCount = store.monthlyRemovalCount;
-            limit = limits.removal;
-            break;
+        return currentCount + count <= limit;
+    } catch (err: any) {
+        if (err.message?.includes("no such column")) {
+            console.error("[USAGE_SAFE] Assuming true for canPerformActions due to missing columns.");
+            return true;
+        }
+        throw err;
     }
-
-    return currentCount + count <= limit;
 }
