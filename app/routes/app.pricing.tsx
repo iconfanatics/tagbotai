@@ -111,7 +111,7 @@ export default function Pricing() {
             yearly: 0,
             tagline: "Get started for free",
             features: [
-                "100 customer tags / month",
+                "100 customer & order tags / month",
                 "Basic conditional rules",
                 "Standard Smart Segments",
                 "Manual tagging dashboard",
@@ -127,7 +127,7 @@ export default function Pricing() {
             yearly: growthYearly,
             tagline: "Scale your tagging",
             features: [
-                "1,000 customer tags / month",
+                "1,000 customer & order tags / month",
                 "Advanced order & traffic rules",
                 "Predictive Re-engagement AI",
                 "Revenue ROI analytics",
@@ -143,7 +143,7 @@ export default function Pricing() {
             yearly: proYearly,
             tagline: "Unlimited AI automation",
             features: [
-                "Unlimited customer tags",
+                "Unlimited customer & order tags",
                 "✨ AI Natural Language Rules",
                 "Order Note Sentiment NLP",
                 "Automated Customer Note Sync",
