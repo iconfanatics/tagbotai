@@ -2,7 +2,7 @@
   "name": "tag-bot-ai-smart-segmentation",
   "private": true,
   "scripts": {
-    "vercel-build": "TURSO_DATABASE_URL=file:./dev.sqlite prisma generate && prisma db push --accept-data-loss && react-router build",
+    "vercel-build": "prisma generate && react-router build",
     "build": "react-router build",
     "dev": "shopify app dev",
     "config:link": "shopify app config link",
