@@ -27,12 +27,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     // 1. Get all Activity Logs for these tags grouped by tagContext (O(1) query)
     const activeTags = rules.map(r => r.targetTag);
     const logsGroups = await db.activityLog.groupBy({
-        by: ['tagContext'],
-        where: { storeId: store.id, action: "TAG_ADDED", tagContext: { in: activeTags } },
-        _count: { id: true }
+        by: ['tagContext', 'customerId'],
+        where: { storeId: store.id, action: "TAG_ADDED", tagContext: { in: activeTags } }
     });
 
-    const logsMap = new Map(logsGroups.filter(g => g.tagContext).map(g => [g.tagContext!, g._count.id]));
+    const logsMap = new Map<string, number>();
+    for (const group of logsGroups) {
+        if (!group.tagContext) continue;
+        logsMap.set(group.tagContext, (logsMap.get(group.tagContext) || 0) + 1);
+    }
 
     // 2. Customers are a bit tricky because they are comma-separated string `contains` checks, 
     //    so we just fetch all tagged customers once and tally them in JS (O(1) query)
