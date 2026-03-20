@@ -17,7 +17,7 @@ const REPAIR_COMMANDS = [
     `ALTER TABLE "Store" ADD COLUMN "usageResetDate" DATETIME DEFAULT NULL`
 ];
 
-async function attemptRepair() {
+export async function attemptRepair() {
     console.log("[DB_REPAIR] Starting automatic schema repair check...");
     try {
         // @ts-ignore

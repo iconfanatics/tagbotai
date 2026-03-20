@@ -7,6 +7,7 @@ import {
 } from "@shopify/shopify-app-react-router/server";
 import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prisma";
 import prisma from "./db.server";
+import { attemptRepair } from "./services/cache.server";
 
 export const MONTHLY_PLAN = "Premium Plans";
 
@@ -73,6 +74,10 @@ const shopify = shopifyApp({
     afterAuth: async ({ session }) => {
       // Fires immediately when a merchant installs the app
       shopify.registerWebhooks({ session });
+      
+      // Proactively ensure schema is repaired for this new store
+      console.log(`[AUTH] Running proactive schema repair for new install: ${session.shop}`);
+      await attemptRepair();
     },
   },
 });
