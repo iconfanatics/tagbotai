@@ -170,7 +170,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           ? db.customer.findMany({ where: { storeId: store.id, orderCount: { gt: 3 }, lastOrderDate: { lt: sixtyDaysAgo } }, take: 5, orderBy: { lastOrderDate: "asc" } })
           : Promise.resolve([]),
         db.rule.findMany({ where: { storeId: store.id } }),
-        (admin as any).rest.get({ path: 'orders/count.json', query: { status: 'any' } }).catch(() => null)
+        fetch(`https://${session.shop}/admin/api/2025-01/orders/count.json?status=any`, { headers: { "X-Shopify-Access-Token": session.accessToken || "" } }).then(res => res.json()).catch(() => null)
       ]);
 
       const orderRules = allRules.filter((r: any) => {
@@ -188,9 +188,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       const topOrderTags = Object.entries(topOrderTagMap).map(([tag, count]) => ({ tag, count })).sort((a, b) => b.count - a.count).slice(0, 6);
 
       let totalOrders = 0;
-      if (orderCountRes) {
-        const orderCountData = await orderCountRes.json();
-        totalOrders = orderCountData.count || 0;
+      if (orderCountRes && typeof orderCountRes.count === 'number') {
+        totalOrders = orderCountRes.count;
       }
 
       return {
