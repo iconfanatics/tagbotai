@@ -100,18 +100,27 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
                   });
               }
           }
-      } catch (e) {
-          console.error("Failed to sequence Welcome Email:", e);
-      }
+      } catch (e: any) {
+            if (e.message?.includes("no such column")) {
+                console.error("[Index_SAFE] Skipping welcomeEmailSent update due to missing columns.");
+            } else {
+                console.error("Failed to sequence Welcome Email:", e);
+            }
+        }
   }
 
   // Reset stuck sync
   if (store.isSyncing && store.updatedAt) {
     const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
     if (store.updatedAt < tenMinutesAgo) {
-      await db.store.update({ where: { id: store.id }, data: { isSyncing: false, syncMessage: null } });
-      store.isSyncing = false;
-      store.syncMessage = null;
+      try {
+        await db.store.update({ where: { id: store.id }, data: { isSyncing: false, syncMessage: null } });
+        store.isSyncing = false;
+        store.syncMessage = null;
+      } catch (err: any) {
+        if (!err.message?.includes("no such column")) throw err;
+        console.error("[Index_SAFE] Skipping isSyncing reset due to missing columns.");
+      }
     }
   }
 
@@ -210,7 +219,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const actionType = formData.get("action");
   
   if (actionType === "complete_tour") {
-    await db.store.update({ where: { id: store.id }, data: { hasSeenTour: true } });
+    try {
+        await db.store.update({ where: { id: store.id }, data: { hasSeenTour: true } });
+    } catch (err: any) {
+        if (!err.message?.includes("no such column")) throw err;
+        console.error("[Index_SAFE] Skipping hasSeenTour update due to missing columns.");
+    }
     return { success: true };
   }
 

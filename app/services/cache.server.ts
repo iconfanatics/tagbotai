@@ -18,15 +18,35 @@ const REPAIR_COMMANDS = [
 ];
 
 async function attemptRepair() {
-    console.log("[DB_REPAIR] Starting automatic schema repair...");
-    for (const cmd of REPAIR_COMMANDS) {
-        try {
-            // @ts-ignore
-            await db.$executeRawUnsafe(cmd);
-            console.log(`[DB_REPAIR] SUCCESS: ${cmd}`);
-        } catch (e: any) {
-            console.log(`[DB_REPAIR] SKIPPED/FAILED: ${cmd} - ${e.message}`);
+    console.log("[DB_REPAIR] Starting automatic schema repair check...");
+    try {
+        // @ts-ignore
+        const tableInfo = await db.$queryRawUnsafe(`PRAGMA table_info("Store")`) as any[];
+        const existingColumns = tableInfo.map(c => c.name);
+        
+        const repairs = [
+            { name: "monthlyCustomerTagCount", sql: `ALTER TABLE "Store" ADD COLUMN "monthlyCustomerTagCount" INTEGER DEFAULT 0` },
+            { name: "monthlyOrderTagCount", sql: `ALTER TABLE "Store" ADD COLUMN "monthlyOrderTagCount" INTEGER DEFAULT 0` },
+            { name: "monthlyRemovalCount", sql: `ALTER TABLE "Store" ADD COLUMN "monthlyRemovalCount" INTEGER DEFAULT 0` },
+            { name: "usageResetDate", sql: `ALTER TABLE "Store" ADD COLUMN "usageResetDate" DATETIME DEFAULT CURRENT_TIMESTAMP` }
+        ];
+
+        for (const repair of repairs) {
+            if (!existingColumns.includes(repair.name)) {
+                try {
+                    console.log(`[DB_REPAIR] Adding missing column: ${repair.name}`);
+                    // @ts-ignore
+                    await db.$executeRawUnsafe(repair.sql);
+                    console.log(`[DB_REPAIR] SUCCESS: ${repair.name}`);
+                } catch (e: any) {
+                    console.error(`[DB_REPAIR] FAILED: ${repair.name} - ${e.message}`);
+                }
+            } else {
+                console.log(`[DB_REPAIR] Column already exists: ${repair.name}`);
+            }
         }
+    } catch (err: any) {
+        console.error(`[DB_REPAIR] Fatal error during schema check: ${err.message}`);
     }
 }
 
