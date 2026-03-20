@@ -89,20 +89,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     });
 
     // Fire-and-forget: do NOT await this — redirect immediately
-    const hasMetric = conditions.some((c: any) => c.ruleCategory === "metric");
-    if (hasMetric) {
-        Promise.resolve().then(async () => {
-            try {
-                const isFree = store.planName === "Free" || store.planName === "";
-                const { fetchAllCustomers } = await import("../services/shopify-helpers.server");
-                const customersToSync = await fetchAllCustomers(admin, isFree);
-                if (customersToSync.length > 0) {
-                    const { enqueueSyncJob } = await import("../services/queue.server");
-                    enqueueSyncJob({ shop: session.shop, storeId: store.id, customersToSync });
-                }
-            } catch (e) { console.error("Auto-sync failed:", e); }
-        });
-    }
+    Promise.resolve().then(async () => {
+        try {
+            const isFree = store.planName === "Free" || store.planName === "";
+            const { fetchAllCustomers } = await import("../services/shopify-helpers.server");
+            const customersToSync = await fetchAllCustomers(admin, isFree);
+            if (customersToSync.length > 0) {
+                const { enqueueSyncJob } = await import("../services/queue.server");
+                enqueueSyncJob({ shop: session.shop, storeId: store.id, syncType: "RULES" });
+            }
+        } catch (e) { console.error("Auto-sync failed:", e); }
+    });
 
     return redirect("/app/rules");
 };
