@@ -74,7 +74,15 @@ export async function getCachedStore(shop: string): Promise<Store | null> {
                 // @ts-ignore
                 store = await db.store.findUnique({
                     where: { shop },
-                    select: { id: true, shop: true, isActive: true, planName: true, createdAt: true, updatedAt: true }
+                    select: { 
+                        id: true, shop: true, isActive: true, planName: true,
+                        hasSeenTour: true, welcomeEmailSent: true,
+                        isSyncing: true, syncTarget: true, syncCompleted: true, syncMessage: true,
+                        klaviyoIsActive: true, klaviyoApiKey: true,
+                        mailchimpApiKey: true, mailchimpServerPrefix: true, mailchimpListId: true,
+                        syncTagsToNotes: true, enableSentimentAnalysis: true,
+                        createdAt: true, updatedAt: true
+                    }
                 }) as any;
             }
         } else {
@@ -112,7 +120,15 @@ export async function getCachedStoreById(id: string): Promise<Store | null> {
                 // @ts-ignore
                 store = await db.store.findUnique({
                     where: { id },
-                    select: { id: true, shop: true, isActive: true, planName: true, createdAt: true, updatedAt: true }
+                    select: { 
+                        id: true, shop: true, isActive: true, planName: true,
+                        hasSeenTour: true, welcomeEmailSent: true,
+                        isSyncing: true, syncTarget: true, syncCompleted: true, syncMessage: true,
+                        klaviyoIsActive: true, klaviyoApiKey: true,
+                        mailchimpApiKey: true, mailchimpServerPrefix: true, mailchimpListId: true,
+                        syncTagsToNotes: true, enableSentimentAnalysis: true,
+                        createdAt: true, updatedAt: true
+                    }
                 }) as any;
             }
         } else {
