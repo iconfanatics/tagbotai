@@ -60,16 +60,36 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-    const { billing, session } = await authenticate.admin(request);
+    const { admin, billing, session } = await authenticate.admin(request);
     const formData = await request.formData();
     const plan = formData.get("plan") as string;
     const url = new URL(request.url);
 
     const paidPlans = ["Growth Plan", "Growth Plan Yearly", "Pro Plan", "Pro Plan Yearly", "Elite Plan", "Elite Plan Yearly"];
 
-    // isTest should be true only in development. Set BILLING_TEST_MODE=true in local .env.
-    // In production (Vercel), leave BILLING_TEST_MODE unset — real charges apply.
-    const isTestMode = process.env.BILLING_TEST_MODE === "true";
+    // Determine if the current shop is a development/test store
+    // This is required so the Shopify Review Team can upgrade plans without getting a generic billing error.
+    let isTestMode = process.env.BILLING_TEST_MODE === "true";
+    try {
+        const response = await admin.graphql(`
+            #graphql
+            query {
+                shop {
+                    plan {
+                        partnerDevelopment
+                        test
+                    }
+                }
+            }
+        `);
+        const { data } = await response.json();
+        if (data?.shop?.plan?.partnerDevelopment || data?.shop?.plan?.test) {
+            isTestMode = true;
+            console.log(`[BILLING] Store is a development/test store. Forcing isTestMode = true`);
+        }
+    } catch (e) {
+        console.error("Failed to fetch shop plan for billing isTest flag", e);
+    }
 
     if (paidPlans.includes(plan)) {
         try {
