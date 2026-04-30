@@ -92,16 +92,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
 
     if (paidPlans.includes(plan)) {
-        try {
-            await billing.request({
-                plan: plan as any,
-                isTest: isTestMode,
-            });
-        } catch (error: any) {
-            if (error instanceof Response) throw error;
-            console.error("[BILLING_ERROR]", error);
-            return { success: false, message: `Billing Error: ${error.message || String(error)}` };
-        }
+        // billing.request() throws a redirect Response to the Shopify payment approval page.
+        // We must re-throw it so the browser gets redirected. Do NOT swallow it in a catch.
+        const redirectResponse = await billing.request({
+            plan: plan as any,
+            isTest: isTestMode,
+        });
+        throw redirectResponse;
     } else if (plan === "Free") {
         try {
             const billingCheck = await billing.check({
