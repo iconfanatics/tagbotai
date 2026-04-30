@@ -13,7 +13,7 @@ function calcYearly(monthly: number, discountPct: number) {
 }
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-    const { session } = await authenticate.admin(request);
+    const { session, billing } = await authenticate.admin(request);
     const store = await getCachedStore(session.shop);
 
     let config = await db.pricingConfig.findUnique({ where: { key: "default" } });
@@ -23,8 +23,33 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         });
     }
 
+    const paidPlans = ["Growth Plan", "Growth Plan Yearly", "Pro Plan", "Pro Plan Yearly", "Elite Plan", "Elite Plan Yearly"];
+    const isTestMode = process.env.BILLING_TEST_MODE === "true";
+
+    let currentPlanName = "Free";
+    try {
+        const billingCheck = await billing.check({
+            plans: paidPlans as any,
+            isTest: isTestMode,
+        });
+
+        const activeSub = billingCheck.appSubscriptions.find(sub => sub.name);
+        if (billingCheck.hasActivePayment && activeSub) {
+             currentPlanName = activeSub.name;
+        }
+    } catch(err) {
+        console.error("Billing check error", err);
+        currentPlanName = store?.planName || "Free";
+    }
+
+    const basePlan = currentPlanName.replace(" Yearly", "");
+    if (store && store.planName !== basePlan) {
+        await db.store.update({ where: { shop: session.shop }, data: { planName: basePlan } });
+        invalidateStoreCache(session.shop);
+    }
+
     return {
-        currentPlanName: store?.planName || "Free",
+        currentPlanName: currentPlanName,
         pricing: {
             yearlyDiscount: config.yearlyDiscount,
             growthMonthly: config.growthMonthly,
@@ -48,26 +73,34 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     if (paidPlans.includes(plan)) {
         try {
-            await billing.require({
-                plans: [plan] as any,
+            await billing.request({
+                plan: plan as any,
                 isTest: isTestMode,
-                onFailure: async () => billing.request({
-                    plan: plan as any,
-                    isTest: isTestMode,
-                    returnUrl: `https://${url.host}/app/pricing`,
-                }),
+                returnUrl: `https://${url.host}/app/pricing`,
             });
         } catch (error: any) {
             if (error instanceof Response) throw error;
             console.error("[BILLING_ERROR]", error);
             return { success: false, message: `Billing Error: ${error.message || String(error)}` };
         }
-
-        const basePlan = plan.replace(" Yearly", "");
-        await db.store.update({ where: { shop: session.shop }, data: { planName: basePlan } });
-        invalidateStoreCache(session.shop);
-        return { success: true, message: `Successfully upgraded to ${plan}.` };
     } else if (plan === "Free") {
+        try {
+            const billingCheck = await billing.check({
+                plans: paidPlans as any,
+                isTest: isTestMode,
+            });
+            const activeSub = billingCheck.appSubscriptions.find(sub => sub.name);
+            if (activeSub && activeSub.id) {
+                await billing.cancel({
+                    subscriptionId: activeSub.id,
+                    isTest: isTestMode,
+                    prorate: true
+                });
+            }
+        } catch (err) {
+            console.error("Failed to cancel subscription", err);
+        }
+
         await db.store.update({ where: { shop: session.shop }, data: { planName: "Free" } });
         invalidateStoreCache(session.shop);
         return { success: true, message: "Successfully downgraded to Free Plan." };

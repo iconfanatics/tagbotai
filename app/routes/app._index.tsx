@@ -6,7 +6,7 @@ import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import db from "../db.server";
 import { sendWelcomeEmail } from "../services/email.server";
-import { getCachedStore } from "../services/cache.server";
+import { getCachedStore, invalidateStoreCache } from "../services/cache.server";
 import { enqueueSyncJob } from "../services/queue.server";
 import {
   Page, Layout, Card, Text, BlockStack, InlineStack, Badge, DataTable,
@@ -62,8 +62,30 @@ const DashboardSkeleton = () => (
 // ─── Loader ───────────────────────────────────────────────────────────────────
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session, admin } = await authenticate.admin(request);
+  const { session, admin, billing } = await authenticate.admin(request);
   const store = await getCachedStore(session.shop);
+
+  const paidPlans = ["Growth Plan", "Growth Plan Yearly", "Pro Plan", "Pro Plan Yearly", "Elite Plan", "Elite Plan Yearly"];
+  const isTestMode = process.env.BILLING_TEST_MODE === "true";
+
+  let currentPlanName = "Free";
+  try {
+      const billingCheck = await billing.check({ plans: paidPlans as any, isTest: isTestMode });
+      const activeSub = billingCheck.appSubscriptions.find(sub => sub.name);
+      if (billingCheck.hasActivePayment && activeSub) {
+           currentPlanName = activeSub.name;
+      }
+  } catch(err) {
+      console.error("Billing check error", err);
+      currentPlanName = store?.planName || "Free";
+  }
+
+  const basePlan = currentPlanName.replace(" Yearly", "");
+  if (store && store.planName !== basePlan) {
+      await db.store.update({ where: { shop: session.shop }, data: { planName: basePlan } });
+      invalidateStoreCache(session.shop);
+      store.planName = basePlan;
+  }
 
   if (!store) {
     return {
