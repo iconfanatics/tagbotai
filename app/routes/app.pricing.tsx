@@ -96,7 +96,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             await billing.request({
                 plan: plan as any,
                 isTest: isTestMode,
-                returnUrl: `https://${url.host}/app/pricing`,
             });
         } catch (error: any) {
             if (error instanceof Response) throw error;
