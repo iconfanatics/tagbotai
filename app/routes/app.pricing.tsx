@@ -77,15 +77,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                 shop {
                     plan {
                         partnerDevelopment
-                        test
                     }
                 }
             }
         `);
         const { data } = await response.json();
-        if (data?.shop?.plan?.partnerDevelopment || data?.shop?.plan?.test) {
+        if (data?.shop?.plan?.partnerDevelopment) {
             isTestMode = true;
-            console.log(`[BILLING] Store is a development/test store. Forcing isTestMode = true`);
+            console.log(`[BILLING] Store is a partner development store. Forcing isTestMode = true`);
         }
     } catch (e) {
         console.error("Failed to fetch shop plan for billing isTest flag", e);
