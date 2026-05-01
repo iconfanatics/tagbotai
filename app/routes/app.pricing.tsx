@@ -94,6 +94,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     const appUrl = process.env.SHOPIFY_APP_URL || "";
 
+    // Return URL must point back INTO the Shopify Admin so the merchant
+    // doesn't see a login screen after approving the charge.
+    // Format: https://admin.shopify.com/store/{store}/apps/{api-key}
+    const storeSlug = session.shop.replace(".myshopify.com", "");
+    const apiKey = process.env.SHOPIFY_API_KEY || "";
+    const returnUrl = `https://admin.shopify.com/store/${storeSlug}/apps/${apiKey}/app/pricing`;
+
     if (paidPlans.includes(plan)) {
         const config = PLAN_CONFIG[plan];
         // Use GraphQL directly so we get the confirmationUrl as JSON.
@@ -124,7 +131,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             `, {
                 variables: {
                     name: plan,
-                    returnUrl: `${appUrl}/app/pricing`,
+                    returnUrl: returnUrl,
                     test: isTestMode,
                     lineItems: [{
                         plan: {
