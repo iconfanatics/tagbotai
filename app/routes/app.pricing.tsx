@@ -13,7 +13,7 @@ function calcYearly(monthly: number, discountPct: number) {
 }
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-    const { session, billing } = await authenticate.admin(request);
+    const { session, billing, admin } = await authenticate.admin(request);
     const store = await getCachedStore(session.shop);
 
     let config = await db.pricingConfig.findUnique({ where: { key: "default" } });
@@ -24,7 +24,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     }
 
     const paidPlans = ["Growth Plan", "Growth Plan Yearly", "Pro Plan", "Pro Plan Yearly", "Elite Plan", "Elite Plan Yearly"];
-    const isTestMode = process.env.BILLING_TEST_MODE === "true";
+
+    // Detect partner/dev stores so billing.check() uses the same isTest flag as the action.
+    // If this doesn't match, test subscriptions become invisible to billing.check() → shows "Free".
+    let isTestMode = process.env.BILLING_TEST_MODE === "true";
+    try {
+        const shopRes = await admin.graphql(`#graphql query { shop { plan { partnerDevelopment } } }`);
+        const { data } = await shopRes.json();
+        if (data?.shop?.plan?.partnerDevelopment) isTestMode = true;
+    } catch (_) {}
 
     let currentPlanName = "Free";
     try {
@@ -58,6 +66,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         }
     };
 };
+
 
 // Plan pricing config (must match shopify.server.ts)
 const PLAN_CONFIG: Record<string, { amount: number; interval: string }> = {
