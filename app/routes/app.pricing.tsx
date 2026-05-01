@@ -247,6 +247,15 @@ export default function Pricing() {
 
     const baseCurrent = (currentPlanName || "Free").replace(" Yearly", "");
 
+    // Plan hierarchy: index = rank (higher = more expensive)
+    const PLAN_RANK: Record<string, number> = {
+        "Free": 0,
+        "Growth Plan": 1,
+        "Pro Plan": 2,
+        "Elite Plan": 3,
+    };
+    const currentRank = PLAN_RANK[baseCurrent] ?? 0;
+
     const plans = [
         {
             name: "Free",
@@ -262,7 +271,6 @@ export default function Pricing() {
                 "Manual tagging dashboard",
                 "Community support",
             ],
-            cta: "Downgrade to Free",
             highlighted: false,
             badge: null,
         },
@@ -280,7 +288,6 @@ export default function Pricing() {
                 "Revenue ROI analytics",
                 "Priority email support",
             ],
-            cta: "Upgrade to Growth",
             highlighted: false,
             badge: null,
         },
@@ -297,7 +304,6 @@ export default function Pricing() {
                 "Automated Customer Note Sync",
                 "CSV Bulk Segment Exporting",
             ],
-            cta: "Upgrade to Pro",
             highlighted: true,
             badge: "Most Popular",
         },
@@ -313,11 +319,11 @@ export default function Pricing() {
                 "Real-time Automated Syncing",
                 "Dedicated Account Manager",
             ],
-            cta: "Upgrade to Elite",
             highlighted: false,
             badge: null,
         },
     ];
+
 
     return (
         <Page backAction={{ content: "Dashboard", url: "/app" }}>
@@ -668,6 +674,16 @@ export default function Pricing() {
 
                         const isLoading = loadingPlan === plan.name || loadingPlan === `${plan.name} Yearly`;
 
+                        // Calculate dynamic CTA text based on rank
+                        const planRank = PLAN_RANK[plan.name] ?? 0;
+                        let ctaText = "Current Plan";
+                        if (!isCurrent) {
+                            const shortName = plan.name.replace(" Plan", "");
+                            ctaText = planRank > currentRank 
+                                ? `Upgrade to ${shortName}` 
+                                : `Downgrade to ${shortName}`;
+                        }
+
                         return (
                             <div key={plan.name} className={`pg-card${isPro ? " pro" : ""}`}>
                                 {plan.badge && (
@@ -721,7 +737,7 @@ export default function Pricing() {
                                         }
                                     }}
                                 >
-                                    {isLoading ? "Processing…" : isCurrent ? "Current Plan" : plan.cta}
+                                    {isLoading ? "Processing…" : ctaText}
                                 </button>
                             </div>
                         );
