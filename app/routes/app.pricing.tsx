@@ -36,19 +36,35 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
     let currentPlanName = "Free";
     try {
-        const billingCheck = await billing.check({
-            plans: paidPlans as any,
-            isTest: isTestMode,
-        });
+        const subsResult = await admin.graphql(`
+            #graphql
+            query {
+                currentAppInstallation {
+                    activeSubscriptions {
+                        id
+                        name
+                        status
+                        test
+                    }
+                }
+            }
+        `);
+        const subsData = await subsResult.json() as any;
+        const activeSubs: { id: string; name: string; status: string; test: boolean }[] =
+            subsData?.data?.currentAppInstallation?.activeSubscriptions || [];
 
-        const activeSub = billingCheck.appSubscriptions.find(sub => sub.name);
-        if (billingCheck.hasActivePayment && activeSub) {
-             currentPlanName = activeSub.name;
+        console.log(`[BILLING_LOADER] Active subscriptions:`, JSON.stringify(activeSubs));
+
+        const matched = activeSubs.find(sub => paidPlans.includes(sub.name) && sub.status === "ACTIVE");
+        if (matched) {
+            currentPlanName = matched.name;
+            console.log(`[BILLING_LOADER] Plan detected: ${currentPlanName}`);
         }
     } catch(err) {
         console.error("Billing check error", err);
         currentPlanName = store?.planName || "Free";
     }
+
 
     const basePlan = currentPlanName.replace(" Yearly", "");
     if (store && store.planName !== basePlan) {
