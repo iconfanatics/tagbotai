@@ -262,7 +262,7 @@ export default function Pricing() {
                 "Manual tagging dashboard",
                 "Community support",
             ],
-            cta: "Current Plan",
+            cta: "Downgrade to Free",
             highlighted: false,
             badge: null,
         },
