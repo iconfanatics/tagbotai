@@ -91,11 +91,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
 
     if (paidPlans.includes(plan)) {
-        // billing.request() throws a redirect Response to the Shopify payment approval page.
-        // We must re-throw it so the browser gets redirected. Do NOT swallow it in a catch.
+        // billing.request() redirects merchant to Shopify's charge approval page.
+        // returnUrl tells Shopify where to send the merchant back after they approve.
+        const appUrl = process.env.SHOPIFY_APP_URL || `https://${session.shop}/admin/apps/tagbot-ai-smart-segmentation`;
         const redirectResponse = await billing.request({
             plan: plan as any,
             isTest: isTestMode,
+            returnUrl: `${appUrl}/app/pricing`,
         });
         throw redirectResponse;
     } else if (plan === "Free") {
