@@ -59,47 +59,99 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     };
 };
 
+// Plan pricing config (must match shopify.server.ts)
+const PLAN_CONFIG: Record<string, { amount: number; interval: string }> = {
+    "Growth Plan":        { amount: 14.99,  interval: "EVERY_30_DAYS" },
+    "Growth Plan Yearly": { amount: 152.90, interval: "ANNUAL" },
+    "Pro Plan":           { amount: 29.99,  interval: "EVERY_30_DAYS" },
+    "Pro Plan Yearly":    { amount: 305.90, interval: "ANNUAL" },
+    "Elite Plan":         { amount: 49.99,  interval: "EVERY_30_DAYS" },
+    "Elite Plan Yearly":  { amount: 509.90, interval: "ANNUAL" },
+};
+
 export const action = async ({ request }: ActionFunctionArgs) => {
     const { admin, billing, session } = await authenticate.admin(request);
     const formData = await request.formData();
     const plan = formData.get("plan") as string;
-    const url = new URL(request.url);
 
-    const paidPlans = ["Growth Plan", "Growth Plan Yearly", "Pro Plan", "Pro Plan Yearly", "Elite Plan", "Elite Plan Yearly"];
+    const paidPlans = Object.keys(PLAN_CONFIG);
 
-    // Determine if the current shop is a development/test store
-    // This is required so the Shopify Review Team can upgrade plans without getting a generic billing error.
+    // Detect dev/partner stores so test charges are used during review
     let isTestMode = process.env.BILLING_TEST_MODE === "true";
     try {
         const response = await admin.graphql(`
             #graphql
-            query {
-                shop {
-                    plan {
-                        partnerDevelopment
-                    }
-                }
-            }
+            query { shop { plan { partnerDevelopment } } }
         `);
         const { data } = await response.json();
         if (data?.shop?.plan?.partnerDevelopment) {
             isTestMode = true;
-            console.log(`[BILLING] Store is a partner development store. Forcing isTestMode = true`);
+            console.log(`[BILLING] Partner dev store — isTestMode = true`);
         }
     } catch (e) {
-        console.error("Failed to fetch shop plan for billing isTest flag", e);
+        console.error("Failed to fetch shop plan", e);
     }
 
+    const appUrl = process.env.SHOPIFY_APP_URL || "";
+
     if (paidPlans.includes(plan)) {
-        // billing.request() redirects merchant to Shopify's charge approval page.
-        // returnUrl tells Shopify where to send the merchant back after they approve.
-        const appUrl = process.env.SHOPIFY_APP_URL || `https://${session.shop}/admin/apps/tagbot-ai-smart-segmentation`;
-        const redirectResponse = await billing.request({
-            plan: plan as any,
-            isTest: isTestMode,
-            returnUrl: `${appUrl}/app/pricing`,
-        });
-        throw redirectResponse;
+        const config = PLAN_CONFIG[plan];
+        // Use GraphQL directly so we get the confirmationUrl as JSON.
+        // We CANNOT throw a server-side redirect in an embedded app — it causes
+        // a 401 because useSubmit() is fetch-based and fetch can't cross Shopify's
+        // charge approval auth boundary. Instead, return the URL and let the
+        // frontend do a top-level window redirect to break out of the iframe.
+        try {
+            const result = await admin.graphql(`
+                #graphql
+                mutation appSubscriptionCreate(
+                    $name: String!
+                    $lineItems: [AppSubscriptionLineItemInput!]!
+                    $returnUrl: URL!
+                    $test: Boolean
+                ) {
+                    appSubscriptionCreate(
+                        name: $name
+                        lineItems: $lineItems
+                        returnUrl: $returnUrl
+                        test: $test
+                        trialDays: 0
+                    ) {
+                        confirmationUrl
+                        userErrors { field message }
+                    }
+                }
+            `, {
+                variables: {
+                    name: plan,
+                    returnUrl: `${appUrl}/app/pricing`,
+                    test: isTestMode,
+                    lineItems: [{
+                        plan: {
+                            appRecurringPricingDetails: {
+                                price: { amount: config.amount, currencyCode: "USD" },
+                                interval: config.interval,
+                            }
+                        }
+                    }]
+                }
+            });
+
+            const { data } = await result.json() as any;
+            const confirmationUrl = data?.appSubscriptionCreate?.confirmationUrl;
+            const userErrors: { message: string }[] = data?.appSubscriptionCreate?.userErrors || [];
+
+            if (userErrors.length > 0) {
+                return { success: false, message: userErrors[0].message };
+            }
+            if (confirmationUrl) {
+                return { checkoutUrl: confirmationUrl };
+            }
+            return { success: false, message: "Failed to create subscription. No confirmation URL." };
+        } catch (err: any) {
+            console.error("[BILLING_ERROR]", err);
+            return { success: false, message: `Billing Error: ${err.message || String(err)}` };
+        }
     } else if (plan === "Free") {
         try {
             const billingCheck = await billing.check({
@@ -141,8 +193,17 @@ export default function Pricing() {
     const eliteYearly = calcYearly(eliteMonthly, yearlyDiscount);
 
     useEffect(() => {
-        if (actionData?.message) {
-            shopify.toast.show(actionData.message, { isError: !actionData.success });
+        if ((actionData as any)?.checkoutUrl) {
+            // Embedded apps run in an iframe — must use window.top to break out
+            // and navigate the full browser to Shopify's charge approval page.
+            if (window.top) {
+                window.top.location.href = (actionData as any).checkoutUrl;
+            } else {
+                window.location.href = (actionData as any).checkoutUrl;
+            }
+        } else if (actionData?.message) {
+            setLoadingPlan(null);
+            shopify.toast.show(actionData.message, { isError: !(actionData as any).success });
         }
     }, [actionData]);
 
