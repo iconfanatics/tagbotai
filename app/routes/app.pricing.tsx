@@ -245,7 +245,7 @@ export default function Pricing() {
         submit({ plan: planName }, { method: "post" });
     };
 
-    const baseCurrent = currentPlanName.replace(" Yearly", "");
+    const baseCurrent = (currentPlanName || "Free").replace(" Yearly", "");
 
     const plans = [
         {
@@ -649,9 +649,10 @@ export default function Pricing() {
                         const monthlyEquiv = billing === "yearly" && plan.monthly > 0
                             ? (plan.yearly / 12).toFixed(2)
                             : null;
-                        const isCurrent = plan.name === "Free"
-                            ? baseCurrent === "Free" || baseCurrent === ""
-                            : baseCurrent === plan.name;
+                        // Strictly match the active plan name.
+                        // Free is current ONLY when baseCurrent is exactly "Free".
+                        // Paid plans are current when baseCurrent matches exactly.
+                        const isCurrent = baseCurrent === plan.name;
 
                         // CTA style
                         let ctaClass = "pg-cta";
