@@ -8,7 +8,7 @@ import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
 
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
-import { getCachedStore } from "../services/cache.server";
+import { getCachedStore, invalidateStoreCache } from "../services/cache.server";
 
 // Import our new premium complex UI extensions
 import premiumStyles from "../styles/app-premium.css?url";
@@ -26,9 +26,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   if (!store) {
     store = await db.store.upsert({
       where: { shop },
-      create: { shop },
-      update: {}
+      create: { shop, isActive: true },
+      update: { isActive: true }
     });
+    invalidateStoreCache(shop);
+  } else if (!store.isActive) {
+    store = await db.store.update({
+      where: { shop },
+      data: { isActive: true }
+    });
+    invalidateStoreCache(shop);
   }
 
   return { apiKey: process.env.SHOPIFY_API_KEY || "" };
