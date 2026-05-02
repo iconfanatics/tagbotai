@@ -84,20 +84,22 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 
-// Plan pricing config (must match shopify.server.ts)
-const PLAN_CONFIG: Record<string, { amount: number; interval: string }> = {
-    "Growth Plan":        { amount: 14.99,  interval: "EVERY_30_DAYS" },
-    "Growth Plan Yearly": { amount: 152.90, interval: "ANNUAL" },
-    "Pro Plan":           { amount: 29.99,  interval: "EVERY_30_DAYS" },
-    "Pro Plan Yearly":    { amount: 305.90, interval: "ANNUAL" },
-    "Elite Plan":         { amount: 49.99,  interval: "EVERY_30_DAYS" },
-    "Elite Plan Yearly":  { amount: 509.90, interval: "ANNUAL" },
-};
-
 export const action = async ({ request }: ActionFunctionArgs) => {
     const { admin, billing, session } = await authenticate.admin(request);
     const formData = await request.formData();
     const plan = formData.get("plan") as string;
+
+    const configData = await db.pricingConfig.findUnique({ where: { key: "default" } });
+    const pricingDefaults = configData || { yearlyDiscount: 15, growthMonthly: 14.99, proMonthly: 29.99, eliteMonthly: 49.99 };
+
+    const PLAN_CONFIG: Record<string, { amount: number; interval: string }> = {
+        "Growth Plan":        { amount: pricingDefaults.growthMonthly,  interval: "EVERY_30_DAYS" },
+        "Growth Plan Yearly": { amount: calcYearly(pricingDefaults.growthMonthly, pricingDefaults.yearlyDiscount), interval: "ANNUAL" },
+        "Pro Plan":           { amount: pricingDefaults.proMonthly,  interval: "EVERY_30_DAYS" },
+        "Pro Plan Yearly":    { amount: calcYearly(pricingDefaults.proMonthly, pricingDefaults.yearlyDiscount), interval: "ANNUAL" },
+        "Elite Plan":         { amount: pricingDefaults.eliteMonthly,  interval: "EVERY_30_DAYS" },
+        "Elite Plan Yearly":  { amount: calcYearly(pricingDefaults.eliteMonthly, pricingDefaults.yearlyDiscount), interval: "ANNUAL" },
+    };
 
     const paidPlans = Object.keys(PLAN_CONFIG);
 
