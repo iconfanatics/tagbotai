@@ -91,7 +91,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     // Fire-and-forget: do NOT await this — redirect immediately
     Promise.resolve().then(async () => {
         try {
-            const isFree = store.planName === "Free" || store.planName === "";
+            const isFree = !store.planName || (!store.planName.includes("Growth") && !store.planName.includes("Pro") && !store.planName.includes("Elite"));
             const { fetchAllCustomers } = await import("../services/shopify-helpers.server");
             const customersToSync = await fetchAllCustomers(admin, isFree);
             if (customersToSync.length > 0) {
@@ -330,7 +330,7 @@ export default function NewRule() {
     const navigate = useNavigate();
     const shopify = useAppBridge();
     const isSubmitting = navigation.state === "submitting";
-    const isFreePlan = !planName || planName === "Free";
+    const isFreePlan = !planName || (!planName.includes("Growth") && !planName.includes("Pro") && !planName.includes("Elite"));
 
     // AI Fetcher
     const aiFetcher = useFetcher<typeof action>();

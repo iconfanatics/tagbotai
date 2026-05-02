@@ -84,7 +84,7 @@ export default function WorkflowsPage() {
     const submit = useSubmit();
     const isSubmitting = navigation.state === "submitting";
 
-    const isFree = !planName || planName === "Free";
+    const isFree = !planName || (!planName.includes("Growth") && !planName.includes("Pro") && !planName.includes("Elite"));
 
     const [name, setName] = useState("");
     const [triggerTag, setTriggerTag] = useState("");

@@ -134,7 +134,7 @@ function KpiCard({ label, value, sub, icon, tone, bg, trend }: {
 export default function ROIDashboard() {
     const { segments, totalRevenue, totalCustomers, totalOrders, planName } = useLoaderData<typeof loader>();
     const navigate = useNavigate();
-    const isFree = !planName || planName === "Free";
+    const isFree = !planName || (!planName.includes("Growth") && !planName.includes("Pro") && !planName.includes("Elite"));
 
     // Chart data — top 8 for readability
     const top8 = segments.slice(0, 8);

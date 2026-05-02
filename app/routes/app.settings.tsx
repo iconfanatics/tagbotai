@@ -65,7 +65,7 @@ export default function Settings() {
     const [enableSentimentAnalysis, setEnableSentimentAnalysis] = useState(initialEnableSentimentAnalysis); // Added this line
     const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
 
-    const isFreePlan = currentPlanName === "Free" || currentPlanName === "";
+    const isFreePlan = !currentPlanName || (!currentPlanName.includes("Growth") && !currentPlanName.includes("Pro") && !currentPlanName.includes("Elite"));
 
     const handleToggle = (newChecked: boolean) => {
         if (isFreePlan) {

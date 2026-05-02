@@ -65,7 +65,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const store = await getCachedStore(session.shop);
     if (!store) return { success: false, message: "Store not found." };
 
-    if (store.planName === "Free") {
+    if (!store.planName?.includes("Growth") && !store.planName?.includes("Pro") && !store.planName?.includes("Elite")) {
         return { success: false, message: "Predictive Segmentation requires a Growth, Pro, or Elite plan." };
     }
 
@@ -86,7 +86,7 @@ export default function PredictPage() {
     const navigate = useNavigate();
 
     const isRunning = navigation.state === "submitting";
-    const isFree = !planName || planName === "Free";
+    const isFree = !planName || (!planName.includes("Growth") && !planName.includes("Pro") && !planName.includes("Elite"));
 
     const handleRun = () => submit({}, { method: "post" });
 

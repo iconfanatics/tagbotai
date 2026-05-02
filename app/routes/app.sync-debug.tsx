@@ -122,7 +122,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     // --- Customer Rules Evaluation ---
     if (rulesToScanCustomer.length > 0) {
-        const isFree = store.planName === "" || store.planName.toLowerCase() === "free plan" || store.planName === "Free";
+        const isFree = !store.planName || (!store.planName.includes("Growth") && !store.planName.includes("Pro") && !store.planName.includes("Elite"));
         const allCustomers = await fetchAllCustomers(admin, isFree);
         totalItems += allCustomers.length;
 

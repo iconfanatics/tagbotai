@@ -223,7 +223,7 @@ export default function Integrations() {
 
     const [isEliteModalOpen, setIsEliteModalOpen] = useState(false);
 
-    const isElitePlan = currentPlanName === "Elite Plan";
+    const isElitePlan = Boolean(currentPlanName?.includes("Elite"));
 
     // Handle Top-Level Redirect for OAuth out of the iframe
     useEffect(() => {

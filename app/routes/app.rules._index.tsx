@@ -154,7 +154,7 @@ export default function RulesManagement() {
     }
 
     const handleExportSegment = (ruleId: string, ruleName: string, ruleEntity: string) => {
-        if (currentPlanName === "Free" || currentPlanName === "") {
+        if (!currentPlanName || (!currentPlanName.includes("Growth") && !currentPlanName.includes("Pro") && !currentPlanName.includes("Elite"))) {
             setIsUpgradeModalOpen(true);
         } else {
             shopify.toast.show(`Preparing CSV export for: ${ruleName}…`);

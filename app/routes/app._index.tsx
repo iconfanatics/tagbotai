@@ -146,7 +146,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     }
   }
 
-  const isProOrElite = store.planName === "Pro Plan" || store.planName === "Elite Plan";
+  const isProOrElite = Boolean(store.planName?.includes("Pro") || store.planName?.includes("Elite"));
 
   // Wrap heavy DB operations in a promise function (do NOT await it in loader)
   const getDashboardData = async () => {
@@ -303,7 +303,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   if (actionType === "sync_customers") {
     try {
-      const isFree = store.planName === "Free" || store.planName === "";
+      const isFree = !store.planName || (!store.planName.includes("Growth") && !store.planName.includes("Pro") && !store.planName.includes("Elite"));
       const { fetchAllCustomers } = await import("../services/shopify-helpers.server");
       const customersToSync = await fetchAllCustomers(admin, isFree);
       if (customersToSync.length > 0) {
@@ -382,7 +382,7 @@ export default function Index() {
   // Tag limits
   let tagLimit = Infinity;
   if (currentPlanName === "Free" || currentPlanName === "") tagLimit = 100;
-  else if (currentPlanName === "Growth Plan") tagLimit = 1000;
+  else if (currentPlanName?.includes("Growth")) tagLimit = 1000;
   const currentMonthlyTags = monthlyTagCount || 0;
 
   let limitBanner = null;
@@ -638,7 +638,7 @@ export default function Index() {
                   </Layout.Section>
 
                   {/* ── Row 5: Retention Alerts ───────────────── */}
-                  {currentPlanName !== "Pro Plan" && currentPlanName !== "Elite Plan" ? (
+                  {!Boolean(currentPlanName?.includes("Pro") || currentPlanName?.includes("Elite")) ? (
                     <Layout.Section>
                       <Card>
                         <BlockStack gap="300">

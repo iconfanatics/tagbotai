@@ -335,7 +335,7 @@ export default function SmartCleanup() {
     const submit = useSubmit();
 
     const isSubmitting = navigation.state === "submitting";
-    const isFree = !planName || planName === "Free";
+    const isFree = !planName || (!planName.includes("Growth") && !planName.includes("Pro") && !planName.includes("Elite"));
 
     // Which tag is currently being processed (for button loading state)
     const [activeTag, setActiveTag] = useState<string | null>(null);

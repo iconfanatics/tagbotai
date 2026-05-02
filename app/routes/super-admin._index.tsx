@@ -53,9 +53,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         totalTagsEverApplied += totalTagsApplied;
 
         if (store.isActive) {
-            if (store.planName === "Growth Plan") totalRevenue += pricingConfig.growthMonthly;
-            if (store.planName === "Pro Plan") totalRevenue += pricingConfig.proMonthly;
-            if (store.planName === "Elite Plan") totalRevenue += pricingConfig.eliteMonthly;
+            if (store.planName === "Growth Plan" || store.planName === "Growth Plan Yearly") totalRevenue += pricingConfig.growthMonthly;
+            if (store.planName === "Pro Plan" || store.planName === "Pro Plan Yearly") totalRevenue += pricingConfig.proMonthly;
+            if (store.planName === "Elite Plan" || store.planName === "Elite Plan Yearly") totalRevenue += pricingConfig.eliteMonthly;
         }
 
         return {
@@ -278,8 +278,8 @@ export default function SuperAdminIndex() {
                                 store.monthlyTagCount.toLocaleString(),
                                 store.createdAt,
                                 <InlineStack key={`actions-${store.id}`} gap="200" wrap={false}>
-                                    <Button size="micro" onClick={() => handleUpgrade(store.id, "upgrade_pro")} disabled={store.planName === "Pro Plan" || isUpdating}>Set Pro</Button>
-                                    <Button size="micro" tone="critical" onClick={() => handleUpgrade(store.id, "upgrade_elite")} disabled={store.planName === "Elite Plan" || isUpdating}>Set Elite</Button>
+                                    <Button size="micro" onClick={() => handleUpgrade(store.id, "upgrade_pro")} disabled={store.planName?.includes("Pro") || isUpdating}>Set Pro</Button>
+                                    <Button size="micro" tone="critical" onClick={() => handleUpgrade(store.id, "upgrade_elite")} disabled={store.planName?.includes("Elite") || isUpdating}>Set Elite</Button>
                                     <Button size="micro" variant="tertiary" onClick={() => handleUpgrade(store.id, "downgrade_free")} disabled={store.planName === "Free" || isUpdating}>Reset Free</Button>
                                 </InlineStack>
                             ])}

@@ -32,7 +32,7 @@ export async function manageCustomerTags(
     mailchimpApiKey = store.mailchimpApiKey;
     mailchimpServerPrefix = store.mailchimpServerPrefix;
     mailchimpListId = store.mailchimpListId;
-    isElitePlan = store.planName === "Elite Plan";
+    isElitePlan = Boolean(store.planName?.includes("Elite"));
 
     if (!isHistoricalSync && tagsToAdd.length > 0) {
       let limit = 0;
