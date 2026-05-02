@@ -33,6 +33,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         }
     });
 
+    // Load pricing config first to use it for dynamic revenue calculation
+    let pricingConfig = await db.pricingConfig.findUnique({ where: { key: "default" } });
+    if (!pricingConfig) {
+        pricingConfig = await db.pricingConfig.create({
+            data: { key: "default", yearlyDiscount: 15, growthMonthly: 14.99, proMonthly: 29.99, eliteMonthly: 49.99 }
+        });
+    }
+
     // 3. Aggregate Data
     const activeInstalls = stores.filter(s => s.isActive).length;
     let totalRevenue = 0;
@@ -45,9 +53,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         totalTagsEverApplied += totalTagsApplied;
 
         if (store.isActive) {
-            if (store.planName === "Growth Plan") totalRevenue += 14.99;
-            if (store.planName === "Pro Plan") totalRevenue += 29.99;
-            if (store.planName === "Elite Plan") totalRevenue += 49.99;
+            if (store.planName === "Growth Plan") totalRevenue += pricingConfig.growthMonthly;
+            if (store.planName === "Pro Plan") totalRevenue += pricingConfig.proMonthly;
+            if (store.planName === "Elite Plan") totalRevenue += pricingConfig.eliteMonthly;
         }
 
         return {
@@ -61,14 +69,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
             createdAt: new Date(store.createdAt).toLocaleDateString()
         };
     });
-
-    // Load pricing config
-    let pricingConfig = await db.pricingConfig.findUnique({ where: { key: "default" } });
-    if (!pricingConfig) {
-        pricingConfig = await db.pricingConfig.create({
-            data: { key: "default", yearlyDiscount: 15, growthMonthly: 14.99, proMonthly: 29.99, eliteMonthly: 49.99 }
-        });
-    }
 
     return { activeInstalls, totalRevenue, totalTagsEverApplied, globalChurnRiskCount, stores: mappedStores, pricingConfig };
 };
