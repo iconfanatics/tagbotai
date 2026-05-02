@@ -68,23 +68,29 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const paidPlans = ["Growth Plan", "Growth Plan Yearly", "Pro Plan", "Pro Plan Yearly", "Elite Plan", "Elite Plan Yearly"];
   const isTestMode = process.env.BILLING_TEST_MODE === "true";
 
-  let currentPlanName = "Free";
-  try {
-      const billingCheck = await billing.check({ plans: paidPlans as any, isTest: isTestMode });
-      const activeSub = billingCheck.appSubscriptions.find(sub => sub.name);
-      if (billingCheck.hasActivePayment && activeSub) {
-           currentPlanName = activeSub.name;
-      }
-  } catch(err) {
-      console.error("Billing check error", err);
-      currentPlanName = store?.planName || "Free";
-  }
+  let currentPlanName = store?.planName || "Free";
+  const hasAdminOverride = currentPlanName.includes("(Admin Override)");
 
-  const basePlan = currentPlanName.replace(" Yearly", "");
-  if (store && store.planName !== basePlan) {
-      await db.store.update({ where: { shop: session.shop }, data: { planName: basePlan } });
-      invalidateStoreCache(session.shop);
-      store.planName = basePlan;
+  if (!hasAdminOverride) {
+      try {
+          const billingCheck = await billing.check({ plans: paidPlans as any, isTest: isTestMode });
+          const activeSub = billingCheck.appSubscriptions.find(sub => sub.name);
+          if (billingCheck.hasActivePayment && activeSub) {
+               currentPlanName = activeSub.name;
+          } else {
+               currentPlanName = "Free";
+          }
+      } catch(err) {
+          console.error("Billing check error", err);
+          currentPlanName = "Free";
+      }
+
+      const basePlan = currentPlanName.replace(" Yearly", "");
+      if (store && store.planName !== basePlan) {
+          await db.store.update({ where: { shop: session.shop }, data: { planName: basePlan } });
+          invalidateStoreCache(session.shop);
+          store.planName = basePlan;
+      }
   }
 
   if (!store) {

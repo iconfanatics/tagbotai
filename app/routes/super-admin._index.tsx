@@ -3,6 +3,7 @@ import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
 import { Page, Layout, Card, Text, BlockStack, InlineStack, DataTable, Button, Icon, Badge, TextField, Divider, Banner } from "@shopify/polaris";
 import { MoneyIcon, PersonIcon, HashtagIcon, AlertCircleIcon, SettingsIcon } from "@shopify/polaris-icons";
 import db from "../db.server";
+import { getCachedStore, invalidateStoreCache } from "../services/cache.server";
 import { requireAdminAuth } from "../adminSession.server";
 import { useState } from "react";
 
@@ -81,15 +82,21 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const intent = formData.get("intent") as string;
 
     if (storeId && intent === "upgrade_pro") {
-        await db.store.update({ where: { id: storeId }, data: { planName: "Pro Plan", monthlyCustomerTagCount: 0, monthlyOrderTagCount: 0, monthlyRemovalCount: 0 } });
+        await db.store.update({ where: { id: storeId }, data: { planName: "Pro Plan (Admin Override)", monthlyCustomerTagCount: 0, monthlyOrderTagCount: 0, monthlyRemovalCount: 0 } });
+        const store = await db.store.findUnique({ where: { id: storeId } });
+        if (store) await invalidateStoreCache(store.shop);
         return { success: true };
     }
     if (storeId && intent === "upgrade_elite") {
-        await db.store.update({ where: { id: storeId }, data: { planName: "Elite Plan", monthlyCustomerTagCount: 0, monthlyOrderTagCount: 0, monthlyRemovalCount: 0 } });
+        await db.store.update({ where: { id: storeId }, data: { planName: "Elite Plan (Admin Override)", monthlyCustomerTagCount: 0, monthlyOrderTagCount: 0, monthlyRemovalCount: 0 } });
+        const store = await db.store.findUnique({ where: { id: storeId } });
+        if (store) await invalidateStoreCache(store.shop);
         return { success: true };
     }
     if (storeId && intent === "downgrade_free") {
         await db.store.update({ where: { id: storeId }, data: { planName: "Free", monthlyCustomerTagCount: 0, monthlyOrderTagCount: 0, monthlyRemovalCount: 0 } });
+        const store = await db.store.findUnique({ where: { id: storeId } });
+        if (store) await invalidateStoreCache(store.shop);
         return { success: true };
     }
 
