@@ -251,9 +251,22 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             }
         }
 
+        if (cancelledSubscription) {
+            try {
+                const remainingActiveSubs = await getActivePaidSubscriptions(admin);
+                if (remainingActiveSubs.length > 0) {
+                    console.error("[BILLING_CANCEL_VERIFY] Subscription still active:", JSON.stringify(remainingActiveSubs));
+                    return { success: false, message: "The paid subscription is still active. Please try downgrading again." };
+                }
+            } catch (err) {
+                console.error("Failed to verify subscription cancellation", err);
+                return { success: false, message: "Could not verify the subscription was cancelled. Please try again." };
+            }
+        }
+
         await db.store.update({ where: { shop: session.shop }, data: { planName: "Free" } });
         invalidateStoreCache(session.shop);
-        return { success: true, message: "Successfully downgraded to Free Plan." };
+        return { success: true, message: "Successfully downgraded to Free Plan.", currentPlanName: "Free" };
     }
 
     return { success: false, message: "Invalid plan selection." };
@@ -265,7 +278,15 @@ export default function Pricing() {
     const actionData = useActionData<typeof action>();
     const submit = useSubmit();
 
-    const [billing, setBilling] = useState<"monthly" | "yearly">("monthly");
+    const normalizedCurrentPlan = (currentPlanName || "Free").replace(" (Admin Override)", "");
+    const baseCurrent = normalizedCurrentPlan.replace(" Yearly", "");
+    const currentBillingCycle = normalizedCurrentPlan.includes("Yearly") ? "yearly" : "monthly";
+    const currentBillingLabel = baseCurrent === "Free" ? "Free" : currentBillingCycle === "yearly" ? "Yearly" : "Monthly";
+    const currentPlanDisplay = baseCurrent === "Free"
+        ? "Free Plan"
+        : `${baseCurrent.replace(" Plan", "")} · ${currentBillingLabel}`;
+
+    const [billing, setBilling] = useState<"monthly" | "yearly">(currentBillingCycle);
     const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
 
     const { yearlyDiscount, growthMonthly, proMonthly, eliteMonthly } = pricing;
@@ -288,14 +309,15 @@ export default function Pricing() {
         }
     }, [actionData]);
 
+    useEffect(() => {
+        setBilling(currentBillingCycle);
+    }, [currentBillingCycle]);
+
     const handleSubscribe = (baseName: string) => {
         const planName = billing === "yearly" ? `${baseName} Yearly` : baseName;
         setLoadingPlan(planName);
         submit({ plan: planName }, { method: "post" });
     };
-
-    const normalizedCurrentPlan = (currentPlanName || "Free").replace(" (Admin Override)", "");
-    const baseCurrent = normalizedCurrentPlan.replace(" Yearly", "");
 
     // Plan hierarchy: index = rank (higher = more expensive)
     const PLAN_RANK: Record<string, number> = {
@@ -402,6 +424,23 @@ export default function Pricing() {
                     font-size: 16px;
                     color: #6b7280;
                     margin: 0;
+                }
+                .pg-current-summary {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 8px;
+                    margin-top: 16px;
+                    padding: 8px 14px;
+                    border: 1px solid #dbeafe;
+                    background: #eff6ff;
+                    color: #1e3a8a;
+                    border-radius: 999px;
+                    font-size: 13px;
+                    font-weight: 650;
+                }
+                .pg-current-kicker {
+                    color: #64748b;
+                    font-weight: 600;
                 }
 
                 /* ── Billing toggle ──────────────────────────────────────── */
@@ -516,6 +555,21 @@ export default function Pricing() {
                     margin: 0 0 20px;
                 }
                 .pg-card.pro .pg-plan-tagline { color: rgba(255,255,255,0.6); }
+                .pg-active-tag {
+                    display: inline-flex;
+                    width: fit-content;
+                    margin-bottom: 14px;
+                    padding: 4px 10px;
+                    border-radius: 999px;
+                    background: #dcfce7;
+                    color: #166534;
+                    font-size: 12px;
+                    font-weight: 750;
+                }
+                .pg-card.pro .pg-active-tag {
+                    background: rgba(255,255,255,0.16);
+                    color: #bbf7d0;
+                }
 
                 /* ── Price ───────────────────────────────────────────────── */
                 .pg-price-block { margin-bottom: 20px; }
@@ -672,6 +726,10 @@ export default function Pricing() {
                 <div className="pg-hero">
                     <h1>Simple, transparent pricing</h1>
                     <p>Start free. Upgrade as your store grows. No hidden fees.</p>
+                    <div className="pg-current-summary">
+                        <span className="pg-current-kicker">Current plan</span>
+                        <span>{currentPlanDisplay}</span>
+                    </div>
                 </div>
 
                 {/* Toggle */}
@@ -751,6 +809,11 @@ export default function Pricing() {
 
                                 <p className="pg-plan-name">{plan.name.replace(" Plan", "")}</p>
                                 <p className="pg-plan-tagline">{plan.tagline}</p>
+                                {isCurrent && (
+                                    <span className="pg-active-tag">
+                                        Current {selectedPlanName === "Free" ? "plan" : currentBillingLabel.toLowerCase()}
+                                    </span>
+                                )}
 
                                 {/* Price */}
                                 <div className="pg-price-block">
