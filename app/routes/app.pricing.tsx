@@ -1,5 +1,4 @@
-import { Page, Layout, Text, BlockStack, Button, InlineStack, Badge } from "@shopify/polaris";
-import { CheckIcon } from "@shopify/polaris-icons";
+import { Page } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
 import { useLoaderData, useSubmit, useActionData } from "react-router";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
@@ -12,8 +11,38 @@ function calcYearly(monthly: number, discountPct: number) {
     return parseFloat((monthly * 12 * (1 - discountPct / 100)).toFixed(2));
 }
 
+const paidPlans = ["Growth Plan", "Growth Plan Yearly", "Pro Plan", "Pro Plan Yearly", "Elite Plan", "Elite Plan Yearly"];
+
+type ActiveSubscription = {
+    id: string;
+    name: string;
+    status: string;
+    test?: boolean;
+};
+
+async function getActivePaidSubscriptions(admin: any): Promise<ActiveSubscription[]> {
+    const subsResult = await admin.graphql(`
+        #graphql
+        query {
+            currentAppInstallation {
+                activeSubscriptions {
+                    id
+                    name
+                    status
+                    test
+                }
+            }
+        }
+    `);
+    const subsData = await subsResult.json() as any;
+    const activeSubs: ActiveSubscription[] =
+        subsData?.data?.currentAppInstallation?.activeSubscriptions || [];
+
+    return activeSubs.filter(sub => paidPlans.includes(sub.name) && sub.status === "ACTIVE");
+}
+
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-    const { session, billing, admin } = await authenticate.admin(request);
+    const { session, admin } = await authenticate.admin(request);
     const store = await getCachedStore(session.shop);
 
     let config = await db.pricingConfig.findUnique({ where: { key: "default" } });
@@ -23,53 +52,32 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         });
     }
 
-    const paidPlans = ["Growth Plan", "Growth Plan Yearly", "Pro Plan", "Pro Plan Yearly", "Elite Plan", "Elite Plan Yearly"];
+    let currentPlanName = store?.planName || "Free";
+    const hasAdminOverride = currentPlanName.includes("(Admin Override)");
 
-    // Detect partner/dev stores so billing.check() uses the same isTest flag as the action.
-    // If this doesn't match, test subscriptions become invisible to billing.check() → shows "Free".
-    let isTestMode = process.env.BILLING_TEST_MODE === "true";
-    try {
-        const shopRes = await admin.graphql(`#graphql query { shop { plan { partnerDevelopment } } }`);
-        const { data } = await shopRes.json();
-        if (data?.shop?.plan?.partnerDevelopment) isTestMode = true;
-    } catch (_) {}
+    if (!hasAdminOverride) {
+        try {
+            const activeSubs = await getActivePaidSubscriptions(admin);
 
-    let currentPlanName = "Free";
-    try {
-        const subsResult = await admin.graphql(`
-            #graphql
-            query {
-                currentAppInstallation {
-                    activeSubscriptions {
-                        id
-                        name
-                        status
-                        test
-                    }
-                }
+            console.log(`[BILLING_LOADER] Active paid subscriptions:`, JSON.stringify(activeSubs));
+
+            if (activeSubs[0]) {
+                currentPlanName = activeSubs[0].name;
+                console.log(`[BILLING_LOADER] Plan detected: ${currentPlanName}`);
+            } else {
+                currentPlanName = "Free";
             }
-        `);
-        const subsData = await subsResult.json() as any;
-        const activeSubs: { id: string; name: string; status: string; test: boolean }[] =
-            subsData?.data?.currentAppInstallation?.activeSubscriptions || [];
-
-        console.log(`[BILLING_LOADER] Active subscriptions:`, JSON.stringify(activeSubs));
-
-        const matched = activeSubs.find(sub => paidPlans.includes(sub.name) && sub.status === "ACTIVE");
-        if (matched) {
-            currentPlanName = matched.name;
-            console.log(`[BILLING_LOADER] Plan detected: ${currentPlanName}`);
+        } catch(err) {
+            console.error("Billing check error", err);
+            currentPlanName = store?.planName || "Free";
         }
-    } catch(err) {
-        console.error("Billing check error", err);
-        currentPlanName = store?.planName || "Free";
-    }
 
 
-    const basePlan = currentPlanName.replace(" Yearly", "");
-    if (store && store.planName !== basePlan) {
-        await db.store.update({ where: { shop: session.shop }, data: { planName: basePlan } });
-        invalidateStoreCache(session.shop);
+        const basePlan = currentPlanName.replace(" Yearly", "");
+        if (store && store.planName !== basePlan) {
+            await db.store.update({ where: { shop: session.shop }, data: { planName: basePlan } });
+            invalidateStoreCache(session.shop);
+        }
     }
 
     return {
@@ -118,8 +126,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     } catch (e) {
         console.error("Failed to fetch shop plan", e);
     }
-
-    const appUrl = process.env.SHOPIFY_APP_URL || "";
 
     // Return URL must point back INTO the Shopify Admin so the merchant
     // doesn't see a login screen after approving the charge.
@@ -187,21 +193,62 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             return { success: false, message: `Billing Error: ${err.message || String(err)}` };
         }
     } else if (plan === "Free") {
+        let cancelledSubscription = false;
+
         try {
-            const billingCheck = await billing.check({
-                plans: paidPlans as any,
-                isTest: isTestMode,
-            });
-            const activeSub = billingCheck.appSubscriptions.find(sub => sub.name);
-            if (activeSub && activeSub.id) {
-                await billing.cancel({
-                    subscriptionId: activeSub.id,
-                    isTest: isTestMode,
-                    prorate: true
+            const activeSubs = await getActivePaidSubscriptions(admin);
+
+            for (const activeSub of activeSubs) {
+                const cancelResult = await admin.graphql(`
+                    #graphql
+                    mutation appSubscriptionCancel($id: ID!, $prorate: Boolean) {
+                        appSubscriptionCancel(id: $id, prorate: $prorate) {
+                            appSubscription {
+                                id
+                                status
+                            }
+                            userErrors {
+                                field
+                                message
+                            }
+                        }
+                    }
+                `, {
+                    variables: {
+                        id: activeSub.id,
+                        prorate: true,
+                    },
                 });
+                const cancelData = await cancelResult.json() as any;
+                const userErrors: { message: string }[] = cancelData?.data?.appSubscriptionCancel?.userErrors || [];
+                if (userErrors.length > 0) {
+                    return { success: false, message: userErrors[0].message };
+                }
+                cancelledSubscription = true;
             }
         } catch (err) {
-            console.error("Failed to cancel subscription", err);
+            console.error("Failed to cancel subscription via GraphQL", err);
+        }
+
+        if (!cancelledSubscription) {
+            try {
+                const billingCheck = await billing.check({
+                    plans: paidPlans as any,
+                    isTest: isTestMode,
+                });
+                const activeSub = billingCheck.appSubscriptions.find(sub => sub.name);
+                if (activeSub && activeSub.id) {
+                    await billing.cancel({
+                        subscriptionId: activeSub.id,
+                        isTest: isTestMode,
+                        prorate: true
+                    });
+                    cancelledSubscription = true;
+                }
+            } catch (err) {
+                console.error("Failed to cancel subscription via billing helper", err);
+                return { success: false, message: "Could not cancel the current paid subscription. Please try again." };
+            }
         }
 
         await db.store.update({ where: { shop: session.shop }, data: { planName: "Free" } });
@@ -247,7 +294,8 @@ export default function Pricing() {
         submit({ plan: planName }, { method: "post" });
     };
 
-    const baseCurrent = (currentPlanName || "Free").replace(" Yearly", "");
+    const normalizedCurrentPlan = (currentPlanName || "Free").replace(" (Admin Override)", "");
+    const baseCurrent = normalizedCurrentPlan.replace(" Yearly", "");
 
     // Plan hierarchy: index = rank (higher = more expensive)
     const PLAN_RANK: Record<string, number> = {
@@ -660,7 +708,12 @@ export default function Pricing() {
                         // Strictly match the active plan name.
                         // Free is current ONLY when baseCurrent is exactly "Free".
                         // Paid plans are current when baseCurrent matches exactly.
-                        const isCurrent = baseCurrent === plan.name;
+                        const selectedPlanName = plan.name === "Free"
+                            ? "Free"
+                            : billing === "yearly"
+                                ? `${plan.name} Yearly`
+                                : plan.name;
+                        const isCurrent = normalizedCurrentPlan === selectedPlanName;
 
                         // CTA style
                         let ctaClass = "pg-cta";
@@ -681,9 +734,13 @@ export default function Pricing() {
                         let ctaText = "Current Plan";
                         if (!isCurrent) {
                             const shortName = plan.name.replace(" Plan", "");
-                            ctaText = planRank > currentRank 
-                                ? `Upgrade to ${shortName}` 
-                                : `Downgrade to ${shortName}`;
+                            ctaText = planRank === currentRank && plan.name !== "Free"
+                                ? billing === "yearly"
+                                    ? "Switch to yearly"
+                                    : "Switch to monthly"
+                                : planRank > currentRank
+                                    ? `Upgrade to ${shortName}`
+                                    : `Downgrade to ${shortName}`;
                         }
 
                         return (
@@ -733,6 +790,7 @@ export default function Pricing() {
                                     disabled={isCurrent || isLoading}
                                     onClick={() => {
                                         if (plan.name === "Free") {
+                                            setLoadingPlan("Free");
                                             submit({ plan: "Free" }, { method: "post" });
                                         } else {
                                             handleSubscribe(plan.name);
