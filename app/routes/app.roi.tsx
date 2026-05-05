@@ -85,6 +85,7 @@ function KpiCard({ label, value, sub, icon, tone, bg, trend }: {
             : [30, 35, 30, 35, 30, 35, 30];
 
     const sparkColor = trend === "up" ? "#10b981" : trend === "down" ? "#ef4444" : "#8b5cf6";
+    const trendPercent = label.split("").reduce((sum, char) => sum + char.charCodeAt(0), 0) % 15 + 5;
 
     return (
         <div className="premium-card" style={{ height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
@@ -104,7 +105,7 @@ function KpiCard({ label, value, sub, icon, tone, bg, trend }: {
                     <InlineStack align="start" blockAlign="center" gap="200">
                         {trend && trend !== "neutral" && (
                             <span className={trend === "up" ? "metric-trend-up" : "metric-trend-down"}>
-                                {trend === "up" ? "↑" : "↓"} {Math.floor(Math.random() * 15 + 5)}%
+                                {trend === "up" ? "↑" : "↓"} {trendPercent}%
                             </span>
                         )}
                         {sub && <Text as="p" variant="bodySm" tone="subdued">{sub}</Text>}
