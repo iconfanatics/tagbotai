@@ -9,6 +9,7 @@ import db from "../db.server";
 import { getCachedStore, invalidateStoreCache } from "../services/cache.server";
 import { enqueueMarketingBulkSyncJob } from "../services/queue.server";
 import { generatePKCE, getKlaviyoAuthUrl, klaviyoSessionStorage } from "../services/klaviyo.server";
+import { hasEliteAccess } from "../services/plan-access";
 import { redirect } from "react-router";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -55,6 +56,19 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     const formData = await request.formData();
     const actionType = formData.get("action");
+    const store = await getCachedStore(shop);
+    const eliteOnlyActions = [
+        "init_klaviyo_oauth",
+        "toggle_klaviyo",
+        "save_klaviyo",
+        "save_mailchimp",
+        "bulk_sync_klaviyo",
+        "bulk_sync_mailchimp",
+    ];
+
+    if (eliteOnlyActions.includes(String(actionType)) && !hasEliteAccess(store?.planName)) {
+        return { success: false, message: "Marketing integrations require the Elite plan." };
+    }
 
     if (actionType === "init_klaviyo_oauth") {
         const { verifier, challenge } = generatePKCE();
@@ -96,7 +110,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
 
     if (actionType === "toggle_klaviyo") {
-        const store = await getCachedStore(shop);
         await db.store.update({
             where: { shop },
             data: { klaviyoIsActive: !store?.klaviyoIsActive }

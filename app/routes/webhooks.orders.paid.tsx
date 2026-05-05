@@ -7,6 +7,7 @@ import { getCachedStore } from "../services/cache.server";
 import { analyzeSentiment } from "../services/ai.server";
 import { evaluateOrderRules } from "../services/order-rules.server";
 import { incrementUsage } from "../services/usage.server";
+import { hasProAccess } from "../services/plan-access";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
     const { admin, shop, payload, topic } = await authenticate.webhook(request);
@@ -153,7 +154,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         }
 
         // 3. Evaluate AI Sentiment Analysis on the Order Note
-        if (store.enableSentimentAnalysis && order.note) {
+        if (store.enableSentimentAnalysis && hasProAccess(store.planName) && order.note) {
             try {
                 const sentimentTag = await analyzeSentiment(order.note);
                 if (sentimentTag) {

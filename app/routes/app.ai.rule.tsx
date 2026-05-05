@@ -1,9 +1,9 @@
 import { data } from "react-router";
 import type { ActionFunctionArgs } from "react-router";
 import { generateRuleConditions } from "../services/ai.server";
-import { requireAdminAuth } from "../adminSession.server";
-// Note: Normally we'd use authenticate.admin(request), but for this isolated feature we ensure they are logged in via Shopify's session wrapper in the parent route.
-// Let's rely on standard authentication if needed, but since this is an internal API called by the frontend, we'll just validate the prompt.
+import { authenticate } from "../shopify.server";
+import { getCachedStore } from "../services/cache.server";
+import { hasProAccess } from "../services/plan-access";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
     if (request.method !== "POST") {
@@ -11,6 +11,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
 
     try {
+        const { session } = await authenticate.admin(request);
+        const store = await getCachedStore(session.shop);
+        if (!hasProAccess(store?.planName)) {
+            return data({ error: "AI rule generation requires the Pro or Elite plan." }, { status: 403 });
+        }
+
         const { prompt } = await request.json();
 
         if (!prompt || typeof prompt !== "string") {

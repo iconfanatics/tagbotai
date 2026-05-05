@@ -3,6 +3,7 @@ import { useLoaderData, useNavigate, useSubmit, useActionData, useNavigation } f
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { getCachedStore } from "../services/cache.server";
+import { hasProAccess } from "../services/plan-access";
 import { Page, Layout, Card, Text, BlockStack, IndexTable, Badge, Button, EmptyState, InlineStack, Tooltip, Modal, Box, Banner, Divider } from "@shopify/polaris";
 import { DeleteIcon, AutomationIcon, ExportIcon, RefreshIcon, SearchIcon } from "@shopify/polaris-icons";
 import { useAppBridge } from "@shopify/app-bridge-react";
@@ -146,6 +147,7 @@ export default function RulesManagement() {
     }, [actionData, shopify]);
 
     const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
+    const canExportCsv = hasProAccess(currentPlanName);
 
     const handleDelete = (id: string, name: string) => {
         if (confirm(`Are you sure you want to delete the rule "${name}"? This will stop future matching but will not remove tags already applied.`)) {
@@ -154,7 +156,7 @@ export default function RulesManagement() {
     }
 
     const handleExportSegment = (ruleId: string, ruleName: string, ruleEntity: string) => {
-        if (!currentPlanName || (!currentPlanName.includes("Growth") && !currentPlanName.includes("Pro") && !currentPlanName.includes("Elite"))) {
+        if (!canExportCsv) {
             setIsUpgradeModalOpen(true);
         } else {
             shopify.toast.show(`Preparing CSV export for: ${ruleName}…`);

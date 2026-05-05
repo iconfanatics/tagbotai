@@ -6,6 +6,7 @@ import { SettingsIcon, CheckIcon, InfoIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { getCachedStore, invalidateStoreCache } from "../services/cache.server";
+import { hasProAccess } from "../services/plan-access";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
     const { session } = await authenticate.admin(request);
@@ -34,6 +35,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     if (actionType === "save_settings") {
         const syncTagsToNotes = formData.get("syncTagsToNotes") === "true";
         const enableSentimentAnalysis = formData.get("enableSentimentAnalysis") === "true";
+        const store = await getCachedStore(shop);
+
+        if ((syncTagsToNotes || enableSentimentAnalysis) && !hasProAccess(store?.planName)) {
+            return { success: false, message: "Please upgrade to Pro or Elite to enable these settings." };
+        }
 
         await db.store.update({
             where: { shop },
@@ -65,10 +71,10 @@ export default function Settings() {
     const [enableSentimentAnalysis, setEnableSentimentAnalysis] = useState(initialEnableSentimentAnalysis); // Added this line
     const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
 
-    const isFreePlan = !currentPlanName || (!currentPlanName.includes("Growth") && !currentPlanName.includes("Pro") && !currentPlanName.includes("Elite"));
+    const canUseProSettings = hasProAccess(currentPlanName);
 
     const handleToggle = (newChecked: boolean) => {
-        if (isFreePlan) {
+        if (!canUseProSettings) {
             setIsUpgradeModalOpen(true);
         } else {
             setSyncTagsToNotes(newChecked);
@@ -76,7 +82,7 @@ export default function Settings() {
     };
 
     const handleSentimentToggle = (newChecked: boolean) => {
-        if (isFreePlan) {
+        if (!canUseProSettings) {
             setIsUpgradeModalOpen(true);
         } else {
             setEnableSentimentAnalysis(newChecked);

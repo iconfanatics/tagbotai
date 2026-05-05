@@ -2,6 +2,7 @@ import db from "../db.server";
 import { syncTagsToKlaviyo } from "./klaviyo.server";
 import { syncTagsToMailchimp } from "./mailchimp.server";
 import { dispatchWorkflowActions } from "./workflows.server";
+import { hasEliteAccess, hasProAccess } from "./plan-access";
 
 export async function manageCustomerTags(
   admin: any,
@@ -25,14 +26,14 @@ export async function manageCustomerTags(
   const store = await db.store.findUnique({ where: { id: storeId } });
 
   if (store) {
-    syncTagsToNotes = store.syncTagsToNotes;
+    syncTagsToNotes = store.syncTagsToNotes && hasProAccess(store.planName);
     klaviyoApiKey = store.klaviyoApiKey;
     klaviyoAccessToken = store.klaviyoAccessToken;
     klaviyoIsActive = store.klaviyoIsActive;
     mailchimpApiKey = store.mailchimpApiKey;
     mailchimpServerPrefix = store.mailchimpServerPrefix;
     mailchimpListId = store.mailchimpListId;
-    isElitePlan = Boolean(store.planName?.includes("Elite"));
+    isElitePlan = hasEliteAccess(store.planName);
 
     if (!isHistoricalSync && tagsToAdd.length > 0) {
       let limit = 0;
@@ -205,7 +206,7 @@ export async function manageCustomerTags(
   }
 
   // ── Workflow Actions (Additive, fire-and-forget, never blocks tagging) ──
-  if (tagsToAdd.length > 0 || tagsToRemove.length > 0) {
+  if (isElitePlan && (tagsToAdd.length > 0 || tagsToRemove.length > 0)) {
     dispatchWorkflowActions(storeId, customerId, tagsToAdd, tagsToRemove)
       .catch(err => console.error('[WORKFLOW] dispatch error:', err));
   }

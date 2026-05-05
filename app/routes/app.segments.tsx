@@ -4,6 +4,7 @@ import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import db from "../db.server";
 import { getCachedStore } from "../services/cache.server";
+import { hasProAccess } from "../services/plan-access";
 import {
   Page, Layout, Card, Text, BlockStack, InlineStack, Badge, Button, Icon, Divider, EmptyState, Box
 } from "@shopify/polaris";
@@ -15,6 +16,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const store = await getCachedStore(session.shop);
   if (!store) throw new Error("Store not found");
+  const canExportCsv = hasProAccess(store.planName);
 
   // Fetch all customers for this store to aggregate segments
   const allCustomers = await db.customer.findMany({
@@ -60,13 +62,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         }
         segmentsMap[tag].count += 1;
         segmentsMap[tag].totalSpent += c.totalSpent;
-        segmentsMap[tag].customers.push({
-          firstName: c.firstName || "",
-          lastName: c.lastName || "",
-          email: c.email || "",
-          totalSpent: c.totalSpent,
-          orderCount: c.orderCount
-        });
+        if (canExportCsv) {
+          segmentsMap[tag].customers.push({
+            firstName: c.firstName || "",
+            lastName: c.lastName || "",
+            email: c.email || "",
+            totalSpent: c.totalSpent,
+            orderCount: c.orderCount
+          });
+        }
       });
     }
   });
@@ -95,11 +99,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     }))
     .sort((a, b) => b.count - a.count);
 
-  return { segments };
+  return { segments, planName: store.planName };
 };
 
 export default function SmartSegments() {
-  const { segments } = useLoaderData<typeof loader>();
+  const { segments, planName } = useLoaderData<typeof loader>();
+  const navigate = useNavigate();
+  const canExportCsv = hasProAccess(planName);
 
   const downloadCustomerCSV = (segmentName: string, customers: any[], type: "customer" | "order") => {
     if (type === "order") {
@@ -202,9 +208,15 @@ export default function SmartSegments() {
                         size="medium"
                         fullWidth 
                         icon={ExportIcon}
-                        onClick={() => downloadCustomerCSV(segment.name, segment.customers, segment.type)}
+                        onClick={() => {
+                          if (!canExportCsv) {
+                            navigate("/app/pricing");
+                            return;
+                          }
+                          downloadCustomerCSV(segment.name, segment.customers, segment.type);
+                        }}
                       >
-                        Download CSV
+                        {canExportCsv ? "Download CSV" : "Upgrade for CSV"}
                       </Button>
                     </Box>
                   </BlockStack>

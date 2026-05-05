@@ -2,6 +2,7 @@ import type { LoaderFunctionArgs } from "react-router";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { getCachedStore } from "../services/cache.server";
+import { hasProAccess } from "../services/plan-access";
 
 /**
  * CSV Export Route
@@ -25,8 +26,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     }
 
     // Plan fencing
-    const plan = (store.planName || "").toLowerCase();
-    if (!plan.includes("pro") && !plan.includes("elite")) {
+    if (!hasProAccess(store.planName)) {
         return new Response("Please upgrade to Pro or Elite to access CSV exports.", { status: 403 });
     }
 

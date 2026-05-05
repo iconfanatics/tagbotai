@@ -15,6 +15,7 @@ import { AutomationIcon, DeleteIcon, PlusIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { getCachedStore } from "../services/cache.server";
+import { hasEliteAccess } from "../services/plan-access";
 import { useState } from "react";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -34,6 +35,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const { session } = await authenticate.admin(request);
     const store = await getCachedStore(session.shop);
     if (!store) return { success: false };
+    if (!hasEliteAccess(store.planName)) {
+        return { success: false, message: "Action Workflows require the Elite plan." };
+    }
 
     const form = await request.formData();
     const intent = form.get("intent") as string;

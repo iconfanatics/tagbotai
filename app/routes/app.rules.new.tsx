@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { authenticate } from "../shopify.server";
 import { getCachedStore } from "../services/cache.server";
+import { hasEliteAccess, hasGrowthAccess, hasProAccess } from "../services/plan-access";
 import db from "../db.server";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
 import { useLoaderData, useSubmit, useActionData, useNavigation, useNavigate, useFetcher, redirect } from "react-router";
@@ -39,6 +40,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     // ── AI Generation ────────────────────────────────────────────
     if (actionType === "generate_ai_rule") {
+        if (!hasProAccess(store.planName)) {
+            return { aiError: "AI rule generation requires the Pro or Elite plan." };
+        }
         const prompt = fd.get("prompt") as string;
         if (!prompt?.trim()) return { aiError: "Please describe your rule." };
         try {
@@ -74,10 +78,20 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         }
     } catch (e) { return { error: "Invalid conditions structure" }; }
 
+    const usesAdvancedRule = targetEntity === "order" || conditions.some((c: any) =>
+        ["order", "payment", "location", "discount"].includes(c.ruleCategory)
+    );
+    if (usesAdvancedRule && !hasGrowthAccess(store.planName)) {
+        return { error: "Advanced order and traffic rules require the Growth plan or higher." };
+    }
+
     const description = `${conditions.length} condition(s) specified.`;
 
     const syncToKlaviyo = fd.get("syncToKlaviyo") === "true";
     const syncToMailchimp = fd.get("syncToMailchimp") === "true";
+    if ((syncToKlaviyo || syncToMailchimp) && !hasEliteAccess(store.planName)) {
+        return { error: "Marketing integration sync requires the Elite plan." };
+    }
 
     await db.rule.create({
         data: {
@@ -330,7 +344,8 @@ export default function NewRule() {
     const navigate = useNavigate();
     const shopify = useAppBridge();
     const isSubmitting = navigation.state === "submitting";
-    const isFreePlan = !planName || (!planName.includes("Growth") && !planName.includes("Pro") && !planName.includes("Elite"));
+    const isFreePlan = !hasGrowthAccess(planName);
+    const canUseMarketingSync = hasEliteAccess(planName);
 
     // AI Fetcher
     const aiFetcher = useFetcher<typeof action>();
@@ -615,7 +630,7 @@ export default function NewRule() {
                                             label="Sync segment to Klaviyo"
                                             checked={syncToKlaviyo}
                                             onChange={setSyncToKlaviyo}
-                                            disabled={!klaviyoConnected}
+                                            disabled={!klaviyoConnected || !canUseMarketingSync}
                                         />
                                     </Tooltip>
 
@@ -624,7 +639,7 @@ export default function NewRule() {
                                             label="Sync segment to Mailchimp"
                                             checked={syncToMailchimp}
                                             onChange={setSyncToMailchimp}
-                                            disabled={!mailchimpConnected}
+                                            disabled={!mailchimpConnected || !canUseMarketingSync}
                                         />
                                     </Tooltip>
 

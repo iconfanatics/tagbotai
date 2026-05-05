@@ -8,6 +8,7 @@ import db from "../db.server";
 import { sendWelcomeEmail } from "../services/email.server";
 import { getCachedStore, invalidateStoreCache } from "../services/cache.server";
 import { enqueueSyncJob } from "../services/queue.server";
+import { hasProAccess } from "../services/plan-access";
 import {
   Page, Layout, Card, Text, BlockStack, InlineStack, Badge, DataTable,
   Button, Banner, Icon, Box, Modal, Spinner, Divider, Grid,
@@ -357,11 +358,12 @@ export default function Index() {
   const navigation = useNavigation();
   const isSyncing = navigation.state === "submitting";
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
+  const canExportCsv = hasProAccess(currentPlanName);
 
   const handleSync = () => submit({ action: "sync_customers" }, { method: "post" });
 
   const handleExport = (tag?: string) => {
-    if (currentPlanName === "Free" || currentPlanName === "") {
+    if (!canExportCsv) {
       setIsUpgradeModalOpen(true);
     } else {
       shopify.toast.show(`Preparing CSV export${tag ? ` for ${tag}` : ""}…`);
